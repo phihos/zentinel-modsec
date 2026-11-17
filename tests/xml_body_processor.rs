@@ -253,13 +253,23 @@ fn ordinary_xml_does_not_set_reqbody_error() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn mismatched_tags_set_reqbody_error() {
-    assert!(run(BODY_ERROR_RULE, "application/xml", b"<a><b></a>"));
+fn mismatched_ancestor_closures_are_tolerated_like_coraza() {
+    assert!(!run(BODY_ERROR_RULE, "application/xml", b"<a><b></a>"));
+    assert!(run(
+        BODY_ERROR_RULE,
+        "application/xml",
+        b"<a><b></unrelated>"
+    ));
 }
 
 #[test]
-fn truncated_markup_sets_reqbody_error() {
-    assert!(run(BODY_ERROR_RULE, "application/xml", b"<a><b>text"));
+fn truncated_markup_preserves_inspected_text_like_coraza() {
+    assert!(!run(BODY_ERROR_RULE, "application/xml", b"<a><b>text"));
+    assert!(run(
+        SQLI_RULE,
+        "application/xml",
+        b"<a><b>1 UNION SELECT password FROM users"
+    ));
 }
 
 #[test]

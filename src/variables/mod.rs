@@ -9,6 +9,8 @@ mod resolver;
 mod response;
 mod tx;
 mod value;
+mod xml;
+mod xml_entities;
 
 pub use collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
 pub use request::RequestData;

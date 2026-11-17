@@ -329,137 +329,26 @@ impl RequestData {
     /// Parse XML values into their own collection, without inventing HTTP
     /// arguments. `XML:/*` selects text and `XML://@*` attribute values.
     pub fn parse_xml_body(&mut self) -> Result<(), String> {
-        use quick_xml::events::Event;
-
         self.body_processor = "XML".to_string();
-
-        if self.body.iter().all(|b| b.is_ascii_whitespace()) {
-            return Ok(());
-        }
-
-        let mut reader = quick_xml::Reader::from_reader(self.body.as_slice());
-        reader.config_mut().check_end_names = true;
-
-        let mut path: Vec<String> = Vec::new();
-        // Text arrives in fragments, split around entity references. Buffering
-        // per element and flushing on the closing tag keeps a value whole: a
-        // payload written as `UNION&#32;SELECT` would otherwise be split into
-        // pieces small enough for every rule to miss.
-        let mut text: Vec<String> = Vec::new();
-        let mut count = 0usize;
-        let mut unresolved_entity: Option<String> = None;
-        let mut buf = Vec::new();
-
-        macro_rules! cap {
-            ($name:expr, $value:expr) => {
-                if push_xml_arg(&$name, $value, &mut self.xml, &mut count) {
-                    let msg = xml_limit_message();
-                    self.body_error = Some(msg.clone());
-                    return Err(msg);
-                }
-            };
-        }
-
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                    if path.len() >= MAX_XML_DEPTH {
-                        let msg = format!(
-                            "XML body exceeded {MAX_XML_DEPTH} levels of nesting; \
-                             only part of the body was inspected"
-                        );
-                        self.body_error = Some(msg.clone());
-                        return Err(msg);
-                    }
-                    path.push(decode_name(e.name().as_ref()));
-                    text.push(String::new());
-
-                    for attr in e.attributes().flatten() {
-                        let value = attr
-                            .decoded_and_normalized_value(
-                                quick_xml::XmlVersion::Implicit1_0,
-                                reader.decoder(),
-                            )
-                            .map(|v| v.into_owned())
-                            .unwrap_or_default();
-                        cap!("//@*", value);
-                    }
-                }
-                Ok(Event::End(_)) => {
-                    if let Some(collected) = text.pop() {
-                        let trimmed = collected.trim();
-                        if !trimmed.is_empty() && !path.is_empty() {
-                            cap!("/*", trimmed.to_string());
-                        }
-                    }
-                    path.pop();
-                }
-                Ok(Event::Text(e)) => {
-                    if let (Some(current), Ok(t)) = (text.last_mut(), e.decode()) {
-                        current.push_str(t.as_ref());
-                    }
-                }
-                Ok(Event::CData(e)) => {
-                    // CDATA is text that is deliberately not markup, and a
-                    // classic place to hide a payload.
-                    if let Some(current) = text.last_mut() {
-                        current.push_str(&String::from_utf8_lossy(e.as_ref()));
-                    }
-                }
-                Ok(Event::GeneralRef(e)) => {
-                    let name = e.decode().map(|n| n.into_owned()).unwrap_or_default();
-                    match resolve_entity(&name) {
-                        Some(resolved) => {
-                            if let Some(current) = text.last_mut() {
-                                current.push_str(&resolved);
-                            }
-                        }
-                        None => {
-                            // A custom entity. Expanding it is how XXE and
-                            // billion-laughs work, so this deliberately does
-                            // not. But the origin application may expand it,
-                            // and content this engine cannot see is content it
-                            // cannot inspect -- so say so rather than treat
-                            // the document as fully examined.
-                            unresolved_entity.get_or_insert(name);
-                        }
-                    }
-                }
-                Ok(Event::Eof) => break,
-                Ok(_) => {}
-                Err(e) => {
-                    let msg = format!("XML parsing error: {e}");
-                    self.body_error = Some(msg.clone());
-                    return Err(msg);
-                }
+        self.xml.clear();
+        self.body_error = None;
+        let result = super::xml::parse(&self.body);
+        let error = match result {
+            Ok((values, suppressed_entity)) => {
+                self.xml = values;
+                suppressed_entity.map(|name| {
+                    format!(
+                        "XML body references the undeclared or custom entity '&{name};', which \
+                     is not expanded; any content it carries was not inspected"
+                    )
+                })
             }
-            buf.clear();
+            Err(error) => Some(error),
+        };
+        if let Some(error) = error {
+            self.body_error = Some(error.clone());
+            return Err(error);
         }
-
-        // Elements left open at end of input mean the document was cut short.
-        // quick-xml reports EOF rather than an error for this, so a truncated
-        // body would otherwise look like a complete one that simply had less
-        // in it.
-        if !path.is_empty() {
-            let msg = format!(
-                "XML body ended with {} element(s) still open; the document is truncated \
-                 and was only partly inspected",
-                path.len()
-            );
-            self.body_error = Some(msg.clone());
-            return Err(msg);
-        }
-
-        if let Some(name) = unresolved_entity {
-            let msg = format!(
-                "XML body references the undeclared or custom entity '&{name};', which is \
-                 not expanded (expanding it is how XXE and entity-expansion attacks work). \
-                 Any content it carries was not inspected."
-            );
-            self.body_error = Some(msg.clone());
-            return Err(msg);
-        }
-
         Ok(())
     }
 
@@ -469,48 +358,6 @@ impl RequestData {
         all.extend(self.args_post.all());
         all
     }
-}
-
-/// Most arguments extracted from a single XML body.
-const MAX_XML_ARGS: usize = 4096;
-
-/// Deepest element nesting the XML processor will descend.
-///
-/// quick-xml is a pull parser and does not recurse, so this bounds work and
-/// argument-name length rather than stack depth.
-const MAX_XML_DEPTH: usize = 64;
-
-fn xml_limit_message() -> String {
-    format!(
-        "XML body exceeded {MAX_XML_ARGS} extracted values; only part of the \
-         body was inspected"
-    )
-}
-
-/// Resolve an entity reference this engine is willing to expand.
-///
-/// The five predefined XML entities and numeric character references only.
-/// Custom entities declared in an internal DTD subset are deliberately not
-/// resolved: expanding those is precisely the mechanism behind XXE and
-/// billion-laughs, and no amount of care makes expanding attacker-supplied
-/// entity definitions safe.
-fn resolve_entity(name: &str) -> Option<String> {
-    if let Some(predefined) = quick_xml::escape::resolve_predefined_entity(name) {
-        return Some(predefined.to_string());
-    }
-    // Numeric character references: &#65; and &#x41;.
-    let digits = name.strip_prefix('#')?;
-    let code = match digits.strip_prefix(['x', 'X']) {
-        Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-        None => digits.parse::<u32>().ok()?,
-    };
-    char::from_u32(code).map(|c| c.to_string())
-}
-
-/// Element and attribute names are ASCII in practice; lossy decoding avoids
-/// rejecting a document over a malformed name when the payload is elsewhere.
-fn decode_name(raw: &[u8]) -> String {
-    String::from_utf8_lossy(raw).to_string()
 }
 
 /// Decode only the path component. Query delimiters are split by the caller
@@ -570,21 +417,6 @@ fn form_decode(component: &str) -> String {
     percent_encoding::percent_decode_str(&plus_decoded)
         .decode_utf8_lossy()
         .into_owned()
-}
-
-/// Record one extracted XML value. Returns `true` once the cap is hit.
-fn push_xml_arg(
-    name: &str,
-    value: String,
-    args: &mut HashMapCollection,
-    count: &mut usize,
-) -> bool {
-    if *count >= MAX_XML_ARGS {
-        return true;
-    }
-    *count += 1;
-    args.add(name.to_string(), value);
-    false
 }
 
 /// Most arguments extracted from a single JSON body.
