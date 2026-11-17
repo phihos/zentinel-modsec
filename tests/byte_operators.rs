@@ -8,7 +8,8 @@ fn byte_comparisons_and_validation_use_original_bytes() {
         (OperatorName::BeginsWith, "safe", &b"safe\xff"[..], true),
         (OperatorName::EndsWith, "attack", &b"\xffattack"[..], true),
         (OperatorName::StreQ, "\\xff", &b"\xff"[..], false),
-        (OperatorName::Eq, "0", &b"\xff"[..], false),
+        // Pinned Coraza ignores Atoi syntax errors, yielding numeric zero.
+        (OperatorName::Eq, "0", &b"\xff"[..], true),
         (OperatorName::Ne, "normal", &b"\xff"[..], true),
         (OperatorName::ValidateUtf8Encoding, "", &b"\xff"[..], true),
         (

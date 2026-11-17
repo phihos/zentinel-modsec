@@ -152,6 +152,42 @@ impl Operator for StreqOperator {
     }
 }
 
+// Pinned Coraza's numeric operators use strconv.Atoi and ignore its error.
+// Syntax errors become zero; signed 64-bit overflows retain the clamped value.
+// Work on original bytes: invalid UTF-8 is a syntax error, not absent input.
+fn numeric_value(bytes: &[u8]) -> i64 {
+    let (negative, digits) = match bytes.first() {
+        Some(b'-') => (true, &bytes[1..]),
+        Some(b'+') => (false, &bytes[1..]),
+        _ => (false, bytes),
+    };
+    let saturated = if negative { i64::MIN } else { i64::MAX };
+    let mut value = 0u64;
+    for &byte in digits {
+        if !byte.is_ascii_digit() {
+            return 0;
+        }
+        let Some(next) = value
+            .checked_mul(10)
+            .and_then(|n| n.checked_add(u64::from(byte - b'0')))
+        else {
+            // strconv.ParseUint returns immediately on unsigned overflow,
+            // even if later bytes would have been invalid syntax.
+            return saturated;
+        };
+        value = next;
+    }
+    if negative {
+        if value >= 1u64 << 63 {
+            i64::MIN
+        } else {
+            -(value as i64)
+        }
+    } else {
+        value.min(i64::MAX as u64) as i64
+    }
+}
+
 /// Numeric equals operator (@eq).
 /// Supports both numeric literals and variable references (e.g., %{tx.var}).
 pub struct EqOperator {
@@ -172,30 +208,33 @@ impl EqOperator {
         if self.arg.contains("%{") {
             return None;
         }
-        self.arg.parse().ok()
+        Some(numeric_value(self.arg.as_bytes()))
     }
 }
 
 impl Operator for EqOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        // A binary string is not a decimal number; do not replace its bytes.
-        Ok(match std::str::from_utf8(value) {
-            Ok(text) => self.execute(text).into(),
-            Err(_) => ByteOperatorResult::no_match(),
-        })
+        Ok(
+            if self
+                .target_value()
+                .is_some_and(|target| numeric_value(value) == target)
+            {
+                ByteOperatorResult::matched(value.to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
-            if let Ok(n) = value.parse::<i64>() {
-                if n == target {
-                    return OperatorResult::matched(value.to_string());
-                }
-            }
+        if self
+            .target_value()
+            .is_some_and(|target| numeric_value(value.as_bytes()) == target)
+        {
+            OperatorResult::matched(value.to_string())
+        } else {
+            OperatorResult::no_match()
         }
-        // For variable references, comparison would need runtime resolution
-        // For now, we don't match if we can't resolve
-        OperatorResult::no_match()
     }
 
     fn name(&self) -> &'static str {
@@ -220,28 +259,33 @@ impl GtOperator {
         if self.arg.contains("%{") {
             return None;
         }
-        self.arg.parse().ok()
+        Some(numeric_value(self.arg.as_bytes()))
     }
 }
 
 impl Operator for GtOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        // A binary string is not a decimal number; do not replace its bytes.
-        Ok(match std::str::from_utf8(value) {
-            Ok(text) => self.execute(text).into(),
-            Err(_) => ByteOperatorResult::no_match(),
-        })
+        Ok(
+            if self
+                .target_value()
+                .is_some_and(|target| numeric_value(value) > target)
+            {
+                ByteOperatorResult::matched(value.to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
-            if let Ok(n) = value.parse::<i64>() {
-                if n > target {
-                    return OperatorResult::matched(value.to_string());
-                }
-            }
+        if self
+            .target_value()
+            .is_some_and(|target| numeric_value(value.as_bytes()) > target)
+        {
+            OperatorResult::matched(value.to_string())
+        } else {
+            OperatorResult::no_match()
         }
-        OperatorResult::no_match()
     }
 
     fn name(&self) -> &'static str {
@@ -266,28 +310,33 @@ impl LtOperator {
         if self.arg.contains("%{") {
             return None;
         }
-        self.arg.parse().ok()
+        Some(numeric_value(self.arg.as_bytes()))
     }
 }
 
 impl Operator for LtOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        // A binary string is not a decimal number; do not replace its bytes.
-        Ok(match std::str::from_utf8(value) {
-            Ok(text) => self.execute(text).into(),
-            Err(_) => ByteOperatorResult::no_match(),
-        })
+        Ok(
+            if self
+                .target_value()
+                .is_some_and(|target| numeric_value(value) < target)
+            {
+                ByteOperatorResult::matched(value.to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
-            if let Ok(n) = value.parse::<i64>() {
-                if n < target {
-                    return OperatorResult::matched(value.to_string());
-                }
-            }
+        if self
+            .target_value()
+            .is_some_and(|target| numeric_value(value.as_bytes()) < target)
+        {
+            OperatorResult::matched(value.to_string())
+        } else {
+            OperatorResult::no_match()
         }
-        OperatorResult::no_match()
     }
 
     fn name(&self) -> &'static str {
@@ -312,28 +361,33 @@ impl GeOperator {
         if self.arg.contains("%{") {
             return None;
         }
-        self.arg.parse().ok()
+        Some(numeric_value(self.arg.as_bytes()))
     }
 }
 
 impl Operator for GeOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        // A binary string is not a decimal number; do not replace its bytes.
-        Ok(match std::str::from_utf8(value) {
-            Ok(text) => self.execute(text).into(),
-            Err(_) => ByteOperatorResult::no_match(),
-        })
+        Ok(
+            if self
+                .target_value()
+                .is_some_and(|target| numeric_value(value) >= target)
+            {
+                ByteOperatorResult::matched(value.to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
-            if let Ok(n) = value.parse::<i64>() {
-                if n >= target {
-                    return OperatorResult::matched(value.to_string());
-                }
-            }
+        if self
+            .target_value()
+            .is_some_and(|target| numeric_value(value.as_bytes()) >= target)
+        {
+            OperatorResult::matched(value.to_string())
+        } else {
+            OperatorResult::no_match()
         }
-        OperatorResult::no_match()
     }
 
     fn name(&self) -> &'static str {
@@ -358,28 +412,33 @@ impl LeOperator {
         if self.arg.contains("%{") {
             return None;
         }
-        self.arg.parse().ok()
+        Some(numeric_value(self.arg.as_bytes()))
     }
 }
 
 impl Operator for LeOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        // A binary string is not a decimal number; do not replace its bytes.
-        Ok(match std::str::from_utf8(value) {
-            Ok(text) => self.execute(text).into(),
-            Err(_) => ByteOperatorResult::no_match(),
-        })
+        Ok(
+            if self
+                .target_value()
+                .is_some_and(|target| numeric_value(value) <= target)
+            {
+                ByteOperatorResult::matched(value.to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(target) = self.target_value() {
-            if let Ok(n) = value.parse::<i64>() {
-                if n <= target {
-                    return OperatorResult::matched(value.to_string());
-                }
-            }
+        if self
+            .target_value()
+            .is_some_and(|target| numeric_value(value.as_bytes()) <= target)
+        {
+            OperatorResult::matched(value.to_string())
+        } else {
+            OperatorResult::no_match()
         }
-        OperatorResult::no_match()
     }
 
     fn name(&self) -> &'static str {
