@@ -302,7 +302,10 @@ fn report_macros(found: &mut Diagnostics, value: &str, id: &str) {
         remaining = tail;
         let lower = name.to_ascii_lowercase();
         let supported = match lower.split_once('.') {
-            Some((collection, _)) => matches!(collection, "tx" | "request_headers"),
+            Some((collection, _)) => matches!(
+                collection,
+                "tx" | "request_headers" | "args" | "args_get" | "args_post"
+            ),
             None => {
                 matches!(lower.as_str(), "matched_var" | "matched_var_name")
                     || VariableName::from_str(name).is_none()

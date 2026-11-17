@@ -157,7 +157,6 @@ fn unsupported_macro_sources_are_reported_in_operator_and_setvar() {
     for config in [
         r#"SecRule ARGS "@contains %{rule.msg}" "id:108,phase:2,pass""#,
         r#"SecAction "id:108,phase:1,pass,setvar:tx.source=%{REMOTE_ADDR}""#,
-        r#"SecRule ARGS "@contains %{ARGS._charset_}" "id:108,phase:2,pass""#,
     ] {
         let (_, log) = load_logs(config);
         assert!(
@@ -302,4 +301,18 @@ fn oversized_variable_regex_programs_warn_at_load_even_with_negation() {
             );
         }
     }
+}
+
+#[test]
+fn supported_argument_macros_do_not_warn_and_read_present_values() {
+    let (engine, log) = load_logs(
+        r#"SecAction "id:1,phase:1,pass,setvar:tx.charset=%{ARGS._charset_}"
+SecRule TX:charset "@streq utf-8" "id:2,phase:1,pass""#,
+    );
+    assert!(log.is_empty(), "{log}");
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/?_charset_=utf-8", "GET", "HTTP/1.1")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2"]);
 }
