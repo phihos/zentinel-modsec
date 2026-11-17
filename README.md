@@ -162,7 +162,10 @@ Response headers can be supplied with `process_response_headers_with_status()`;
 
 Under `SecRuleEngine DetectionOnly` rules match but never intervene;
 `tx.matched_rules()` lists what matched. `setvar` on `TX` works as in CRS, and
-`tx.anomaly_score()` returns the accumulated score:
+`tx.anomaly_score()` reads `TX:anomaly_score`. CRS versions with per-paranoia
+scores compute separate aggregates; read `TX:blocking_inbound_anomaly_score`
+through `tx.tx()` for the score used by inbound blocking. Rules own these
+variables, and phase completion preserves their values:
 
 ```rust
 let modsec = ModSecurity::from_string(r#"

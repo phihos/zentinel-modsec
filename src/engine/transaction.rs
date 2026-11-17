@@ -8,7 +8,6 @@ use super::control::{CtlDirective, TransactionControls};
 use super::intervention::Intervention;
 use super::phase::Phase;
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
-use super::scoring::AnomalyScore;
 use crate::actions::{
     execute_actions, ActionResult, DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar,
     SetVarOperation,
@@ -54,8 +53,6 @@ pub struct Transaction {
     phase: Phase,
     /// Intervention (if any).
     intervention: Option<Intervention>,
-    /// Anomaly score tracker.
-    anomaly_score: AnomalyScore,
     /// Default block status.
     default_status: u16,
     /// Matched rules.
@@ -205,7 +202,6 @@ impl Transaction {
             tx: TxCollection::new(),
             phase: Phase::RequestHeaders,
             intervention: None,
-            anomaly_score: AnomalyScore::new(),
             default_status,
             matched_rules: Vec::new(),
             allowed: false,
@@ -871,9 +867,20 @@ impl Transaction {
         &self.matched_rules
     }
 
-    /// Get the anomaly score.
+    /// Read the current legacy `TX:anomaly_score` value, or zero if absent.
+    ///
+    /// CRS versions with per-paranoia scores compute their own aggregates, such
+    /// as `TX:blocking_inbound_anomaly_score`. Read those keys through `tx()`;
+    /// this accessor does not invent or overwrite rule-owned scoring variables.
     pub fn anomaly_score(&self) -> i32 {
-        self.anomaly_score.inbound
+        self.tx
+            .get_bytes(b"anomaly_score")
+            .and_then(|values| {
+                values
+                    .first()
+                    .and_then(|v| std::str::from_utf8(v).ok()?.parse().ok())
+            })
+            .unwrap_or(0)
     }
 
     /// Get the TX collection.
@@ -1239,9 +1246,6 @@ impl Transaction {
             idx += 1;
         }
 
-        // Sync anomaly score to TX
-        self.anomaly_score.sync_to_tx(&mut self.tx);
-
         Ok(())
     }
 
@@ -1555,9 +1559,6 @@ impl Transaction {
                 op: change,
             });
         }
-        if name == b"anomaly_score" {
-            self.anomaly_score.sync_from_tx(&self.tx);
-        }
     }
 }
 
@@ -1615,7 +1616,7 @@ impl std::fmt::Debug for Transaction {
         f.debug_struct("Transaction")
             .field("phase", &self.phase)
             .field("has_intervention", &self.intervention.is_some())
-            .field("anomaly_score", &self.anomaly_score.inbound)
+            .field("anomaly_score", &self.anomaly_score())
             .field("matched_rules", &self.matched_rules)
             .finish()
     }
