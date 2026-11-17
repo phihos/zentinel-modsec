@@ -87,6 +87,18 @@ fn a_negated_invalid_pattern_does_not_block_everything() {
     }
 }
 
+/// Syntax validation alone accepted this pattern. Compilation failed only at
+/// first use, producing a no-match that negation inverted into a blanket deny.
+#[test]
+fn a_negated_oversized_program_does_not_block_everything() {
+    let rules = r#"SecRuleEngine On
+SecRule REQUEST_URI "!@rx \w{100000}" "id:1,phase:1,deny"
+SecRule REQUEST_URI "@rx /attack" "id:2,phase:1,deny""#;
+    let msc = load(rules).expect("an oversized pattern is reported at load");
+    assert!(!blocked(&msc, "/harmless"));
+    assert!(blocked(&msc, "/attack"));
+}
+
 /// A negated *valid* pattern still inverts, so the test above is not passing
 /// because negation stopped working generally.
 #[test]
