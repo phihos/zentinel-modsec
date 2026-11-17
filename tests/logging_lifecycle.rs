@@ -58,7 +58,7 @@ SecAction "id:3,phase:5,pass""#
 fn every_disruptive_logging_outcome_permits_later_logging_rules() {
     for (action, status) in [
         ("block", 403),
-        ("drop", 444),
+        ("drop", 0),
         ("redirect:https://example.test/", 302),
     ] {
         let engine = ModSecurity::from_string(&format!(

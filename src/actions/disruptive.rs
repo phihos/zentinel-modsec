@@ -10,7 +10,7 @@ pub fn status_for_outcome(outcome: &DisruptiveOutcome, default_status: u16) -> u
         DisruptiveOutcome::Allow => 200,
         DisruptiveOutcome::Redirect(_) => 302,
         DisruptiveOutcome::Pass => 200,
-        DisruptiveOutcome::Drop => 444, // nginx-style connection drop
+        DisruptiveOutcome::Drop => 0, // connection drop without an HTTP response
     }
 }
 

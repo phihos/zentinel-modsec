@@ -109,6 +109,8 @@ pub enum SetVarOperation {
 pub struct RuleMetadata {
     /// Rule ID.
     pub id: Option<String>,
+    /// Explicit disruptive status, independent of action ordering.
+    pub status: Option<u16>,
     /// Rule message.
     pub msg: Option<String>,
     /// Log message.
@@ -173,6 +175,13 @@ pub fn execute_actions(
         }
     }
 
+    if let Some(DisruptiveOutcome::Deny(status)) = result.disruptive.as_mut() {
+        *status = result
+            .metadata
+            .status
+            .filter(|status| *status != 0)
+            .unwrap_or(*status);
+    }
     result
 }
 
@@ -278,8 +287,8 @@ fn execute_metadata(action: &MetadataAction, metadata: &mut RuleMetadata) {
         MetadataAction::LogData(data) => {
             metadata.logdata = Some(data.clone());
         }
-        MetadataAction::Status(_) => {
-            // Status is handled at disruptive action level
+        MetadataAction::Status(status) => {
+            metadata.status = Some(*status);
         }
     }
 }

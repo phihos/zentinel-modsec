@@ -155,6 +155,11 @@ then resolves access and the pending limit decision; no body phase runs early.
 Each header/body phase executes at most once; failed callbacks remain errors
 on retries. After a body callback seals an ordinary body,
 new bytes produce a visible error; tails after a limit consume zero bytes.
+`status` applies to deny/block and drop actions. Redirects accept status
+301, 302, 303 or 307 and otherwise use 302, matching Coraza. A drop has
+`drop_connection=true` and status zero by default; check the intervention itself,
+not only a nonzero HTTP status. Status arguments retain the public `u16` domain.
+
 Response headers can be supplied with `process_response_headers_with_status()`;
 `process_response_body()` runs phase 4 after MIME/access checks.
 
