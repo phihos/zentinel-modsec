@@ -436,7 +436,7 @@ impl Transaction {
             return Ok(());
         }
 
-        if ct_lower.starts_with("multipart/form-data") {
+        if self.request.body_processor == "MULTIPART" {
             // Multipart body processor: populates ARGS_POST, FILES and
             // MULTIPART_PART_HEADERS. Never fall back to the urlencoded
             // parser for multipart payloads — that would produce bogus ARGS.
@@ -455,7 +455,7 @@ impl Transaction {
             // to inspect. An injection payload was blocked in a form body and
             // passed unexamined in a JSON body.
             self.process_json_body();
-        } else if ct_lower.starts_with("application/x-www-form-urlencoded")
+        } else if self.request.body_processor == "URLENCODED"
             || self.controls.force_request_body_variable()
         {
             // Pinned Coraza selects URLENCODED for forceRequestBodyVariable
