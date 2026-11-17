@@ -705,6 +705,12 @@ impl Transaction {
                     // Known limitations were reported with rule IDs at load;
                     // repeating those warnings for every request adds no evidence.
                     if !matches!(directive, CtlDirective::Unsupported { .. }) {
+                        // The selected processor is observable immediately,
+                        // including phase-1 rules and explicitly typed empty
+                        // bodies. Fallback selection still waits for body data.
+                        if let CtlDirective::RequestBodyProcessor(ref processor) = directive {
+                            self.request.body_processor = processor.clone();
+                        }
                         self.controls.apply(directive);
                     }
                 }
