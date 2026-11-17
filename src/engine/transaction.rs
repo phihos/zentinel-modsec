@@ -228,6 +228,22 @@ impl Transaction {
         &self.rule_messages
     }
 
+    fn expand_rule_message(&self, result: &ActionResult) -> Option<RuleMessage> {
+        Some(RuleMessage {
+            rule_id: result.metadata.id.clone()?,
+            message: result
+                .metadata
+                .msg
+                .as_deref()
+                .map(|s| self.expand_operator_macros_bytes(s)),
+            logdata: result
+                .metadata
+                .logdata
+                .as_deref()
+                .map(|s| self.expand_operator_macros_bytes(s)),
+        })
+    }
+
     /// Set the client address, backing `REMOTE_ADDR` and `REMOTE_PORT`.
     ///
     /// Without this there is no way for a caller to populate them, so every
@@ -666,6 +682,7 @@ impl Transaction {
                     .iter()
                     .any(|a| matches!(a, Action::Data(DataAction::Capture)));
                 let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
+                let mut first_message = None;
 
                 // `capture` and `setvar` run once for each variable the
                 // operator matched, in order, as libmodsecurity does
@@ -714,6 +731,17 @@ impl Transaction {
                     }
                     for op in &setvar_ops {
                         self.apply_setvar(op, link_rule_id);
+                    }
+                    // A standalone rule's primary log record describes its
+                    // first match, with captures and setvar effects from that
+                    // match. Later values can overwrite both. Chain starters
+                    // instead expand after the final link has completed.
+                    if n == 0
+                        && self.record_rule_messages
+                        && !rule.is_chain
+                        && !chain_state.in_chain
+                    {
+                        first_message = self.expand_rule_message(&action_result);
                     }
                 }
 
@@ -780,22 +808,10 @@ impl Transaction {
                 }
 
                 if self.record_rule_messages {
-                    if let Some(id) = action_result.metadata.id.as_ref() {
-                        let message = action_result
-                            .metadata
-                            .msg
-                            .as_deref()
-                            .map(|template| self.expand_operator_macros_bytes(template));
-                        let logdata = action_result
-                            .metadata
-                            .logdata
-                            .as_deref()
-                            .map(|template| self.expand_operator_macros_bytes(template));
-                        self.rule_messages.push(RuleMessage {
-                            rule_id: id.clone(),
-                            message,
-                            logdata,
-                        });
+                    if let Some(message) =
+                        first_message.or_else(|| self.expand_rule_message(&action_result))
+                    {
+                        self.rule_messages.push(message);
                     }
                 }
 

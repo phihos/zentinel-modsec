@@ -80,3 +80,29 @@ fn disabling_message_recording_does_not_disable_detection() {
     assert_eq!(tx.matched_rules(), ["400"]);
     assert!(tx.rule_messages().is_empty());
 }
+
+#[test]
+fn standalone_message_keeps_first_match_captures_and_score() {
+    let engine = ModSecurity::from_string(
+        r#"SecRuleEngine DetectionOnly
+SecAction "id:1,phase:1,pass,setvar:tx.score=0"
+SecRule ARGS:q "@rx ^evil(.)$" "id:500,phase:2,pass,capture,msg:'score=%{tx.score}',logdata:'%{MATCHED_VAR} capture=%{tx.1}',setvar:tx.score=+5""#,
+    ).unwrap();
+    let mut tx = engine.new_transaction();
+    tx.set_record_rule_messages(true);
+    tx.process_uri("/?q=evil1&q=evil2", "GET", "HTTP/1.1")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    let message = tx
+        .rule_messages()
+        .iter()
+        .find(|m| m.rule_id == "500")
+        .unwrap();
+    assert_eq!(message.message.as_deref(), Some(b"score=5".as_slice()));
+    assert_eq!(
+        message.logdata.as_deref(),
+        Some(b"evil1 capture=1".as_slice())
+    );
+    assert_eq!(tx.anomaly_score(), 0);
+}
