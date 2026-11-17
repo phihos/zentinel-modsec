@@ -150,6 +150,13 @@ pub enum Error {
         message: String,
     },
 
+    /// A text-only extension cannot execute against arbitrary input bytes.
+    #[error("{component} cannot inspect binary input; implement its byte API")]
+    UnsupportedBinaryInput {
+        /// Operator, transformation, or backend that requires UTF-8 text.
+        component: String,
+    },
+
     /// Internal error (should not happen in normal operation).
     #[error("internal error: {message}")]
     Internal {

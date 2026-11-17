@@ -23,6 +23,11 @@ fn checked_result(result: c_int, fingerprint: impl FnOnce() -> String) -> Detect
 
 /// Detect SQLi with upstream libinjection, including its native fingerprint.
 pub fn detect_sqli(input: &str) -> DetectionResult {
+    detect_sqli_bytes(input.as_bytes())
+}
+
+/// Detect SQLi in the original bytes, including invalid UTF-8 and embedded NULs.
+pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
     // Upstream requires at least eight bytes and writes an ASCII C string.
     let mut fingerprint = [0 as c_char; 8];
     // SAFETY: input remains valid for len bytes throughout the synchronous
@@ -42,6 +47,11 @@ pub fn detect_sqli(input: &str) -> DetectionResult {
 
 /// Detect XSS with upstream libinjection.
 pub fn detect_xss(input: &str) -> DetectionResult {
+    detect_xss_bytes(input.as_bytes())
+}
+
+/// Detect XSS in the original bytes, including invalid UTF-8 and embedded NULs.
+pub fn detect_xss_bytes(input: &[u8]) -> DetectionResult {
     // SAFETY: input is a valid immutable byte slice for the supplied length;
     // upstream neither retains nor mutates it. Embedded NULs are supported.
     let result = unsafe { libinjection_xss(input.as_ptr().cast(), input.len()) };
