@@ -267,3 +267,28 @@ fn malformed_id_target_controls_warn_before_evaluation() {
         );
     }
 }
+
+#[test]
+fn oversized_variable_regex_programs_warn_at_load_even_with_negation() {
+    // Valid syntax, but the Unicode character class repeated this many times
+    // exceeds regex::Regex's default compiled program limit.
+    let pattern = r"\w{100000}";
+    assert!(matches!(
+        regex::Regex::new(pattern),
+        Err(regex::Error::CompiledTooBig(_))
+    ));
+    for variables in [
+        format!("ARGS:/{pattern}/"),
+        format!("ARGS|!ARGS:/{pattern}/"),
+    ] {
+        for operator in ["@contains attack", "!@contains attack"] {
+            let (_, log) = load_logs(&format!(
+                r#"SecRule {variables} "{operator}" "id:115,phase:2,pass""#
+            ));
+            assert!(
+                log.contains("variable-regex") && log.contains("rule_ids=115"),
+                "{variables}, {operator}: {log}"
+            );
+        }
+    }
+}
