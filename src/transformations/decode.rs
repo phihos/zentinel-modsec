@@ -7,6 +7,10 @@ use std::borrow::Cow;
 pub struct UrlDecode;
 
 impl Transformation for UrlDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         match percent_encoding::percent_decode_str(input).decode_utf8() {
             Ok(decoded) => {
@@ -29,6 +33,10 @@ impl Transformation for UrlDecode {
 pub struct UrlDecodeUni;
 
 impl Transformation for UrlDecodeUni {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Decode original input positions exactly once. Invalid/truncated
         // escapes must not swallow the following character (which may itself
@@ -101,6 +109,10 @@ impl Transformation for UrlDecodeUni {
 pub struct Base64Decode;
 
 impl Transformation for Base64Decode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use base64::Engine;
         match base64::engine::general_purpose::STANDARD.decode(input) {
@@ -118,6 +130,10 @@ impl Transformation for Base64Decode {
 pub struct Base64DecodeExt;
 
 impl Transformation for Base64DecodeExt {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use base64::Engine;
         // Try URL-safe first, then standard
@@ -140,6 +156,10 @@ impl Transformation for Base64DecodeExt {
 pub struct HexDecode;
 
 impl Transformation for HexDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = Vec::new();
         let mut chars = input.chars().peekable();
@@ -171,6 +191,10 @@ impl Transformation for HexDecode {
 pub struct HtmlEntityDecode;
 
 impl Transformation for HtmlEntityDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let decoded = html_escape::decode_html_entities(input);
         if decoded == input {
@@ -189,6 +213,10 @@ impl Transformation for HtmlEntityDecode {
 pub struct JsDecode;
 
 impl Transformation for JsDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut chars = input.chars().peekable();
@@ -269,6 +297,10 @@ impl Transformation for JsDecode {
 pub struct CssDecode;
 
 impl Transformation for CssDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut chars = input.chars().peekable();

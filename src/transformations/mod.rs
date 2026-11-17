@@ -1,5 +1,6 @@
 //! Transformation functions for ModSecurity.
 
+pub(crate) mod bytes;
 mod decode;
 mod encode;
 mod normalize;
@@ -98,6 +99,10 @@ pub fn create_transformation(name: &str) -> Result<Arc<dyn Transformation>> {
 pub struct None_;
 
 impl Transformation for None_ {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         Cow::Borrowed(input)
     }
@@ -111,6 +116,10 @@ impl Transformation for None_ {
 pub struct Length;
 
 impl Transformation for Length {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         Cow::Owned(input.len().to_string())
     }
