@@ -47,6 +47,26 @@ pub struct RequestData {
     /// Uploaded files (key = part name, value = client-supplied filename),
     /// populated by the multipart body processor. Backs `FILES`/`FILES_NAMES`.
     pub files: HashMapCollection,
+    /// Uploaded field names (one value per file part).
+    pub files_names: HashMapCollection,
+    /// Uploaded payload byte sizes, keyed by the original filename bytes.
+    pub files_sizes: HashMapCollection,
+    /// Sum of multipart field and file payload bytes, excluding framing.
+    pub files_combined_size: usize,
+    /// Multipart field names and all filename interpretations.
+    pub multipart_names: HashMapCollection,
+    /// Filenames keyed by multipart part name.
+    pub multipart_filenames: HashMapCollection,
+    /// Extended filename charsets, without transcoding the filename bytes.
+    pub multipart_filename_charsets: HashMapCollection,
+    /// Extended filename language parameters.
+    pub multipart_filename_languages: HashMapCollection,
+    /// Multipart syntax or parser-disagreement flags.
+    pub multipart_strict_error: bool,
+    /// A duplicate multipart header or conflicting parameter was present.
+    pub multipart_duplicate_part_header: bool,
+    /// An extended filename used invalid quoted-string syntax.
+    pub multipart_invalid_quoting: bool,
     /// Name of the body processor that handled the request body
     /// (`MULTIPART`, `URLENCODED`, `JSON`, or empty when none ran). Backs
     /// `REQBODY_PROCESSOR`.
@@ -61,6 +81,8 @@ pub struct RequestData {
     pub body_error: Option<String>,
     /// Request body.
     pub body: Vec<u8>,
+    /// The engine intentionally retained only a body-limit prefix.
+    pub inbound_data_error: bool,
     /// Client IP address.
     pub client_ip: String,
     /// Client port.
@@ -255,85 +277,32 @@ impl RequestData {
         parse_form_bytes(qs.as_bytes(), &mut self.args_get);
     }
 
-    /// Parse a `multipart/form-data` body.
-    ///
-    /// Populates `args_post` from form fields, `files` from file parts, and
-    /// `multipart_part_headers` with every part header line keyed by the part
-    /// name (ModSecurity `MULTIPART_PART_HEADERS` semantics). Returns `false`
-    /// when no boundary parameter can be extracted from the Content-Type.
+    /// Parse multipart without decoding binary fields or filenames as UTF-8.
     pub fn parse_multipart_body(&mut self, content_type: &str) -> bool {
-        let Some(boundary) = extract_multipart_boundary(content_type) else {
-            return false;
-        };
-        let body = self.body_str();
-        let delimiter = format!("--{boundary}");
+        self.parse_multipart_body_bytes(content_type.as_bytes())
+    }
 
-        let mut sections = body.split(delimiter.as_str());
-        // Everything before the first boundary is preamble; discard it.
-        let _preamble = sections.next();
-
-        for section in sections {
-            if section.starts_with("--") {
-                // Closing delimiter (`--boundary--`); anything after is epilogue.
-                break;
-            }
-            // The boundary line ends with CRLF before the part headers.
-            let section = section
-                .strip_prefix("\r\n")
-                .or_else(|| section.strip_prefix("\n"))
-                .unwrap_or(section);
-
-            // Headers are separated from the part content by a blank line.
-            let (head, content) = match section.split_once("\r\n\r\n") {
-                Some(split) => split,
-                None => match section.split_once("\n\n") {
-                    Some(split) => split,
-                    None => (section, ""),
-                },
-            };
-            // The CRLF before the next boundary belongs to the framing, not
-            // the content.
-            let content = content
-                .strip_suffix("\r\n")
-                .or_else(|| content.strip_suffix("\n"))
-                .unwrap_or(content);
-
-            let mut part_name: Option<String> = None;
-            let mut filename: Option<String> = None;
-            let mut header_lines: Vec<String> = Vec::new();
-
-            for line in head.lines() {
-                let line = line.trim_end_matches('\r');
-                if line.is_empty() {
-                    continue;
-                }
-                header_lines.push(line.to_string());
-                if let Some((hname, hval)) = line.split_once(':') {
-                    if hname.trim().eq_ignore_ascii_case("content-disposition") {
-                        part_name = extract_disposition_param(hval, "name");
-                        filename = extract_disposition_param(hval, "filename");
-                    }
-                }
-            }
-
-            let Some(name) = part_name else {
-                // A part without a Content-Disposition name cannot be
-                // addressed by any collection key; skip it.
-                continue;
-            };
-
-            for line in header_lines {
-                self.multipart_part_headers.add(name.clone(), line);
-            }
-            if let Some(fname) = filename {
-                self.files.add(name, fname);
-            } else {
-                self.args_post.add(name, content.to_string());
-            }
-        }
-
-        self.body_processor = "MULTIPART".to_string();
-        true
+    /// Byte-preserving multipart Content-Type and body processing.
+    /// Returns false when the Content-Type carries no usable boundary; parser
+    /// failures remain visible through body and strict-error variables.
+    pub fn parse_multipart_body_bytes(&mut self, content_type: &[u8]) -> bool {
+        self.body_processor = "MULTIPART".into();
+        let parsed = super::multipart::parse(&self.body, content_type, self.inbound_data_error);
+        self.args_post = parsed.fields;
+        self.files = parsed.files;
+        self.files_names = parsed.file_names;
+        self.files_sizes = parsed.file_sizes;
+        self.files_combined_size = parsed.combined_size;
+        self.multipart_part_headers = parsed.headers;
+        self.multipart_names = parsed.names;
+        self.multipart_filenames = parsed.filenames;
+        self.multipart_filename_charsets = parsed.charsets;
+        self.multipart_filename_languages = parsed.languages;
+        self.multipart_strict_error = parsed.strict;
+        self.multipart_duplicate_part_header = parsed.duplicate;
+        self.multipart_invalid_quoting = parsed.invalid_quoting;
+        self.body_error = parsed.error;
+        parsed.has_boundary
     }
 
     /// Parse form body into args_post.
@@ -576,36 +545,6 @@ fn push_json_arg(
     false
 }
 
-/// Extract the `boundary` parameter from a multipart Content-Type value.
-fn extract_multipart_boundary(content_type: &str) -> Option<String> {
-    for param in content_type.split(';').skip(1) {
-        let param = param.trim();
-        if let Some((key, value)) = param.split_once('=') {
-            if key.trim().eq_ignore_ascii_case("boundary") {
-                let value = value.trim().trim_matches('"');
-                if !value.is_empty() {
-                    return Some(value.to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extract a parameter value (e.g. `name`, `filename`) from a
-/// Content-Disposition header value.
-fn extract_disposition_param(header_value: &str, param: &str) -> Option<String> {
-    for part in header_value.split(';') {
-        let part = part.trim();
-        if let Some((key, value)) = part.split_once('=') {
-            if key.trim().eq_ignore_ascii_case(param) {
-                return Some(value.trim().trim_matches('"').to_string());
-            }
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -639,7 +578,8 @@ mod tests {
         assert_eq!(req.args_post.get("field1"), Some(vec!["value1"]));
         // File part does NOT land in ARGS_POST but in FILES.
         assert_eq!(req.args_post.get("upload"), None);
-        assert_eq!(req.files.get("upload"), Some(vec!["a.txt"]));
+        assert_eq!(req.files.get(""), Some(vec!["a.txt"]));
+        assert_eq!(req.files_names.get(""), Some(vec!["upload"]));
 
         // Every part header line is recorded under the part name.
         let field1_headers = req.multipart_part_headers.get("field1").unwrap();
@@ -666,6 +606,8 @@ mod tests {
         let mut req = RequestData::new();
         req.append_body(b"irrelevant");
         assert!(!req.parse_multipart_body("multipart/form-data"));
-        assert!(req.body_processor.is_empty());
+        assert_eq!(req.body_processor, "MULTIPART");
+        assert!(req.body_error.is_some());
+        assert!(req.multipart_strict_error);
     }
 }
