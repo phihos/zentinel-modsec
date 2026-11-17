@@ -183,6 +183,7 @@ let modsec = ModSecurity::from_string(r#"
 git clone https://github.com/coreruleset/coreruleset /etc/modsecurity/crs
 cp /etc/modsecurity/crs/crs-setup.conf.example /etc/modsecurity/crs/crs-setup.conf
 cat > /etc/modsecurity/main.conf <<'EOF'
+SecRequestBodyAccess On
 Include /etc/modsecurity/crs/crs-setup.conf
 Include /etc/modsecurity/crs/rules/*.conf
 EOF
@@ -208,9 +209,8 @@ async fn waf(
     tx.process_uri(uri, request.method().as_str(), "HTTP/1.1")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     for (name, value) in request.headers() {
-        if let Ok(v) = value.to_str() {
-            let _ = tx.add_request_header(name.as_str(), v);
-        }
+        tx.add_request_header_bytes(name.as_str().as_bytes(), value.as_bytes())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     tx.process_request_headers().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     // Phase 2 (arguments; add the body first if you inspect bodies).
@@ -305,12 +305,23 @@ selector/exclusion regexes and unsupported macro sources also warn with IDs.
 Only TX writes are implemented; non-TX `setvar` collection names are ignored
 and their writes reach TX, which is reported at load.
 
-Accepted action limitations are also reported with rule IDs: `multiMatch`,
+`multiMatch` evaluates the original value and each changed transformation stage.
+The byte APIs preserve binary input, captures and macro expansions; string APIs
+provide display values. Header lookup ignores ASCII case while match metadata
+preserves each original header name.
+
+Accepted action limitations are also reported with rule IDs:
 persistent-collection actions, script execution, response modification,
 `proxy`, `pause`, `xmlns`, scoped `allow`, and logging/sanitization policy.
 The engine has no log sink; embedding applications must implement logging
 policy. Known unsupported controls warn at load without repeating the warning
 on each request.
+
+Connectors can enable `Transaction::set_record_rule_messages(true)` and read
+`rule_messages()` for expanded `msg` and `logdata` bytes captured at match time.
+Recording is disabled by default. The connector applies logging policy and
+escapes these bytes for its output format. Supply actual response metadata via
+`process_response_headers_with_status` before processing its body.
 
 ## CRS conformance
 
