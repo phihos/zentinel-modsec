@@ -190,27 +190,32 @@ fn report_variables(found: &mut Diagnostics, variables: &[VariableSpec], id: &st
         }
         if variable.name != VariableName::Xml {
             if let Some(Selection::Regex(pattern)) = &variable.selection {
-                report_regex(found, pattern, id);
+                report_regex(found, pattern, variable.name, id);
             }
         }
         for exclusion in &variable.exclusions {
-            if let Some((_, selection)) = exclusion.split_once(':') {
+            if let Some((collection, selection)) = exclusion.split_once(':') {
                 if let Some(pattern) = selection
                     .strip_prefix('/')
                     .and_then(|s| s.strip_suffix('/'))
                 {
-                    report_regex(found, pattern, id);
+                    report_regex(
+                        found,
+                        pattern,
+                        VariableName::from_str(collection).unwrap_or(variable.name),
+                        id,
+                    );
                 }
             }
         }
     }
 }
 
-fn report_regex(found: &mut Diagnostics, pattern: &str, id: &str) {
+fn report_regex(found: &mut Diagnostics, pattern: &str, collection: VariableName, id: &str) {
     // Syntax alone is insufficient: valid regexes may exceed the compiled
     // program limit. Reuse the resolver cache so this also warms successful
     // selectors once, and failed compilations remain cached for evaluation.
-    if crate::variables::cached_regex(pattern).is_none() {
+    if crate::variables::cached_collection_regex(pattern, collection).is_none() {
         record(
             found,
             "variable-regex",

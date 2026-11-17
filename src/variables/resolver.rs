@@ -33,6 +33,18 @@ pub(crate) fn cached_regex(pattern: &str) -> Option<Regex> {
         .clone()
 }
 
+/// Compile selectors with their collection's key matching policy. Enabling
+/// folding through regex flags preserves escape/class syntax such as `\D`;
+/// lowercasing regex source would change that operator to `\d`. Explicit
+/// inline flags inside the pattern retain their normal override semantics.
+pub(crate) fn cached_collection_regex(pattern: &str, collection: VariableName) -> Option<Regex> {
+    if collection == VariableName::Tx {
+        cached_regex(&format!("(?i){pattern}"))
+    } else {
+        cached_regex(pattern)
+    }
+}
+
 /// Variable resolver for transaction context.
 pub struct VariableResolver<'a> {
     request: &'a RequestData,
@@ -461,7 +473,7 @@ impl<'a> VariableResolver<'a> {
                 }
             }
             Some(Selection::Regex(pattern)) => {
-                if let Some(re) = cached_regex(pattern) {
+                if let Some(re) = cached_collection_regex(pattern, VariableName::Tx) {
                     self.tx
                         .get_regex(&re)
                         .into_iter()
@@ -499,9 +511,12 @@ fn exclusion_matches(key: &str, exclusion: &str) -> bool {
                 return false;
             }
             if excl_sel.len() > 2 && excl_sel.starts_with('/') && excl_sel.ends_with('/') {
-                cached_regex(&excl_sel[1..excl_sel.len() - 1])
-                    .map(|re| re.is_match(key_member))
-                    .unwrap_or(false)
+                cached_collection_regex(
+                    &excl_sel[1..excl_sel.len() - 1],
+                    VariableName::from_str(excl_coll).unwrap_or(VariableName::Args),
+                )
+                .map(|re| re.is_match(key_member))
+                .unwrap_or(false)
             } else {
                 key_member.eq_ignore_ascii_case(excl_sel)
             }
