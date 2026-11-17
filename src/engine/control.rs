@@ -70,8 +70,10 @@ pub enum CtlDirective {
     },
     /// `ctl:requestBodyAccess=On|Off`
     RequestBodyAccess(bool),
-    /// `ctl:requestBodyProcessor=URLENCODED|MULTIPART|JSON|XML`
+    /// `ctl:requestBodyProcessor=URLENCODED|MULTIPART|JSON|XML|RAW`
     RequestBodyProcessor(String),
+    /// Expose an otherwise unprocessed body (Coraza 3.8.1 uses URLENCODED).
+    ForceRequestBodyVariable(bool),
     /// A directive this engine does not implement.
     ///
     /// Kept as a distinct variant so it can be reported rather than discarded.
@@ -86,7 +88,7 @@ pub enum CtlDirective {
 }
 
 /// Body processors this engine can actually run.
-const SUPPORTED_BODY_PROCESSORS: &[&str] = &["URLENCODED", "MULTIPART", "JSON", "XML"];
+const SUPPORTED_BODY_PROCESSORS: &[&str] = &["URLENCODED", "MULTIPART", "JSON", "XML", "RAW"];
 
 impl CtlDirective {
     /// Interpret a parsed `ctl:` action.
@@ -203,6 +205,16 @@ impl CtlDirective {
                 ),
             },
 
+            "forcerequestbodyvariable" => match value.to_ascii_lowercase().as_str() {
+                "on" => Self::ForceRequestBodyVariable(true),
+                "off" => Self::ForceRequestBodyVariable(false),
+                _ => Self::unsupported(
+                    directive,
+                    value,
+                    "forceRequestBodyVariable accepts only On or Off",
+                ),
+            },
+
             "requestbodyprocessor" => {
                 let upper = value.to_ascii_uppercase();
                 if SUPPORTED_BODY_PROCESSORS.contains(&upper.as_str()) {
@@ -212,7 +224,7 @@ impl CtlDirective {
                         directive,
                         value,
                         "requestBodyProcessor accepts only URLENCODED, MULTIPART, \
-                         JSON or XML",
+                         JSON, XML or RAW",
                     )
                 }
             }
@@ -281,6 +293,7 @@ pub struct TransactionControls {
     removed_tag_targets: Vec<(String, VariableSpec, Option<regex::Regex>)>,
     request_body_access: Option<bool>,
     request_body_processor: Option<String>,
+    force_request_body_variable: bool,
     /// Unsupported directives already reported, so a rule that fires on every
     /// request does not produce a warning per request.
     reported: HashSet<String>,
@@ -336,6 +349,7 @@ impl TransactionControls {
             }
             CtlDirective::RequestBodyAccess(on) => self.request_body_access = Some(on),
             CtlDirective::RequestBodyProcessor(p) => self.request_body_processor = Some(p),
+            CtlDirective::ForceRequestBodyVariable(on) => self.force_request_body_variable = on,
             CtlDirective::Unsupported {
                 directive,
                 value,
@@ -448,6 +462,11 @@ impl TransactionControls {
     /// Whether the request body should be parsed at all.
     pub fn request_body_access(&self) -> bool {
         self.request_body_access.unwrap_or(true)
+    }
+
+    /// Whether a processor should be selected for an otherwise opaque body.
+    pub fn force_request_body_variable(&self) -> bool {
+        self.force_request_body_variable
     }
 
     /// Body processor forced by `ctl:requestBodyProcessor`, if any.
@@ -753,7 +772,7 @@ mod tests {
             ("requestBodyProcessor", "YAML"),
             ("auditEngine", "Off"),
             ("auditLogParts", "+E"),
-            ("forceRequestBodyVariable", "On"),
+            ("forceRequestBodyVariable", "sometimes"),
         ] {
             assert!(
                 matches!(
