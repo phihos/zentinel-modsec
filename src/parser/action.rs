@@ -19,6 +19,8 @@ pub enum Action {
     Control(ControlAction),
     /// Transformation (t:xxx).
     Transformation(String),
+    /// Recognized action that this engine cannot execute (reported at load).
+    Unsupported(String),
 }
 
 /// Disruptive actions.
@@ -295,7 +297,20 @@ fn parse_single_action(input: &str) -> Result<Action> {
         "deny" => Ok(Action::Disruptive(DisruptiveAction::Deny)),
         "block" => Ok(Action::Disruptive(DisruptiveAction::Block)),
         "pass" => Ok(Action::Disruptive(DisruptiveAction::Pass)),
-        "allow" => Ok(Action::Disruptive(DisruptiveAction::Allow)),
+        "allow" => {
+            let action = match argument.as_deref().map(str::to_ascii_lowercase).as_deref() {
+                None => DisruptiveAction::Allow,
+                Some("phase") => DisruptiveAction::AllowPhase,
+                Some("request") => DisruptiveAction::AllowRequest,
+                Some(_) => {
+                    return Err(Error::InvalidActionArgument {
+                        action: "allow".into(),
+                        message: "expected phase or request".into(),
+                    })
+                }
+            };
+            Ok(Action::Disruptive(action))
+        }
         "drop" => Ok(Action::Disruptive(DisruptiveAction::Drop)),
         "redirect" => {
             let url = argument.ok_or_else(|| Error::InvalidActionArgument {
@@ -463,15 +478,17 @@ fn parse_single_action(input: &str) -> Result<Action> {
         }
 
         // setsid/setuid - set session/user ID
-        "setsid" | "setuid" => {
-            // These are used for persistent storage, we'll just acknowledge them
-            Ok(Action::Logging(LoggingAction::NoAuditLog)) // Placeholder - doesn't affect rule matching
-        }
+        "setsid" => Ok(Action::Data(DataAction::SetSid(
+            argument.unwrap_or_default(),
+        ))),
+        "setuid" => Ok(Action::Data(DataAction::SetUid(
+            argument.unwrap_or_default(),
+        ))),
 
         // deprecatevar - deprecated variable handling
-        "deprecatevar" => {
-            Ok(Action::Logging(LoggingAction::NoAuditLog)) // Placeholder
-        }
+        "deprecatevar" => Ok(Action::Data(DataAction::DeprecateVar(
+            argument.unwrap_or_default(),
+        ))),
 
         // expirevar - set variable expiration
         "expirevar" => {
@@ -490,19 +507,24 @@ fn parse_single_action(input: &str) -> Result<Action> {
         "multimatch" => Ok(Action::Flow(FlowAction::MultiMatch)),
 
         // exec - execute an external script (acknowledged but not executed)
-        "exec" => Ok(Action::Logging(LoggingAction::NoAuditLog)), // Placeholder
+        "exec" => Ok(Action::Data(DataAction::Exec(argument.unwrap_or_default()))),
 
         // append/prepend - append/prepend to response body (acknowledged)
-        "append" | "prepend" => Ok(Action::Logging(LoggingAction::NoAuditLog)), // Placeholder
+        "append" => Ok(Action::Data(DataAction::Append(
+            argument.unwrap_or_default(),
+        ))),
+        "prepend" => Ok(Action::Data(DataAction::Prepend(
+            argument.unwrap_or_default(),
+        ))),
 
         // proxy - proxy request (acknowledged)
-        "proxy" => Ok(Action::Logging(LoggingAction::NoAuditLog)), // Placeholder
+        "proxy" => Ok(Action::Unsupported("proxy".into())),
 
         // pause - pause processing (acknowledged)
-        "pause" => Ok(Action::Logging(LoggingAction::NoAuditLog)), // Placeholder
+        "pause" => Ok(Action::Unsupported("pause".into())),
 
         // xmlns - XML namespace (acknowledged)
-        "xmlns" => Ok(Action::Logging(LoggingAction::NoAuditLog)), // Placeholder
+        "xmlns" => Ok(Action::Unsupported("xmlns".into())),
 
         _ => Err(Error::UnknownAction {
             name: name.to_string(),

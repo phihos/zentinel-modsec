@@ -160,6 +160,9 @@ pub fn execute_actions(
                 // per-transaction state, which is not reachable from here.
                 result.control_ops.push(ctl.clone());
             }
+            Action::Unsupported(_) => {
+                // The loader reports the affected rule IDs before evaluation.
+            }
             Action::Transformation(_) => {
                 // Transformations are applied during variable resolution, not execution
             }
