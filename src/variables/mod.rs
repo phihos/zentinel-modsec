@@ -11,7 +11,7 @@ mod tx;
 
 pub use collection::{Collection, HashMapCollection, MutableCollection};
 pub use request::RequestData;
-pub use resolver::VariableResolver;
 pub(crate) use resolver::cached_collection_regex;
+pub use resolver::VariableResolver;
 pub use response::ResponseData;
 pub use tx::TxCollection;
