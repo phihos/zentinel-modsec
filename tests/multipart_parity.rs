@@ -419,3 +419,19 @@ fn invalid_continuation_pieces_do_not_hide_later_parameter_content() {
         );
     }
 }
+
+#[test]
+fn invalid_folded_header_controls_are_not_hidden_by_unfolding() {
+    for control in [0, 1, 11, 12, 13, 31, 127] {
+        let mut input =
+            b"--B\r\nContent-Disposition: form-data; name=\"f\"\r\nX-Test: abc\r\n ".to_vec();
+        input.push(control);
+        input.extend_from_slice(b"\r\n\r\nattack\r\n--B--\r\n");
+        let tx = run(
+            r#"SecRule REQBODY_ERROR "@eq 1" "id:200002,phase:2,pass"
+SecRule MULTIPART_STRICT_ERROR "@eq 1" "id:200003,phase:2,pass""#,
+            &input,
+        );
+        assert_eq!(tx.matched_rules(), ["200002", "200003"], "byte {control}");
+    }
+}
