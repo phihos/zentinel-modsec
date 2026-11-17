@@ -6,7 +6,7 @@ use crate::actions::RuleMetadata;
 /// An intervention (blocking decision) from rule processing.
 #[derive(Debug, Clone)]
 pub struct Intervention {
-    /// HTTP status code to return.
+    /// HTTP status code to return, or zero for a drop without an HTTP response.
     pub status: u16,
     /// Redirect URL (if applicable).
     pub url: Option<String>,
@@ -57,7 +57,7 @@ impl Intervention {
 
     /// Create a drop intervention.
     pub fn drop(phase: Phase, rule_id: Option<String>) -> Self {
-        let mut intervention = Self::new(444, phase);
+        let mut intervention = Self::new(0, phase);
         intervention.drop_connection = true;
         if let Some(id) = rule_id {
             intervention.rule_ids.push(id);
@@ -160,7 +160,7 @@ impl InterventionBuilder {
     /// Set drop connection flag.
     pub fn drop_connection(mut self) -> Self {
         self.intervention.drop_connection = true;
-        self.intervention.status = 444;
+        self.intervention.status = 0;
         self
     }
 

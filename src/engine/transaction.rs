@@ -1182,8 +1182,15 @@ impl Transaction {
                     match outcome {
                         DisruptiveOutcome::Deny(status) => {
                             if should_block {
-                                let mut intervention =
-                                    Intervention::deny(status, phase, rule.id.clone());
+                                let mut intervention = Intervention::deny(
+                                    action_result
+                                        .metadata
+                                        .status
+                                        .filter(|status| *status != 0)
+                                        .unwrap_or(status),
+                                    phase,
+                                    rule.id.clone(),
+                                );
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
                                 if phase != Phase::Logging {
@@ -1193,8 +1200,15 @@ impl Transaction {
                         }
                         DisruptiveOutcome::Block => {
                             if should_block {
-                                let mut intervention =
-                                    Intervention::deny(self.default_status, phase, rule.id.clone());
+                                let mut intervention = Intervention::deny(
+                                    action_result
+                                        .metadata
+                                        .status
+                                        .filter(|status| *status != 0)
+                                        .unwrap_or(self.default_status),
+                                    phase,
+                                    rule.id.clone(),
+                                );
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
                                 if phase != Phase::Logging {
@@ -1210,6 +1224,11 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::redirect(url, phase, rule.id.clone());
+                                intervention.status = action_result
+                                    .metadata
+                                    .status
+                                    .filter(|status| matches!(status, 301 | 302 | 303 | 307))
+                                    .unwrap_or(302);
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
                                 if phase != Phase::Logging {
@@ -1220,6 +1239,7 @@ impl Transaction {
                         DisruptiveOutcome::Drop => {
                             if should_block {
                                 let mut intervention = Intervention::drop(phase, rule.id.clone());
+                                intervention.status = action_result.metadata.status.unwrap_or(0);
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
                                 if phase != Phase::Logging {
