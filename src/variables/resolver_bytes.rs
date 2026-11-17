@@ -8,7 +8,14 @@ pub(crate) fn cached_bytes_regex(
 ) -> Option<regex::bytes::Regex> {
     static CACHE: Lazy<RwLock<HashMap<String, Option<regex::bytes::Regex>>>> =
         Lazy::new(Default::default);
-    let pattern = if collection == VariableName::Tx {
+    let pattern = if matches!(
+        collection,
+        VariableName::Tx
+            | VariableName::RequestHeaders
+            | VariableName::RequestHeadersNames
+            | VariableName::ResponseHeaders
+            | VariableName::ResponseHeadersNames
+    ) {
         format!("(?i){pattern}")
     } else {
         pattern.to_string()
@@ -57,9 +64,9 @@ fn collection_values(
         return vec![];
     }
     collection
-        .all_bytes()
+        .all_bytes_with_names()
         .into_iter()
-        .filter(|(key, _)| {
+        .filter(|(key, _, _)| {
             if let Some(literal) = literal {
                 if names
                     || matches!(
@@ -77,10 +84,10 @@ fn collection_values(
                 regex.as_ref().is_none_or(|regex| regex.is_match(key))
             }
         })
-        .map(|(key, value)| {
+        .map(|(_, original, value)| {
             (
-                named(prefix, key),
-                ByteValue::from(if names { key } else { value }),
+                named(prefix, original),
+                ByteValue::from(if names { original } else { value }),
             )
         })
         .collect()
@@ -97,15 +104,25 @@ fn excluded(key: &[u8], exclusion: &str) -> bool {
                 return false;
             }
             if selection.starts_with('/') && selection.ends_with('/') && selection.len() >= 2 {
-                cached_bytes_regex(
-                    &selection[1..selection.len() - 1],
-                    if collection.eq_ignore_ascii_case(b"TX") {
-                        VariableName::Tx
-                    } else {
-                        VariableName::Args
-                    },
-                )
-                .is_some_and(|re| re.is_match(member))
+                let kind = std::str::from_utf8(collection)
+                    .ok()
+                    .and_then(VariableName::from_str)
+                    .unwrap_or(VariableName::Args);
+                let normalized;
+                let member = if matches!(
+                    kind,
+                    VariableName::RequestHeaders
+                        | VariableName::RequestHeadersNames
+                        | VariableName::ResponseHeaders
+                        | VariableName::ResponseHeadersNames
+                ) {
+                    normalized = member.to_ascii_lowercase();
+                    normalized.as_slice()
+                } else {
+                    member
+                };
+                cached_bytes_regex(&selection[1..selection.len() - 1], kind)
+                    .is_some_and(|re| re.is_match(member))
             } else {
                 member.eq_ignore_ascii_case(selection.as_bytes())
             }
@@ -247,6 +264,9 @@ impl<'a> VariableResolver<'a> {
             }
             VariableName::ResponseHeaders => {
                 collection(&self.response.headers, "RESPONSE_HEADERS", false)
+            }
+            VariableName::ResponseHeadersNames => {
+                collection(&self.response.headers, "RESPONSE_HEADERS_NAMES", true)
             }
             VariableName::ResponseContentType => scalar(
                 "RESPONSE_CONTENT_TYPE",
