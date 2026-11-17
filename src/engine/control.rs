@@ -70,6 +70,8 @@ pub enum CtlDirective {
     },
     /// `ctl:requestBodyAccess=On|Off`
     RequestBodyAccess(bool),
+    /// `ctl:responseBodyAccess=On|Off`
+    ResponseBodyAccess(bool),
     /// `ctl:requestBodyProcessor=URLENCODED|MULTIPART|JSON|XML|RAW`
     RequestBodyProcessor(String),
     /// Expose an otherwise unprocessed body (Coraza 3.8.1 uses URLENCODED).
@@ -214,6 +216,15 @@ impl CtlDirective {
                     "forceRequestBodyVariable accepts only On or Off",
                 ),
             },
+            "responsebodyaccess" => match value.to_ascii_lowercase().as_str() {
+                "on" => CtlDirective::ResponseBodyAccess(true),
+                "off" => CtlDirective::ResponseBodyAccess(false),
+                _ => CtlDirective::unsupported(
+                    directive,
+                    value,
+                    "responseBodyAccess accepts only On or Off",
+                ),
+            },
 
             "requestbodyprocessor" => {
                 let upper = value.to_ascii_uppercase();
@@ -282,6 +293,7 @@ fn parse_id_ranges(value: &str) -> Option<Vec<RuleIdRange>> {
 #[derive(Debug, Default, Clone)]
 pub struct TransactionControls {
     engine_mode: Option<RuleEngineMode>,
+    response_body_access: Option<bool>,
     removed_rules: Vec<RuleIdRange>,
     /// `(rule id, parsed target)` pairs from `ctl:ruleRemoveTargetById`.
     ///
@@ -348,6 +360,7 @@ impl TransactionControls {
                 }
             }
             CtlDirective::RequestBodyAccess(on) => self.request_body_access = Some(on),
+            CtlDirective::ResponseBodyAccess(on) => self.response_body_access = Some(on),
             CtlDirective::RequestBodyProcessor(p) => self.request_body_processor = Some(p),
             CtlDirective::ForceRequestBodyVariable(on) => self.force_request_body_variable = on,
             CtlDirective::Unsupported {
@@ -489,6 +502,16 @@ impl TransactionControls {
     /// Whether the request body should be parsed at all.
     pub fn request_body_access(&self) -> bool {
         self.request_body_access.unwrap_or(true)
+    }
+
+    /// Resolve a request access override against the compiled global policy.
+    pub fn request_body_access_or(&self, configured: bool) -> bool {
+        self.request_body_access.unwrap_or(configured)
+    }
+
+    /// Resolve a response access override against the compiled global policy.
+    pub fn response_body_access_or(&self, configured: bool) -> bool {
+        self.response_body_access.unwrap_or(configured)
     }
 
     /// Whether a processor should be selected for an otherwise opaque body.

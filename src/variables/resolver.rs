@@ -177,6 +177,24 @@ impl<'a> VariableResolver<'a> {
                     self.request.request_body_length_variable(),
                 )]
             }
+            VariableName::InboundDataError => vec![(
+                "INBOUND_DATA_ERROR".into(),
+                if self.request.inbound_data_error {
+                    "1"
+                } else {
+                    ""
+                }
+                .into(),
+            )],
+            VariableName::OutboundDataError => vec![(
+                "OUTBOUND_DATA_ERROR".into(),
+                if self.response.outbound_data_error {
+                    "1"
+                } else {
+                    ""
+                }
+                .into(),
+            )],
 
             // Collections
             VariableName::Args => self.resolve_collection_from_all_args(selection),
@@ -323,7 +341,10 @@ impl<'a> VariableResolver<'a> {
                 )]
             }
             VariableName::ResponseBody => {
-                vec![("RESPONSE_BODY".to_string(), self.response.body_str())]
+                vec![(
+                    "RESPONSE_BODY".to_string(),
+                    String::from_utf8_lossy(self.response.body_variable_bytes()).into_owned(),
+                )]
             }
             VariableName::ResponseContentType => {
                 vec![(

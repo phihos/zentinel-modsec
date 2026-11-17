@@ -13,6 +13,10 @@ pub struct ResponseData {
     pub headers: HashMapCollection,
     /// Response body.
     pub body: Vec<u8>,
+    /// Acquisition reached the configured response body limit.
+    pub outbound_data_error: bool,
+    /// Body bytes were made available to phase 4 under the MIME/access policy.
+    pub body_inspected: bool,
     /// Content type.
     pub content_type: String,
 }
@@ -56,5 +60,14 @@ impl ResponseData {
     /// Get body length.
     pub fn body_length(&self) -> usize {
         self.body.len()
+    }
+
+    /// Bytes visible through RESPONSE_BODY after its phase's access checks.
+    pub fn body_variable_bytes(&self) -> &[u8] {
+        if self.body_inspected {
+            &self.body
+        } else {
+            b""
+        }
     }
 }

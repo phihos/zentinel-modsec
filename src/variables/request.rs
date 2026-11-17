@@ -81,7 +81,7 @@ pub struct RequestData {
     pub body_error: Option<String>,
     /// Request body.
     pub body: Vec<u8>,
-    /// The engine intentionally retained only a body-limit prefix.
+    /// Acquisition reached its body limit; a partial body may end mid-part.
     pub inbound_data_error: bool,
     /// Client IP address.
     pub client_ip: String,
