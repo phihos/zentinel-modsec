@@ -81,6 +81,23 @@ impl TransformationPipeline {
         Ok(current)
     }
 
+    /// Visit the original value and every stage whose output changes it.
+    ///
+    /// `multiMatch` evaluates each of these values, including a match that a
+    /// later transformation removes. Unchanged stages are not duplicate
+    /// evaluations; revisiting a previous value after a real change is.
+    pub fn for_each_stage(&self, input: &str, mut visit: impl FnMut(&str)) {
+        let mut current: Cow<'_, str> = Cow::Borrowed(input);
+        visit(&current);
+        for transformation in &self.transformations {
+            let next = transformation.transform(&current);
+            if next.as_ref() != current.as_ref() {
+                visit(&next);
+                current = Cow::Owned(next.into_owned());
+            }
+        }
+    }
+
     /// Check if the pipeline is empty.
     pub fn is_empty(&self) -> bool {
         self.transformations.is_empty()
