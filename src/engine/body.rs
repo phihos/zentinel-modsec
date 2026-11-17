@@ -67,3 +67,15 @@ pub struct BodyWriteResult {
     /// The corresponding body phase has finished and will not run again.
     pub inspection_complete: bool,
 }
+
+/// State for one direction's bounded acquisition and phase progression.
+#[derive(Debug, Default)]
+pub(crate) struct BodyState {
+    pub headers_processed: bool,
+    pub processed: bool,
+    /// Preserve a failed callback without executing its actions a second time.
+    pub failure: Option<String>,
+    pub limit_reached: bool,
+    /// Previous complete-chunk length to restore if a deferred limit rejects.
+    pub pending_reject_length: Option<usize>,
+}

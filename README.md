@@ -133,9 +133,30 @@ tx.process_request_body()?;    // phase 2: the rule runs here
 assert!(tx.has_intervention());
 ```
 
-Request bodies need `SecRequestBodyAccess On`; feed them with
-`append_request_body()` before `process_request_body()`. Response phases are
-`process_response_headers()` and `process_response_body()`.
+Request and response body access default to Off, matching Coraza. Enable
+`SecRequestBodyAccess On` for request inspection. For response inspection also
+set `SecResponseBodyAccess On` and an explicit `SecResponseBodyMimeType` list;
+the bare MIME list is empty. Run header callbacks before feeding body chunks
+when possible, then finish with the corresponding body callback.
+
+`write_request_body()` and `write_response_body()` report how many bytes were
+retained for inspection. The caller still owns and forwards its original
+input. The `append_*` compatibility wrappers discard that count; all callers
+must check `intervention()` after writes. Writes are bounded before allocation.
+Request and response limits default to 134217728 and 524288 bytes, respectively;
+their actions default to Reject and ProcessPartial. Reaching a limit exactly
+also triggers its action. Reject does not copy the offending chunk and sets
+status 413 for requests or 500 for responses. ProcessPartial inspects only the
+prefix and sets `INBOUND_DATA_ERROR` or `OUTBOUND_DATA_ERROR`; it does not inspect
+the remaining tail. DetectionOnly uses ProcessPartial without interruption.
+
+A pre-header write retains at most a provisional prefix. Header `ctl` policy
+then resolves access and the pending limit decision; no body phase runs early.
+Each header/body phase executes at most once; failed callbacks remain errors
+on retries. After a body callback seals an ordinary body,
+new bytes produce a visible error; tails after a limit consume zero bytes.
+Response headers can be supplied with `process_response_headers_with_status()`;
+`process_response_body()` runs phase 4 after MIME/access checks.
 
 ### Detection only and anomaly scoring
 
@@ -206,9 +227,14 @@ async fn waf(
 **Directives:** `SecRule`, `SecAction`, `SecMarker`, `SecRuleEngine`,
 `SecDefaultAction`, `SecRuleRemoveById`, `SecRuleUpdateTargetById`,
 `SecRuleUpdateTargetByTag`, `Include`.
-`SecRuleUpdateActionById`, `SecRequestBodyAccess`, `SecResponseBodyAccess`,
-`SecRequestBodyLimit` and `SecResponseBodyLimit` are accepted but have no effect;
-load-time warnings list affected rule IDs. Other unknown directives also warn
+Body directives are implemented: `SecRequestBodyAccess`, `SecResponseBodyAccess`,
+`SecRequestBodyLimit`, `SecResponseBodyLimit`, their `LimitAction` settings,
+`SecResponseBodyMimeType` and `SecResponseBodyMimeTypesClear`. Limits must be
+between 1 byte and 1 GiB. MIME directives replace the list, matching the pinned
+reference implementation. In-memory spooling and no-files limits remain
+unsupported and warn; the hard body limit still bounds retained bytes.
+`SecRuleUpdateActionById` remains unsupported, with affected rule IDs in its
+load-time warning. Other unknown directives also warn
 at load. `SecComponentSignature` is accepted as metadata.
 
 `SecRuleUpdateTargetByTag attack-sqli "!ARGS:password"` excludes that argument
