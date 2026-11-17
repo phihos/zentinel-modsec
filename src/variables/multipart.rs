@@ -353,6 +353,14 @@ fn read_headers(body: &[u8], mut position: usize) -> Result<(Headers, usize), He
             }
             return Ok((headers, position));
         }
+        // Validate before trimming and unfolding, which must not erase invalid
+        // control bytes at the beginning/end of a value or continuation line.
+        if raw
+            .iter()
+            .any(|&byte| (byte < 32 && byte != b'\t') || byte == 127)
+        {
+            return Err(HeaderError::Malformed("invalid multipart header value"));
+        }
         if raw.starts_with(b" ") || raw.starts_with(b"\t") {
             let Some((_, value)) = headers.last_mut() else {
                 return Err(HeaderError::Malformed(
@@ -369,12 +377,6 @@ fn read_headers(body: &[u8], mut position: usize) -> Result<(Headers, usize), He
             };
             let name = canonical_name(&raw[..colon])?;
             let value = trim(&raw[colon + 1..]);
-            if value
-                .iter()
-                .any(|&byte| (byte < 32 && byte != b'\t') || byte == 127)
-            {
-                return Err(HeaderError::Malformed("invalid multipart header value"));
-            }
             headers.push((name, value.to_vec()));
         }
         if headers.len() > 10000 || position - start > 10 * 1024 * 1024 {
