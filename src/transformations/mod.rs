@@ -1,5 +1,6 @@
 //! Transformation functions for ModSecurity.
 
+pub(crate) mod bytes;
 mod decode;
 mod encode;
 mod normalize;
@@ -18,6 +19,18 @@ use std::sync::Arc;
 pub trait Transformation: Send + Sync {
     /// Apply the transformation.
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str>;
+
+    /// Apply to original bytes. Custom text-only transforms must override this
+    /// method to support invalid UTF-8; unsupported binary input is an error.
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        let text = std::str::from_utf8(input).map_err(|_| Error::UnsupportedBinaryInput {
+            component: format!("t:{}", self.name()),
+        })?;
+        Ok(match self.transform(text) {
+            Cow::Borrowed(value) => Cow::Borrowed(value.as_bytes()),
+            Cow::Owned(value) => Cow::Owned(value.into_bytes()),
+        })
+    }
 
     /// Get the transformation name.
     fn name(&self) -> &'static str;
@@ -86,6 +99,10 @@ pub fn create_transformation(name: &str) -> Result<Arc<dyn Transformation>> {
 pub struct None_;
 
 impl Transformation for None_ {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         Cow::Borrowed(input)
     }
@@ -99,6 +116,10 @@ impl Transformation for None_ {
 pub struct Length;
 
 impl Transformation for Length {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         Cow::Owned(input.len().to_string())
     }
