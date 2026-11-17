@@ -47,6 +47,14 @@ impl Transformation for UrlDecodeUni {
                         }
                     }
                     if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                        // IIS %u full-width ASCII encodings represent their
+                        // narrow equivalents (FF01..FF5E -> 21..7E). CRS
+                        // applies this after utf8toUnicode as well.
+                        let code = if (0xff01..=0xff5e).contains(&code) {
+                            code - 0xfee0
+                        } else {
+                            code
+                        };
                         if let Some(decoded) = char::from_u32(code) {
                             result.push(decoded);
                             modified = true;
@@ -340,5 +348,31 @@ mod tests {
         let t = JsDecode;
         assert_eq!(t.transform(r"\x3cscript\x3e"), "<script>");
         assert_eq!(t.transform(r"\u003c"), "<");
+    }
+}
+
+#[cfg(test)]
+mod unicode_width_tests {
+    use super::*;
+
+    #[test]
+    fn url_decode_uni_maps_full_width_ascii_for_crs_941110() {
+        let t = UrlDecodeUni;
+        assert_eq!(
+            t.transform("%uFF1Cscript%uFF1Ealert(1)%uFF1C/script%uFF1E"),
+            "<script>alert(1)</script>"
+        );
+        assert_eq!(t.transform("%UFF1cscript%uFF1e"), "<script>");
+        for ascii in 0x21u32..=0x7e {
+            let encoded = format!("%u{:04X}", ascii + 0xfee0);
+            assert_eq!(
+                t.transform(&encoded),
+                char::from_u32(ascii).unwrap().to_string()
+            );
+        }
+        // Only encoded full-width ASCII is folded; literal Unicode is left
+        // for the explicit utf8toUnicode transformation in the CRS chain.
+        assert_eq!(t.transform("＜script＞"), "＜script＞");
+        assert_eq!(t.transform("%uFF00%uFF5F"), "＀｟");
     }
 }
