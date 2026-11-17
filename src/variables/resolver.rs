@@ -41,7 +41,14 @@ pub(crate) fn cached_regex(pattern: &str) -> Option<Regex> {
 /// lowercasing regex source would change that operator to `\d`. Explicit
 /// inline flags inside the pattern retain their normal override semantics.
 pub(crate) fn cached_collection_regex(pattern: &str, collection: VariableName) -> Option<Regex> {
-    if collection == VariableName::Tx {
+    if matches!(
+        collection,
+        VariableName::Tx
+            | VariableName::RequestHeaders
+            | VariableName::RequestHeadersNames
+            | VariableName::ResponseHeaders
+            | VariableName::ResponseHeadersNames
+    ) {
         cached_regex(&format!("(?i){pattern}"))
     } else {
         cached_regex(pattern)
@@ -85,6 +92,19 @@ impl<'a> VariableResolver<'a> {
 
     /// Resolve a variable specification to values.
     pub fn resolve(&self, spec: &VariableSpec) -> Vec<(String, String)> {
+        if matches!(
+            spec.name,
+            VariableName::RequestHeaders
+                | VariableName::RequestHeadersNames
+                | VariableName::ResponseHeaders
+                | VariableName::ResponseHeadersNames
+        ) {
+            return self
+                .resolve_bytes(spec)
+                .into_iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect();
+        }
         let values = self.resolve_variable(spec.name, &spec.selection);
 
         // Apply exclusions

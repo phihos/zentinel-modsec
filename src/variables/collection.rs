@@ -1,7 +1,7 @@
 //! Collection trait and implementations.
 
 use super::ByteValue;
-use indexmap::IndexMap;
+use indexmap::{map::Entry, IndexMap};
 use regex::Regex;
 
 /// A collection of key-value pairs.
@@ -29,6 +29,14 @@ pub trait Collection: Send + Sync {
 pub trait ByteCollection: Collection {
     /// Every original key and value in insertion order.
     fn all_bytes(&self) -> Vec<(&[u8], &[u8])>;
+    /// Stored lookup key, original observed name, and value for every member.
+    /// Ordinary collections use the lookup key as their observed name.
+    fn all_bytes_with_names(&self) -> Vec<(&[u8], &[u8], &[u8])> {
+        self.all_bytes()
+            .into_iter()
+            .map(|(key, value)| (key, key, value))
+            .collect()
+    }
     /// Values under the exact original key bytes.
     fn get_bytes(&self, key: &[u8]) -> Option<Vec<&[u8]>>;
     /// Values selected by a regex over original key bytes.
@@ -64,7 +72,29 @@ pub trait MutableCollection: Collection {
 /// The name is kept for API compatibility.
 #[derive(Debug, Clone, Default)]
 pub struct HashMapCollection {
-    data: IndexMap<ByteValue, Vec<ByteValue>>,
+    data: IndexMap<ByteValue, CollectionValues>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CollectionValues {
+    values: Vec<ByteValue>,
+    // Allocated only when the observed name differs from the lookup key.
+    // Every slot then aligns with exactly one value, including duplicates.
+    original_names: Option<Vec<ByteValue>>,
+}
+impl std::ops::Deref for CollectionValues {
+    type Target = Vec<ByteValue>;
+    fn deref(&self) -> &Self::Target {
+        &self.values
+    }
+}
+impl CollectionValues {
+    fn name<'a>(&'a self, key: &'a ByteValue, index: usize) -> &'a ByteValue {
+        self.original_names
+            .as_ref()
+            .and_then(|names| names.get(index))
+            .unwrap_or(key)
+    }
 }
 
 impl HashMapCollection {
@@ -80,12 +110,66 @@ impl HashMapCollection {
 
     /// Append original bytes, keeping invalid UTF-8 and binary keys distinct.
     pub fn add_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
-        self.data.entry(key.into()).or_default().push(value.into());
+        let value = value.into();
+        match self.data.entry(key.into()) {
+            Entry::Vacant(entry) => {
+                entry.insert(CollectionValues {
+                    values: vec![value],
+                    original_names: None,
+                });
+            }
+            Entry::Occupied(mut entry) => {
+                if entry.get().original_names.is_some() {
+                    let key = entry.key().clone();
+                    entry.get_mut().original_names.as_mut().unwrap().push(key);
+                }
+                entry.get_mut().values.push(value);
+            }
+        }
+    }
+
+    /// Append a value with an observed name distinct from its lookup key.
+    /// Headers use normalized lookup keys while preserving each received name.
+    pub fn add_named_bytes(
+        &mut self,
+        key: impl Into<ByteValue>,
+        original_name: impl Into<ByteValue>,
+        value: impl Into<ByteValue>,
+    ) {
+        let key = key.into();
+        let original_name = original_name.into();
+        let value = value.into();
+        let differs = key != original_name;
+        match self.data.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(CollectionValues {
+                    values: vec![value],
+                    original_names: differs.then_some(vec![original_name]),
+                });
+            }
+            Entry::Occupied(mut entry) => {
+                if differs && entry.get().original_names.is_none() {
+                    let canonical = entry.key().clone();
+                    let count = entry.get().len();
+                    entry.get_mut().original_names = Some(vec![canonical; count]);
+                }
+                if let Some(names) = &mut entry.get_mut().original_names {
+                    names.push(original_name);
+                }
+                entry.get_mut().values.push(value);
+            }
+        }
     }
 
     /// Replace values under an original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
-        self.data.insert(key.into(), vec![value.into()]);
+        self.data.insert(
+            key.into(),
+            CollectionValues {
+                values: vec![value.into()],
+                original_names: None,
+            },
+        );
     }
 
     /// Delete an original byte key without rendering or decoding it.
@@ -103,7 +187,11 @@ impl Collection for HashMapCollection {
     fn all(&self) -> Vec<(&str, &str)> {
         self.data
             .iter()
-            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.display_text(), v.display_text())))
+            .flat_map(|(k, vs)| {
+                vs.iter()
+                    .enumerate()
+                    .map(move |(i, v)| (vs.name(k, i).display_text(), v.display_text()))
+            })
             .collect()
     }
 
@@ -117,7 +205,11 @@ impl Collection for HashMapCollection {
         self.data
             .iter()
             .filter(|(k, _)| pattern.is_match(k.display_text()))
-            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.display_text(), v.display_text())))
+            .flat_map(|(k, vs)| {
+                vs.iter()
+                    .enumerate()
+                    .map(move |(i, v)| (vs.name(k, i).display_text(), v.display_text()))
+            })
             .collect()
     }
 
@@ -164,6 +256,20 @@ impl ByteCollection for HashMapCollection {
                 values
                     .iter()
                     .map(move |value| (key.as_bytes(), value.as_bytes()))
+            })
+            .collect()
+    }
+    fn all_bytes_with_names(&self) -> Vec<(&[u8], &[u8], &[u8])> {
+        self.data
+            .iter()
+            .flat_map(|(key, values)| {
+                values.iter().enumerate().map(move |(index, value)| {
+                    (
+                        key.as_bytes(),
+                        values.name(key, index).as_bytes(),
+                        value.as_bytes(),
+                    )
+                })
             })
             .collect()
     }

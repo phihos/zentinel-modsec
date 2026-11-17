@@ -516,9 +516,7 @@ impl Transaction {
 
     /// Add original response header bytes without UTF-8 replacement.
     pub fn add_response_header_bytes(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
-        self.response
-            .headers
-            .add_bytes(name.to_ascii_lowercase(), value);
+        self.response.add_header_bytes(name, value);
         Ok(())
     }
 

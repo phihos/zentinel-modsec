@@ -39,11 +39,16 @@ impl ResponseData {
 
     /// Add a response header.
     pub fn add_header(&mut self, name: &str, value: &str) {
-        self.headers.add(name.to_lowercase(), value.to_string());
+        self.add_header_bytes(name.as_bytes(), value.as_bytes());
+    }
 
-        // Track content-type
-        if name.eq_ignore_ascii_case("content-type") {
-            self.content_type = value.to_string();
+    /// Add original response bytes, retaining each header name separately from
+    /// its normalized lookup key.
+    pub fn add_header_bytes(&mut self, name: &[u8], value: &[u8]) {
+        self.headers
+            .add_named_bytes(name.to_ascii_lowercase(), name, value);
+        if name.eq_ignore_ascii_case(b"content-type") {
+            self.content_type = super::ByteValue::from(value).to_string();
         }
     }
 

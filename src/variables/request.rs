@@ -210,7 +210,7 @@ impl RequestData {
         if lower == b"cookie" {
             self.parse_cookie_header_bytes(value);
         }
-        self.headers.add_bytes(lower, value);
+        self.headers.add_named_bytes(lower, name, value);
     }
 
     fn parse_cookie_header_bytes(&mut self, value: &[u8]) {

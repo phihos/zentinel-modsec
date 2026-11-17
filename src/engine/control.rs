@@ -572,8 +572,15 @@ fn target_matches_resolved_bytes(var: &VariableSpec, target: &VariableSpec, name
             }
         }),
         Some(Selection::Regex(pattern)) => name.iter().position(|&b| b == b':').is_some_and(|i| {
+            let normalized;
+            let member = if header_keys_are_case_insensitive(var) {
+                normalized = name[i + 1..].to_ascii_lowercase();
+                normalized.as_slice()
+            } else {
+                &name[i + 1..]
+            };
             crate::variables::cached_bytes_regex(pattern, var.name)
-                .is_some_and(|regex| regex.is_match(&name[i + 1..]))
+                .is_some_and(|regex| regex.is_match(member))
         }),
     }
 }
