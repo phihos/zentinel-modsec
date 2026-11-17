@@ -103,14 +103,20 @@ fn base64_decode(input: &[u8], forgiving: bool) -> Vec<u8> {
     out
 }
 
-fn escape_decode(input: &[u8], css: bool) -> Vec<u8> {
+fn escape_decode(input: &[u8], css: bool, javascript: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(input.len());
     let mut i = 0;
     while i < input.len() {
-        if input[i] != b'\\' || i + 1 == input.len() {
+        if input[i] != b'\\' {
             out.push(input[i]);
             i += 1;
             continue;
+        }
+        if i + 1 == input.len() {
+            if !css {
+                out.push(b'\\');
+            }
+            break;
         }
         let next = input[i + 1];
         if css {
@@ -119,29 +125,62 @@ fn escape_decode(input: &[u8], css: bool) -> Vec<u8> {
                 end += 1;
             }
             if end > i + 1 {
-                out.push(width(hex(&input[i + 1..end]).unwrap()));
+                let code = hex(&input[i + 1..end]).unwrap();
+                let code = if (0xff01..=0xff5e).contains(&code) {
+                    code - 0xfee0
+                } else {
+                    code
+                };
+                let character = if code == 0 {
+                    '\u{fffd}'
+                } else {
+                    char::from_u32(code).unwrap_or('\u{fffd}')
+                };
+                let mut encoded = [0; 4];
+                out.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
                 i = end;
                 if i < input.len() && space(input[i]) {
                     i += 1;
                 }
                 continue;
             }
-        } else if next == b'x' && i + 3 < input.len() {
+            if next != b'\n' {
+                out.push(next);
+            }
+            i += 2;
+            continue;
+        }
+        if javascript && next == b'u' && input.get(i + 2) == Some(&b'{') {
+            if let Some(close) = input[i + 3..].iter().position(|&b| b == b'}') {
+                let end = i + 3 + close;
+                if (1..=6).contains(&close) {
+                    if let Some(code) = hex(&input[i + 3..end]) {
+                        out.push(width(code));
+                        i = end + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        if (next == b'x' || !javascript && next == b'X') && i + 3 < input.len() {
             if let Some(code) = hex(&input[i + 2..i + 4]) {
                 out.push(code as u8);
                 i += 4;
                 continue;
             }
-        } else if next == b'u' && i + 5 < input.len() {
+        }
+        if javascript && next == b'u' && i + 5 < input.len() {
             if let Some(code) = hex(&input[i + 2..i + 6]) {
                 out.push(width(code));
                 i += 6;
                 continue;
             }
-        } else if (b'0'..=b'7').contains(&next) {
+        }
+        if (b'0'..=b'7').contains(&next) {
             let mut end = i + 1;
             let mut code = 0u32;
-            while end < input.len() && end < i + 4 && (b'0'..=b'7').contains(&input[end]) {
+            let max = if javascript && next > b'3' { 2 } else { 3 };
+            while end < input.len() && end < i + 1 + max && (b'0'..=b'7').contains(&input[end]) {
                 code = code * 8 + u32::from(input[end] - b'0');
                 end += 1;
             }
@@ -149,19 +188,16 @@ fn escape_decode(input: &[u8], css: bool) -> Vec<u8> {
             i = end;
             continue;
         }
-        match next {
-            b'n' => out.push(b'\n'),
-            b'r' => out.push(b'\r'),
-            b't' => out.push(b'\t'),
-            b'b' => out.push(8),
-            b'f' => out.push(12),
-            b'v' => out.push(11),
-            b'\\' | b'\'' | b'"' => out.push(next),
-            _ => {
-                out.push(b'\\');
-                out.push(next);
-            }
-        }
+        out.push(match next {
+            b'a' => 7,
+            b'b' => 8,
+            b'f' => 12,
+            b'n' => b'\n',
+            b'r' => b'\r',
+            b't' => b'\t',
+            b'v' => 11,
+            _ => next,
+        });
         i += 2;
     }
     out
@@ -203,8 +239,9 @@ pub(super) fn apply<'a>(
             use sha2::Digest;
             sha2::Sha256::digest(input).to_vec()
         }
-        "jsdecode" | "escapeseqdecode" => escape_decode(input, false),
-        "cssdecode" => escape_decode(input, true),
+        "jsdecode" => escape_decode(input, false, true),
+        "escapeseqdecode" => escape_decode(input, false, false),
+        "cssdecode" => escape_decode(input, true, false),
         "sqlhexdecode" => {
             let mut out = Vec::with_capacity(input.len());
             let mut i = 0;
