@@ -10,7 +10,11 @@ fn decoding_never_replaces_binary_intermediate_bytes() {
         ("base64Decode", &b"/wCA"[..], &b"\xff\0\x80"[..]),
         ("base64DecodeExt", &b"_wCA"[..], &b"\xff\0\x80"[..]),
         ("jsDecode", &b"\\xff\\x00\\uFF1C"[..], &b"\xff\0<"[..]),
-        ("cssDecode", &b"\\ff \\00 \\ff1c"[..], &b"\xff\0<"[..]),
+        (
+            "cssDecode",
+            &b"\\ff \\00 \\ff1c"[..],
+            &b"\xc3\xbf\xef\xbf\xbd<"[..],
+        ),
         ("escapeSeqDecode", &b"\\xff\\000\\\""[..], &b"\xff\0\""[..]),
         ("sqlHexDecode", &b"0xff0080"[..], &b"\xff\0\x80"[..]),
         (
