@@ -71,6 +71,10 @@ pub enum VariableName {
     RequestBody,
     /// `REQUEST_BODY_LENGTH`
     RequestBodyLength,
+    /// `INBOUND_DATA_ERROR`
+    InboundDataError,
+    /// `OUTBOUND_DATA_ERROR`
+    OutboundDataError,
     /// `QUERY_STRING`
     QueryString,
 
@@ -315,6 +319,8 @@ impl VariableName {
             | VariableName::RequestCookiesNames
             | VariableName::RequestBody
             | VariableName::RequestBodyLength
+            | VariableName::InboundDataError
+            | VariableName::OutboundDataError
             | VariableName::QueryString
             | VariableName::ResponseStatus
             | VariableName::ResponseProtocol
@@ -418,6 +424,8 @@ static VARIABLE_MAP: phf::Map<&'static str, VariableName> = phf_map! {
     "REQUEST_COOKIES_NAMES" => VariableName::RequestCookiesNames,
     "REQUEST_BODY" => VariableName::RequestBody,
     "REQUEST_BODY_LENGTH" => VariableName::RequestBodyLength,
+    "INBOUND_DATA_ERROR" => VariableName::InboundDataError,
+    "OUTBOUND_DATA_ERROR" => VariableName::OutboundDataError,
     "QUERY_STRING" => VariableName::QueryString,
     "RESPONSE_STATUS" => VariableName::ResponseStatus,
     "RESPONSE_PROTOCOL" => VariableName::ResponseProtocol,

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use super::body::{BodyState, BodyWriteResult};
 use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
 use super::intervention::Intervention;
@@ -14,7 +15,7 @@ use crate::actions::{
 };
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, Operator};
-use crate::parser::{Action, DataAction, FlowAction};
+use crate::parser::{Action, BodyLimitAction, DataAction, FlowAction};
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
 };
@@ -79,6 +80,8 @@ pub struct Transaction {
     /// Optional expanded message snapshots, captured when each rule completes.
     rule_messages: Vec<RuleMessage>,
     record_rule_messages: bool,
+    request_body_state: BodyState,
+    response_body_state: BodyState,
 }
 
 /// The variable a rule matched on.
@@ -213,6 +216,8 @@ impl Transaction {
             record_setvar_effects: false,
             rule_messages: Vec::new(),
             record_rule_messages: false,
+            request_body_state: BodyState::default(),
+            response_body_state: BodyState::default(),
         }
     }
 
@@ -332,24 +337,51 @@ impl Transaction {
 
     /// Process request headers (Phase 1).
     pub fn process_request_headers(&mut self) -> Result<()> {
+        self.check_body_callback(true)?;
+        if self.request_body_state.headers_processed || self.phase > Phase::RequestHeaders {
+            return Ok(());
+        }
+        self.request_body_state.headers_processed = true;
         self.phase = Phase::RequestHeaders;
-        self.run_phase(Phase::RequestHeaders)?;
-        Ok(())
+        self.run_body_callback(Phase::RequestHeaders)?;
+        self.finalize_pending_body(true)
     }
 
-    /// Append data to request body.
+    /// Append a chunk to the bounded request inspection buffer.
+    ///
+    /// The caller still owns and forwards the original input. This compatibility
+    /// wrapper does not report partial acquisition; connectors needing that count
+    /// should use [`Self::write_request_body`] and always check intervention().
     pub fn append_request_body(&mut self, data: &[u8]) -> Result<()> {
-        self.request.append_body(data);
-        Ok(())
+        self.write_request_body(data).map(|_| ())
+    }
+
+    /// Acquire a bounded prefix and report exactly how much was retained.
+    /// Before headers this prefix is provisional, so phase-1 ctl policy can run
+    /// before a limit decision. No body phase runs before its headers.
+    pub fn write_request_body(&mut self, data: &[u8]) -> Result<BodyWriteResult> {
+        self.write_body(data, true)
     }
 
     /// Process request body (Phase 2).
     pub fn process_request_body(&mut self) -> Result<()> {
+        self.check_body_callback(true)?;
+        if !self.request_body_state.headers_processed
+            || self.request_body_state.processed
+            || self.phase > Phase::RequestBody
+            || self.intervention.is_some()
+        {
+            return Ok(());
+        }
+        self.request_body_state.processed = true;
         self.phase = Phase::RequestBody;
+        if self.engine_mode() == RuleEngineMode::Off {
+            return Ok(());
+        }
 
         // Coraza does not select a fallback processor for an empty body.
         if self.request.body.is_empty() {
-            self.run_phase(Phase::RequestBody)?;
+            self.run_body_callback(Phase::RequestBody)?;
             return Ok(());
         }
 
@@ -373,8 +405,8 @@ impl Transaction {
         // ctl:requestBodyAccess=Off, typically set in phase 1, suppresses body
         // parsing entirely. Phase 2 rules still run; they just find no ARGS_POST
         // or FILES, which is what disabling body access means.
-        if !self.controls.request_body_access() {
-            self.run_phase(Phase::RequestBody)?;
+        if !self.request_body_accessible() {
+            self.run_body_callback(Phase::RequestBody)?;
             return Ok(());
         }
 
@@ -400,7 +432,7 @@ impl Transaction {
                 // CtlDirective::parse admits no other value.
                 other => debug_assert!(false, "unsupported forced body processor: {other}"),
             }
-            self.run_phase(Phase::RequestBody)?;
+            self.run_body_callback(Phase::RequestBody)?;
             return Ok(());
         }
 
@@ -433,7 +465,7 @@ impl Transaction {
             self.request.body_processor = "URLENCODED".to_string();
         }
 
-        self.run_phase(Phase::RequestBody)?;
+        self.run_body_callback(Phase::RequestBody)?;
         Ok(())
     }
 
@@ -499,6 +531,10 @@ impl Transaction {
         status: u16,
         protocol: &str,
     ) -> Result<()> {
+        self.check_body_callback(false)?;
+        if self.response_body_state.headers_processed || self.phase > Phase::ResponseHeaders {
+            return Ok(());
+        }
         self.response.set_status(status);
         self.response.set_protocol(protocol);
         self.process_response_headers()
@@ -509,21 +545,309 @@ impl Transaction {
     /// Use [`Self::process_response_headers_with_status`] when supplying a real
     /// response from an HTTP connector. This method remains for existing callers.
     pub fn process_response_headers(&mut self) -> Result<()> {
+        self.check_body_callback(false)?;
+        if self.response_body_state.headers_processed || self.phase > Phase::ResponseHeaders {
+            return Ok(());
+        }
+        self.response_body_state.headers_processed = true;
         self.phase = Phase::ResponseHeaders;
-        self.run_phase(Phase::ResponseHeaders)?;
-        Ok(())
+        self.run_body_callback(Phase::ResponseHeaders)?;
+        self.finalize_pending_body(false)
     }
 
-    /// Append data to response body.
+    /// Append a chunk to the bounded response inspection buffer.
+    /// Use [`Self::write_response_body`] to observe partial acquisition, and
+    /// always check intervention() before forwarding response bytes.
     pub fn append_response_body(&mut self, data: &[u8]) -> Result<()> {
-        self.response.append_body(data);
+        self.write_response_body(data).map(|_| ())
+    }
+
+    /// Acquire a response prefix without copying bytes beyond its limit.
+    pub fn write_response_body(&mut self, data: &[u8]) -> Result<BodyWriteResult> {
+        self.write_body(data, false)
+    }
+
+    /// Process response body (Phase 4), at most once after phase 3.
+    pub fn process_response_body(&mut self) -> Result<()> {
+        self.check_body_callback(false)?;
+        if !self.response_body_state.headers_processed
+            || self.response_body_state.processed
+            || self.phase > Phase::ResponseBody
+            || self.intervention.is_some()
+        {
+            return Ok(());
+        }
+        self.response_body_state.processed = true;
+        self.phase = Phase::ResponseBody;
+        self.response.body_inspected =
+            self.response_body_accessible() && self.response_body_processable();
+        self.run_body_callback(Phase::ResponseBody)?;
         Ok(())
     }
 
-    /// Process response body (Phase 4).
-    pub fn process_response_body(&mut self) -> Result<()> {
-        self.phase = Phase::ResponseBody;
-        self.run_phase(Phase::ResponseBody)?;
+    /// Whether global and current ctl policy permit request acquisition.
+    pub fn request_body_accessible(&self) -> bool {
+        self.controls
+            .request_body_access_or(self.ruleset.body_config().request_access)
+    }
+
+    /// Whether global and current ctl policy permit response acquisition.
+    pub fn response_body_accessible(&self) -> bool {
+        self.controls
+            .response_body_access_or(self.ruleset.body_config().response_access)
+    }
+
+    /// Whether the response media type is selected for phase-4 body inspection.
+    pub fn response_body_processable(&self) -> bool {
+        let content_type = self
+            .response
+            .headers
+            .get_bytes(b"content-type")
+            .and_then(|values| values.first().copied())
+            .unwrap_or_default();
+        let media_type = content_type
+            .split(|byte| *byte == b';')
+            .next()
+            .unwrap_or_default();
+        self.ruleset
+            .body_config()
+            .response_mime_types
+            .iter()
+            .any(|allowed| media_type == allowed.as_bytes())
+    }
+
+    /// Number of bytes currently retained for request inspection.
+    pub fn request_body_buffered_len(&self) -> usize {
+        self.request.body.len()
+    }
+
+    /// Number of bytes currently retained for response inspection.
+    pub fn response_body_buffered_len(&self) -> usize {
+        self.response.body.len()
+    }
+
+    fn check_body_callback(&self, request: bool) -> Result<()> {
+        let state = if request {
+            &self.request_body_state
+        } else {
+            &self.response_body_state
+        };
+        if let Some(message) = &state.failure {
+            return Err(crate::Error::BodyCallbackFailed {
+                direction: if request { "request" } else { "response" },
+                message: message.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    fn run_body_callback(&mut self, phase: Phase) -> Result<()> {
+        if let Err(error) = self.run_phase(phase) {
+            let state = if phase <= Phase::RequestBody {
+                &mut self.request_body_state
+            } else {
+                &mut self.response_body_state
+            };
+            state.failure = Some(error.to_string());
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn body_limit_action(&self, request: bool) -> BodyLimitAction {
+        // DetectionOnly must remain non-disruptive even when enabled by ctl.
+        if self.engine_mode() == RuleEngineMode::DetectionOnly {
+            BodyLimitAction::ProcessPartial
+        } else if request {
+            self.ruleset.body_config().request_limit_action
+        } else {
+            self.ruleset.body_config().response_limit_action
+        }
+    }
+
+    fn write_body(&mut self, data: &[u8], request: bool) -> Result<BodyWriteResult> {
+        self.check_body_callback(request)?;
+        let (state, body_phase, direction) = if request {
+            (&self.request_body_state, Phase::RequestBody, "request")
+        } else {
+            (&self.response_body_state, Phase::ResponseBody, "response")
+        };
+        let processed = state.processed || self.phase > body_phase;
+        let pending_headers = !state.headers_processed;
+        let limit_reached = state.limit_reached;
+        let accessible = if request {
+            self.request_body_accessible()
+        } else {
+            self.response_body_accessible()
+        };
+        if !accessible || self.engine_mode() == RuleEngineMode::Off {
+            return Ok(BodyWriteResult {
+                consumed: 0,
+                limit_reached,
+                pending_headers,
+                inspection_complete: processed,
+            });
+        }
+        if processed && !limit_reached && !data.is_empty() {
+            return Err(crate::Error::BodyAlreadyProcessed { direction });
+        }
+        if processed || self.intervention.is_some() || limit_reached {
+            return Ok(BodyWriteResult {
+                consumed: 0,
+                limit_reached,
+                pending_headers,
+                inspection_complete: processed,
+            });
+        }
+        let limit = if request {
+            self.ruleset.body_config().request_limit
+        } else {
+            self.ruleset.body_config().response_limit
+        };
+        let current = if request {
+            self.request.body.len()
+        } else {
+            self.response.body.len()
+        };
+        let remaining = limit.saturating_sub(current);
+        let reached = data.len() >= remaining;
+        let action = self.body_limit_action(request);
+        let consumed = data.len().min(remaining);
+        // Reserve before committing acquisition state: a recoverable allocation
+        // failure must not mark an uncopied prefix as complete.
+        if !(reached && !pending_headers && action == BodyLimitAction::Reject) {
+            let body = if request {
+                &mut self.request.body
+            } else {
+                &mut self.response.body
+            };
+            body.try_reserve_exact(consumed)
+                .map_err(|source| crate::Error::BodyBufferAllocation { source })?;
+        }
+        if reached {
+            if !pending_headers {
+                self.log_body_limit(request, action);
+            }
+            if request {
+                self.request.inbound_data_error = true;
+                self.request_body_state.limit_reached = true;
+            } else {
+                self.response.outbound_data_error = true;
+                self.response_body_state.limit_reached = true;
+            }
+            if !pending_headers && action == BodyLimitAction::Reject {
+                self.reject_body_limit(request);
+                return Ok(BodyWriteResult {
+                    consumed: 0,
+                    limit_reached: true,
+                    pending_headers: false,
+                    inspection_complete: false,
+                });
+            }
+            if pending_headers {
+                let state = if request {
+                    &mut self.request_body_state
+                } else {
+                    &mut self.response_body_state
+                };
+                state.pending_reject_length = Some(current);
+            }
+        }
+        let body = if request {
+            &mut self.request.body
+        } else {
+            &mut self.response.body
+        };
+        body.extend_from_slice(&data[..consumed]);
+        if reached && !pending_headers {
+            if request {
+                self.process_request_body()?;
+            } else {
+                self.process_response_body()?;
+            }
+        }
+        let processed = if request {
+            self.request_body_state.processed
+        } else {
+            self.response_body_state.processed
+        };
+        Ok(BodyWriteResult {
+            consumed,
+            limit_reached: reached,
+            pending_headers,
+            inspection_complete: processed,
+        })
+    }
+
+    fn log_body_limit(&self, request: bool, action: BodyLimitAction) {
+        let limit = if request {
+            self.ruleset.body_config().request_limit
+        } else {
+            self.ruleset.body_config().response_limit
+        };
+        tracing::warn!(
+            direction = if request { "request" } else { "response" },
+            limit,
+            ?action,
+            "body reached its configured inspection limit"
+        );
+    }
+
+    fn reject_body_limit(&mut self, request: bool) {
+        if self.intervention.is_none() {
+            self.intervention = Some(Intervention::deny(
+                if request { 413 } else { 500 },
+                if request {
+                    Phase::RequestBody
+                } else {
+                    Phase::ResponseBody
+                },
+                None,
+            ));
+        }
+    }
+
+    fn finalize_pending_body(&mut self, request: bool) -> Result<()> {
+        let accessible = if request {
+            self.request_body_accessible()
+        } else {
+            self.response_body_accessible()
+        };
+        if !accessible || self.engine_mode() == RuleEngineMode::Off {
+            if request {
+                self.request.body = Vec::new();
+                self.request.inbound_data_error = false;
+                self.request_body_state.limit_reached = false;
+                self.request_body_state.pending_reject_length = None;
+            } else {
+                self.response.body = Vec::new();
+                self.response.outbound_data_error = false;
+                self.response_body_state.limit_reached = false;
+                self.response_body_state.pending_reject_length = None;
+            }
+            return Ok(());
+        }
+        let previous = if request {
+            self.request_body_state.pending_reject_length.take()
+        } else {
+            self.response_body_state.pending_reject_length.take()
+        };
+        if let Some(previous) = previous {
+            let action = self.body_limit_action(request);
+            self.log_body_limit(request, action);
+            if action == BodyLimitAction::Reject {
+                if request {
+                    self.request.body.truncate(previous);
+                } else {
+                    self.response.body.truncate(previous);
+                }
+                self.reject_body_limit(request);
+            } else if request {
+                self.process_request_body()?;
+            } else {
+                self.process_response_body()?;
+            }
+        }
         Ok(())
     }
 
@@ -1541,5 +1865,55 @@ mod tests {
         // Should match but not block
         assert!(!tx.has_intervention());
         assert!(tx.matched_rules().contains(&"1".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod body_buffer_boundaries {
+    use crate::ModSecurity;
+
+    #[test]
+    fn partial_body_reserves_only_its_bounded_prefix() {
+        let engine = ModSecurity::from_string("SecRequestBodyAccess On\nSecRequestBodyLimit 4\nSecRequestBodyLimitAction ProcessPartial").unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(
+            tx.write_request_body(&vec![b'x'; 65536]).unwrap().consumed,
+            4
+        );
+        assert_eq!(tx.request.body.len(), 4);
+        assert!(tx.request.body.capacity() <= 4);
+        assert!(tx.request.inbound_data_error);
+    }
+
+    #[test]
+    fn reject_does_not_reserve_or_copy_the_over_limit_chunk() {
+        let engine = ModSecurity::from_string(
+            "SecRequestBodyAccess On\nSecRequestBodyLimit 4\nSecRequestBodyLimitAction Reject",
+        )
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(
+            tx.write_request_body(&vec![b'x'; 65536]).unwrap().consumed,
+            0
+        );
+        assert_eq!(tx.request.body.capacity(), 0);
+        assert_eq!(tx.intervention().unwrap().status, 413);
+    }
+
+    #[test]
+    fn engine_off_never_acquires_body_bytes_even_after_the_body_callback() {
+        let engine =
+            ModSecurity::from_string("SecRuleEngine Off\nSecRequestBodyAccess On").unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.write_request_body(b"ignored").unwrap().consumed, 0);
+        assert_eq!(tx.request.body.capacity(), 0);
+        assert!(!tx.request.inbound_data_error);
     }
 }

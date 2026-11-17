@@ -242,7 +242,9 @@ impl<'a> VariableResolver<'a> {
             VariableName::RequestBody => {
                 scalar("REQUEST_BODY", request.request_body_bytes_variable())
             }
-            VariableName::ResponseBody => scalar("RESPONSE_BODY", &self.response.body),
+            VariableName::ResponseBody => {
+                scalar("RESPONSE_BODY", self.response.body_variable_bytes())
+            }
             VariableName::ResponseHeaders => {
                 collection(&self.response.headers, "RESPONSE_HEADERS", false)
             }

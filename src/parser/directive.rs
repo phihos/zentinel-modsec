@@ -4,6 +4,15 @@ use super::{Action, OperatorSpec, VariableSpec};
 use crate::error::SourceLocation;
 use std::path::PathBuf;
 
+/// Policy when an acquired body reaches its configured inspection limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyLimitAction {
+    /// Stop the transaction without copying the offending chunk.
+    Reject,
+    /// Inspect only the bounded prefix and let the connector retain the tail.
+    ProcessPartial,
+}
+
 /// A parsed ModSecurity directive.
 #[derive(Debug, Clone)]
 pub enum Directive {
@@ -38,6 +47,14 @@ pub enum Directive {
     SecRequestBodyLimit(usize),
     /// SecResponseBodyLimit directive.
     SecResponseBodyLimit(usize),
+    /// SecRequestBodyLimitAction directive.
+    SecRequestBodyLimitAction(BodyLimitAction),
+    /// SecResponseBodyLimitAction directive.
+    SecResponseBodyLimitAction(BodyLimitAction),
+    /// SecResponseBodyMimeType directive (replaces the configured list).
+    SecResponseBodyMimeType(Vec<String>),
+    /// SecResponseBodyMimeTypesClear directive.
+    SecResponseBodyMimeTypesClear,
     /// Include directive - include another file.
     Include(PathBuf),
     /// Unknown directive (logged and skipped).

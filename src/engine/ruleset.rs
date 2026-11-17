@@ -115,6 +115,7 @@ pub struct CompiledRuleset {
     rules: Rules,
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
+    body_config: super::body::BodyConfig,
 }
 
 /// Rule engine operating mode.
@@ -135,6 +136,7 @@ impl CompiledRuleset {
         Self {
             rules: Rules::new(),
             engine_mode: RuleEngineMode::default(),
+            body_config: super::body::BodyConfig::default(),
         }
     }
 
@@ -299,6 +301,28 @@ impl CompiledRuleset {
                 Directive::SecMarker(marker) => {
                     ruleset.rules.add_marker(marker.name);
                 }
+                Directive::SecRequestBodyAccess(value) => {
+                    ruleset.body_config.request_access = value
+                }
+                Directive::SecResponseBodyAccess(value) => {
+                    ruleset.body_config.response_access = value
+                }
+                Directive::SecRequestBodyLimit(value) => ruleset.body_config.request_limit = value,
+                Directive::SecResponseBodyLimit(value) => {
+                    ruleset.body_config.response_limit = value
+                }
+                Directive::SecRequestBodyLimitAction(value) => {
+                    ruleset.body_config.request_limit_action = value
+                }
+                Directive::SecResponseBodyLimitAction(value) => {
+                    ruleset.body_config.response_limit_action = value
+                }
+                Directive::SecResponseBodyMimeType(value) => {
+                    ruleset.body_config.response_mime_types = value
+                }
+                Directive::SecResponseBodyMimeTypesClear => {
+                    ruleset.body_config.response_mime_types.clear()
+                }
                 _ => {
                     // Other directives (SecDefaultAction, etc.) handled elsewhere
                 }
@@ -306,8 +330,20 @@ impl CompiledRuleset {
         }
 
         apply_target_updates(&mut ruleset, &target_updates);
+        ruleset.body_config.validate()?;
+        if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
+            ruleset.body_config.request_limit_action =
+                crate::parser::BodyLimitAction::ProcessPartial;
+            ruleset.body_config.response_limit_action =
+                crate::parser::BodyLimitAction::ProcessPartial;
+        }
 
         Ok(ruleset)
+    }
+
+    /// Get the compiled immutable body acquisition policy.
+    pub fn body_config(&self) -> &super::body::BodyConfig {
+        &self.body_config
     }
 
     /// Get rules for a phase.

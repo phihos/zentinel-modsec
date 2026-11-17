@@ -4,7 +4,7 @@
 use zentinel_modsec::ModSecurity;
 
 fn blocks(rules: &str, body: &[u8]) -> bool {
-    let m = ModSecurity::from_string(rules).expect("rules load");
+    let m = load_with_request_body(rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri("/api", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", "application/xml")
@@ -99,7 +99,7 @@ fn benign_xml_matches_nothing() {
 
 #[test]
 fn an_xml_target_is_empty_when_the_body_is_not_xml() {
-    let m = ModSecurity::from_string(
+    let m = load_with_request_body(
         "SecRuleEngine On\nSecRule XML:/* \"@detectSQLi\" \"id:1,phase:2,deny\"",
     )
     .unwrap();
@@ -144,7 +144,7 @@ fn an_unsupported_xpath_expression_still_loads_the_ruleset() {
             "SecRuleEngine On\nSecRule {target} \"@detectSQLi\" \"id:1,phase:2,deny\"\n\
                      SecRule ARGS \"@detectSQLi\" \"id:2,phase:2,deny\""
         );
-        let m = ModSecurity::from_string(&rules)
+        let m = load_with_request_body(&rules)
             .unwrap_or_else(|e| panic!("{target} should still load: {e}"));
         assert_eq!(m.rule_count(), 2, "{target}");
     }
@@ -174,4 +174,10 @@ fn xml_target_selection_is_classified() {
         XmlTarget::from_selection(Some(&Selection::Key("/order/item".into()))),
         None
     );
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

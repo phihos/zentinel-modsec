@@ -18,7 +18,7 @@ fn c_escapes_decode_quotes_controls_octal_and_exactly_two_hex_digits() {
 
 #[test]
 fn crs_sqlite_quote_escapes_are_visible_to_the_exact_rule() {
-    let engine = ModSecurity::from_string(include_str!("fixtures/crs-escape-seq.conf")).unwrap();
+    let engine = load_with_request_body(include_str!("fixtures/crs-escape-seq.conf")).unwrap();
     for body in ["code=1;.\\\"shell whoami\n", "code=1;.\\'shell whoami\n"] {
         let mut tx = engine.new_transaction();
         tx.process_uri("/post", "POST", "HTTP/1.1").unwrap();
@@ -40,4 +40,10 @@ fn unchanged_unicode_input_is_borrowed() {
         EscapeSeqDecode.transform("café"),
         Cow::Borrowed("café")
     ));
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

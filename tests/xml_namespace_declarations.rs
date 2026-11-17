@@ -9,7 +9,7 @@ const RULE_941130_SHAPE: &str = "SecRuleEngine On\n\
     SecRule ARGS_NAMES \"@rx (?i)xmlns\" \"id:941130,phase:2,deny,status:403\"";
 
 fn run(rules: &str, body: &str) -> zentinel_modsec::engine::Transaction {
-    let m = ModSecurity::from_string(rules).expect("rules should load");
+    let m = load_with_request_body(rules).expect("rules should load");
     let mut tx = m.new_transaction();
     tx.process_uri("/api/orders", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Host", "example.com").unwrap();
@@ -79,4 +79,10 @@ fn a_namespace_declaration_value_remains_visible_in_xml_attributes() {
         SecRule XML://@* \"@contains urn:example:orders\" \"id:3,phase:2,deny\"";
     let body = r#"<o:order xmlns:o="urn:example:orders"><o:item>w</o:item></o:order>"#;
     assert!(blocked(rules, body));
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

@@ -18,7 +18,7 @@ const BODY: &str = "--X\r\n\
 /// Run a multipart POST through both request phases and report whether the
 /// request was blocked.
 fn blocked_multipart(rules: &str, body: &str) -> bool {
-    let msc = ModSecurity::from_string(rules).expect("rules should load");
+    let msc = load_with_request_body(rules).expect("rules should load");
     let mut tx = msc.new_transaction();
     tx.process_uri("/upload", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Host", "example.com").unwrap();
@@ -34,7 +34,7 @@ fn blocked_multipart(rules: &str, body: &str) -> bool {
 fn ruleset_using_the_variable_loads() {
     // The load-time regression from #341: a ruleset naming the variable must
     // not fail to parse.
-    ModSecurity::from_string(
+    load_with_request_body(
         "SecRuleEngine On\n\
          SecRule MULTIPART_PART_HEADERS \"@rx nothing\" \"id:922100,phase:2,deny\"",
     )
@@ -78,4 +78,10 @@ fn part_body_content_is_not_treated_as_a_header() {
         !blocked_multipart(rules, body),
         "part content that looks like a header must not populate MULTIPART_PART_HEADERS"
     );
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

@@ -5,7 +5,7 @@
 use zentinel_modsec::ModSecurity;
 
 fn run(rules: &str, content_type: &str, body: &[u8]) -> bool {
-    let m = ModSecurity::from_string(rules).expect("rules should load");
+    let m = load_with_request_body(rules).expect("rules should load");
     let mut tx = m.new_transaction();
     tx.process_uri("/api", "POST", "HTTP/1.1").unwrap();
     if !content_type.is_empty() {
@@ -305,4 +305,10 @@ fn a_non_xml_content_type_is_not_parsed_as_xml() {
     let rules = "SecRuleEngine On\n\
          SecRule XML:/* \"@rx .\" \"id:1,phase:2,deny\"";
     assert!(!run(rules, "text/plain", b"<a>value</a>"));
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }
