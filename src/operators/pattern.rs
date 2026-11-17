@@ -2,11 +2,11 @@
 //!
 //! Compiled regexes are shared across live rulesets in the process.
 
-use super::traits::{Operator, OperatorResult};
+use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 use crate::error::{Error, Result};
 use aho_corasick::AhoCorasick;
 use once_cell::sync::Lazy;
-use regex::Regex;
+use regex::bytes::{Regex, RegexBuilder};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -24,20 +24,67 @@ impl RegexCache {
         // loads of the same pattern from building duplicate automata. Matching
         // never takes this lock.
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(regex) = entries.get(pattern).and_then(Weak::upgrade) {
+        let binary = matches_arbitrary_bytes(pattern);
+        let key = format!(
+            "unicode={};dotall={};multiline={};binary={}:{}",
+            !binary, !binary, !binary, binary, pattern
+        );
+        if let Some(regex) = entries.get(&key).and_then(Weak::upgrade) {
             return Ok(regex);
         }
         entries.retain(|_, regex| regex.strong_count() > 0);
-        let regex = Arc::new(Regex::new(pattern).map_err(|source| Error::RegexCompile {
-            pattern: pattern.to_string(),
-            source,
-        })?);
-        entries.insert(pattern.to_string(), Arc::downgrade(&regex));
+        let regex = Arc::new(
+            RegexBuilder::new(pattern)
+                .unicode(!binary)
+                .dot_matches_new_line(!binary)
+                .multi_line(!binary)
+                .build()
+                .map_err(|source| Error::RegexCompile {
+                    pattern: pattern.to_string(),
+                    source,
+                })?,
+        );
+        entries.insert(key, Arc::downgrade(&regex));
         Ok(regex)
     }
 }
 
 static REGEX_CACHE: Lazy<RegexCache> = Lazy::new(RegexCache::default);
+
+/// Coraza chooses its binary matcher when decoded byte escapes in the
+/// expression do not form UTF-8. Preserve this selection instead of treating
+/// each high-byte escape as a Unicode code point.
+fn matches_arbitrary_bytes(pattern: &str) -> bool {
+    let input = pattern.as_bytes();
+    let mut decoded = Vec::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        if input[i] == b'\\' && i + 3 < input.len() && input[i + 1] == b'x' {
+            let (start, end, next) = if input[i + 2] == b'{' {
+                match input[i + 3..].iter().position(|&b| b == b'}') {
+                    Some(n) => (i + 3, i + 3 + n, i + 4 + n),
+                    None => {
+                        decoded.push(input[i]);
+                        i += 1;
+                        continue;
+                    }
+                }
+            } else {
+                (i + 2, i + 4, i + 4)
+            };
+            if let Ok(text) = std::str::from_utf8(&input[start..end]) {
+                if let Ok(byte) = u8::from_str_radix(text, 16) {
+                    decoded.push(byte);
+                    i = next;
+                    continue;
+                }
+            }
+        }
+        decoded.push(input[i]);
+        i += 1;
+    }
+    std::str::from_utf8(&decoded).is_err()
+}
 
 /// Regex operator (@rx) with process-wide compilation sharing.
 ///
@@ -67,24 +114,27 @@ impl RxOperator {
 
 impl Operator for RxOperator {
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(captures) = self.compiled.captures(value) {
-            let matched_value = captures.get(0).map(|m| m.as_str().to_string());
-            let capture_groups: Vec<String> = captures
-                .iter()
-                .skip(1) // Skip the full match
-                // A group that did not take part stays in its slot (empty), so
-                // TX:2 is always the second group.
-                .map(|c| c.map(|m| m.as_str().to_string()).unwrap_or_default())
-                .collect();
+        // String callers receive escaped presentations for captures that split
+        // a UTF-8 sequence; engine evaluation uses the original bytes below.
+        self.execute_bytes(value.as_bytes())
+            .expect("regex byte evaluation is infallible")
+            .into_text()
+    }
 
-            OperatorResult {
+    fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
+        Ok(if let Some(captures) = self.compiled.captures(value) {
+            ByteOperatorResult {
                 matched: true,
-                captures: capture_groups,
-                matched_value,
+                captures: captures
+                    .iter()
+                    .skip(1)
+                    .map(|capture| capture.map(|m| m.as_bytes().to_vec()).unwrap_or_default())
+                    .collect(),
+                matched_value: captures.get(0).map(|m| m.as_bytes().to_vec()),
             }
         } else {
-            OperatorResult::no_match()
-        }
+            ByteOperatorResult::no_match()
+        })
     }
 
     fn name(&self) -> &'static str {
@@ -186,6 +236,17 @@ impl PmOperator {
 }
 
 impl Operator for PmOperator {
+    fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
+        Ok(match self.automaton.find(value) {
+            Some(found) => ByteOperatorResult::matched(
+                self.patterns[found.pattern().as_usize()]
+                    .as_bytes()
+                    .to_vec(),
+            ),
+            None => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(mat) = self.automaton.find(value) {
             let matched = &self.patterns[mat.pattern().as_usize()];
@@ -245,8 +306,9 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
             "{rules}\nSecRuleUpdateTargetById 1001 \"!ARGS:skip\""
         ))
         .unwrap();
-        let owners =
-            REGEX_CACHE.entries.lock().unwrap()["^shared-exclusion-pattern$"].strong_count();
+        let owners = REGEX_CACHE.entries.lock().unwrap()
+            ["unicode=true;dotall=true;multiline=true;binary=false:^shared-exclusion-pattern$"]
+            .strong_count();
         assert_eq!(owners, 2, "one shared regex owned by both loaded rulesets");
         for (engine, should_block) in [(&original, true), (&excluded, false)] {
             let mut tx = engine.new_transaction();
@@ -290,7 +352,7 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
         assert_eq!(entries.len(), 1);
         assert!(Arc::ptr_eq(
             &live,
-            &entries["^replacement-cache-pattern$"].upgrade().unwrap()
+            &entries["unicode=true;dotall=true;multiline=true;binary=false:^replacement-cache-pattern$"].upgrade().unwrap()
         ));
     }
 
