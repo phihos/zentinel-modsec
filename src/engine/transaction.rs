@@ -76,6 +76,9 @@ pub struct Transaction {
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
     record_setvar_effects: bool,
+    /// Optional expanded message snapshots, captured when each rule completes.
+    rule_messages: Vec<RuleMessage>,
+    record_rule_messages: bool,
 }
 
 /// The variable a rule matched on.
@@ -138,6 +141,21 @@ pub struct MatchedData {
     pub matched_portion_bytes: Option<Vec<u8>>,
 }
 
+/// Expanded message data for a completed logical rule.
+///
+/// Values are original bytes captured at match time, before a later rule can
+/// overwrite TX captures or scores. Rendering/escaping and logging policy belong
+/// to the connector; recording is opt-in and does not emit log messages itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleMessage {
+    /// ID of the standalone rule or completed chain starter.
+    pub rule_id: String,
+    /// Expanded `msg` bytes, if configured.
+    pub message: Option<Vec<u8>>,
+    /// Expanded `logdata` bytes, if configured.
+    pub logdata: Option<Vec<u8>>,
+}
+
 /// What a `setvar` did to a collection.
 ///
 /// The values are the ones that were applied: any `%{...}` macro in the rule
@@ -193,7 +211,21 @@ impl Transaction {
             matched_data: Vec::new(),
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
+            rule_messages: Vec::new(),
+            record_rule_messages: false,
         }
+    }
+
+    /// Enable expanded rule message snapshots for a connector or audit consumer.
+    /// Disabled by default; this does not change rule evaluation or log policy.
+    pub fn set_record_rule_messages(&mut self, enabled: bool) {
+        self.record_rule_messages = enabled;
+    }
+
+    /// Messages captured when logical rules completed, in evaluation order.
+    /// Empty unless [`Self::set_record_rule_messages`] was enabled.
+    pub fn rule_messages(&self) -> &[RuleMessage] {
+        &self.rule_messages
     }
 
     /// Set the client address, backing `REMOTE_ADDR` and `REMOTE_PORT`.
@@ -744,6 +776,26 @@ impl Transaction {
                             self.request.body_processor = processor.clone();
                         }
                         self.controls.apply(directive);
+                    }
+                }
+
+                if self.record_rule_messages {
+                    if let Some(id) = action_result.metadata.id.as_ref() {
+                        let message = action_result
+                            .metadata
+                            .msg
+                            .as_deref()
+                            .map(|template| self.expand_operator_macros_bytes(template));
+                        let logdata = action_result
+                            .metadata
+                            .logdata
+                            .as_deref()
+                            .map(|template| self.expand_operator_macros_bytes(template));
+                        self.rule_messages.push(RuleMessage {
+                            rule_id: id.clone(),
+                            message,
+                            logdata,
+                        });
                     }
                 }
 

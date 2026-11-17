@@ -12,7 +12,7 @@ pub mod transaction;
 pub use control::{CtlDirective, TransactionControls};
 pub use intervention::Intervention;
 pub use ruleset::{CompiledRuleset, Rules};
-pub use transaction::{SetVarChange, SetVarEffect, Transaction};
+pub use transaction::{RuleMessage, SetVarChange, SetVarEffect, Transaction};
 
 use crate::error::Result;
 use std::sync::Arc;
