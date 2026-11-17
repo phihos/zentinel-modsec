@@ -56,7 +56,12 @@ impl TransformationPipeline {
                 Cow::Owned(s) => {
                     let transformed = t.transform(&s);
                     match transformed {
-                        Cow::Borrowed(_) => Cow::Owned(s),
+                        Cow::Borrowed(next)
+                            if next.as_ptr() == s.as_ptr() && next.len() == s.len() =>
+                        {
+                            Cow::Owned(s)
+                        }
+                        Cow::Borrowed(next) => Cow::Owned(next.to_owned()),
                         Cow::Owned(new) => Cow::Owned(new),
                     }
                 }
@@ -73,7 +78,12 @@ impl TransformationPipeline {
             current = match current {
                 Cow::Borrowed(value) => transformation.transform_bytes(value)?,
                 Cow::Owned(value) => match transformation.transform_bytes(&value)? {
-                    Cow::Borrowed(_) => Cow::Owned(value),
+                    Cow::Borrowed(next)
+                        if next.as_ptr() == value.as_ptr() && next.len() == value.len() =>
+                    {
+                        Cow::Owned(value)
+                    }
+                    Cow::Borrowed(next) => Cow::Owned(next.to_vec()),
                     Cow::Owned(next) => Cow::Owned(next),
                 },
             };
