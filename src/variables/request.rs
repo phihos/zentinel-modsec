@@ -27,6 +27,9 @@ pub struct RequestData {
     pub args_post: HashMapCollection,
     /// Cookies.
     pub cookies: HashMapCollection,
+    /// XML attribute and text values keyed by Coraza's two supported selectors
+    /// (`//@*` and `/*`). XML markup never becomes HTTP argument names.
+    pub xml: HashMapCollection,
     /// Multipart part headers (key = part name, value = full header line),
     /// populated by the multipart body processor. Mirrors ModSecurity's
     /// `MULTIPART_PART_HEADERS` collection.
@@ -122,6 +125,25 @@ impl RequestData {
     /// Get body as string.
     pub fn body_str(&self) -> String {
         String::from_utf8_lossy(&self.body).to_string()
+    }
+
+    /// Public REQUEST_BODY value, distinct from the internally retained bytes.
+    /// Coraza populates it only for the URLENCODED and RAW processors.
+    pub fn request_body_variable(&self) -> String {
+        if matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
+            self.body_str()
+        } else {
+            String::new()
+        }
+    }
+
+    /// Structured processors leave REQUEST_BODY_LENGTH at its initial zero.
+    pub fn request_body_length_variable(&self) -> String {
+        if matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
+            self.body_length().to_string()
+        } else {
+            "0".into()
+        }
     }
 
     /// Get body length.
@@ -304,27 +326,8 @@ impl RequestData {
         Ok(())
     }
 
-    /// Parse an XML body, flattening element text and attributes into
-    /// `args_post`.
-    ///
-    /// ModSecurity exposes XML through an XPath-selected `XML:` variable. That
-    /// needs an XPath engine, which this does not have — so instead each text
-    /// node and attribute becomes an argument named by its element path,
-    /// prefixed `xml.`:
-    ///
-    /// ```text
-    /// <order><item id="7">widget</item></order>
-    ///   -> xml.order.item      = widget
-    ///      xml.order.item.@id  = 7
-    /// ```
-    ///
-    /// That is not ModSecurity-compatible naming, and rules written against
-    /// `XML:/order/item` will not match it. It is chosen because the
-    /// alternative was leaving XML bodies uninspected entirely: with this,
-    /// `SecRule ARGS "@detectSQLi"` covers XML payloads the same way it covers
-    /// form and JSON ones, which is what the common rulesets actually do.
-    ///
-    /// The whole document's text is also available as `REQUEST_BODY`.
+    /// Parse XML values into their own collection, without inventing HTTP
+    /// arguments. `XML:/*` selects text and `XML://@*` attribute values.
     pub fn parse_xml_body(&mut self) -> Result<(), String> {
         use quick_xml::events::Event;
 
@@ -349,7 +352,7 @@ impl RequestData {
 
         macro_rules! cap {
             ($name:expr, $value:expr) => {
-                if push_xml_arg(&$name, $value, &mut self.args_post, &mut count) {
+                if push_xml_arg(&$name, $value, &mut self.xml, &mut count) {
                     let msg = xml_limit_message();
                     self.body_error = Some(msg.clone());
                     return Err(msg);
@@ -372,16 +375,6 @@ impl RequestData {
                     text.push(String::new());
 
                     for attr in e.attributes().flatten() {
-                        let attr_name = decode_name(attr.key.as_ref());
-                        // A namespace declaration (`xmlns`, `xmlns:p`) is
-                        // document structure, not data (Namespaces in XML
-                        // 1.0, section 3). Flattening it put `xmlns` into
-                        // ARGS_NAMES, which CRS 941130 reads as an XSS
-                        // attribute vector, blocking any namespaced document.
-                        // The declaration stays visible in REQUEST_BODY.
-                        if is_namespace_declaration(&attr_name) {
-                            continue;
-                        }
                         let value = attr
                             .decoded_and_normalized_value(
                                 quick_xml::XmlVersion::Implicit1_0,
@@ -389,16 +382,14 @@ impl RequestData {
                             )
                             .map(|v| v.into_owned())
                             .unwrap_or_default();
-                        let name = format!("xml.{}.@{}", path.join("."), attr_name);
-                        cap!(name, value);
+                        cap!("//@*", value);
                     }
                 }
                 Ok(Event::End(_)) => {
                     if let Some(collected) = text.pop() {
                         let trimmed = collected.trim();
                         if !trimmed.is_empty() && !path.is_empty() {
-                            let name = format!("xml.{}", path.join("."));
-                            cap!(name, trimmed.to_string());
+                            cap!("/*", trimmed.to_string());
                         }
                     }
                     path.pop();
@@ -520,12 +511,6 @@ fn resolve_entity(name: &str) -> Option<String> {
 /// rejecting a document over a malformed name when the payload is elsewhere.
 fn decode_name(raw: &[u8]) -> String {
     String::from_utf8_lossy(raw).to_string()
-}
-
-/// Whether an attribute's qualified name declares a namespace: `xmlns` itself
-/// or an `xmlns:<prefix>`.
-fn is_namespace_declaration(name: &str) -> bool {
-    name == "xmlns" || name.starts_with("xmlns:")
 }
 
 /// Decode one component of `application/x-www-form-urlencoded` input.

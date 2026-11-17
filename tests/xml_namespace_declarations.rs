@@ -1,7 +1,5 @@
-//! Namespace declarations are document structure, not data: they must not
-//! surface as arguments (zentinelproxy/zentinel-modsec#60). Flattened, the
-//! name `xml.o:order.@xmlns:o` put `xmlns` into ARGS_NAMES, which CRS 941130
-//! reads as an XSS attribute vector -- so every namespaced body was blocked.
+//! XML namespace declarations do not invent HTTP arguments. Their values
+//! remain inspectable through XML attributes, matching Coraza 3.8.1.
 
 use zentinel_modsec::ModSecurity;
 
@@ -53,28 +51,32 @@ fn a_nested_declaration_is_not_an_argument() {
 }
 
 #[test]
-fn element_text_and_other_attributes_are_still_arguments() {
+fn element_text_and_other_attribute_values_are_still_inspected() {
     let body = r#"<o:order xmlns:o="urn:x" o:id="7"><o:item>widget</o:item></o:order>"#;
     let item = "SecRuleEngine On\n\
-        SecRule ARGS:xml.o:order.o:item \"@streq widget\" \"id:1,phase:2,deny\"";
+        SecRule XML:/* \"@streq widget\" \"id:1,phase:2,deny\"";
     assert!(blocked(item, body));
     let attr = "SecRuleEngine On\n\
-        SecRule ARGS:xml.o:order.@o:id \"@streq 7\" \"id:2,phase:2,deny\"";
+        SecRule XML://@* \"@streq 7\" \"id:2,phase:2,deny\"";
     assert!(blocked(attr, body));
 }
 
 #[test]
-fn an_attribute_that_merely_starts_with_xmlns_is_still_an_argument() {
+fn an_ordinary_attribute_is_not_an_argument_but_its_value_is_inspected() {
     // `xmlnsfoo` is an ordinary attribute, not a declaration.
     let body = r#"<order xmlnsfoo="bar"><item>widget</item></order>"#;
-    assert!(blocked(RULE_941130_SHAPE, body));
+    assert!(!blocked(RULE_941130_SHAPE, body));
+    assert!(blocked(
+        r#"SecRule XML://@* "@streq bar" "id:2,phase:2,deny""#,
+        body
+    ));
 }
 
 #[test]
-fn a_declaration_is_still_visible_in_request_body() {
+fn a_namespace_declaration_value_remains_visible_in_xml_attributes() {
     let rules = "SecRuleEngine On\n\
         SecRequestBodyAccess On\n\
-        SecRule REQUEST_BODY \"@contains urn:example:orders\" \"id:3,phase:2,deny\"";
+        SecRule XML://@* \"@contains urn:example:orders\" \"id:3,phase:2,deny\"";
     let body = r#"<o:order xmlns:o="urn:example:orders"><o:item>w</o:item></o:order>"#;
     assert!(blocked(rules, body));
 }
