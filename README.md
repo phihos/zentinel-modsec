@@ -204,9 +204,20 @@ async fn waf(
 
 **Directives:** `SecRule`, `SecAction`, `SecMarker`, `SecRuleEngine`,
 `SecDefaultAction`, `SecRuleRemoveById`, `SecRuleUpdateTargetById`,
+`SecRuleUpdateTargetByTag`,
 `SecRuleUpdateActionById`, `SecRequestBodyAccess`, `SecResponseBodyAccess`,
 `SecRequestBodyLimit`, `SecResponseBodyLimit`, `Include`. Other directives are
 logged and skipped.
+
+`SecRuleUpdateTargetByTag attack-sqli "!ARGS:password"` excludes that argument
+from every rule carrying the exact, case-sensitive `attack-sqli` tag. Positive
+targets append to the rule; a third argument replaces an existing target, as
+with `SecRuleUpdateTargetById`. For a conditional transaction-local exclusion,
+use `ctl:ruleRemoveTargetByTag=attack-sqli;ARGS:password` on an earlier rule.
+Runtime exclusions also apply to children of a tagged chain starter. Both
+forms support regex collection keys such as `ARGS:/^token_/` (the runtime
+regex-key behavior follows Coraza 3.8.1). Invalid configure-time targets fail
+loading; malformed runtime controls produce load-time warnings with rule IDs.
 
 **Operators:** `@rx`, `@pm`, `@pmf`, `@pmFromFile`, `@contains`, `@beginsWith`,
 `@endsWith`, `@streq`, `@within`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,

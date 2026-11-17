@@ -21,6 +21,8 @@ pub enum Directive {
     SecRuleRemoveById(Vec<RuleIdSelector>),
     /// SecRuleUpdateTargetById directive - update rule targets (CRS exclusions).
     SecRuleUpdateTargetById(UpdateTargetById),
+    /// SecRuleUpdateTargetByTag directive - update targets for an exact tag.
+    SecRuleUpdateTargetByTag(UpdateTargetByTag),
     /// SecRuleUpdateActionById directive - update rule actions.
     SecRuleUpdateActionById {
         /// ID of the rule whose actions are being amended.
@@ -83,6 +85,16 @@ pub struct UpdateTargetById {
     pub replaced: Option<String>,
     /// Source location for diagnostics.
     pub location: SourceLocation,
+}
+
+/// A target update selected by an exact, case-sensitive rule tag.
+#[derive(Debug, Clone)]
+pub struct UpdateTargetByTag {
+    /// Rule tag to select.
+    pub tag: String,
+    /// Target update, using the same append/exclude/replace semantics as by ID.
+    /// Its ID selectors are empty because selection is by tag.
+    pub targets: UpdateTargetById,
 }
 
 /// A SecRule directive.

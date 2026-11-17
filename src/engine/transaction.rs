@@ -550,7 +550,14 @@ impl Transaction {
             }
 
             // Evaluate rule
-            let outcome = self.evaluate_rule(rule)?;
+            // Runtime tag exclusions apply to every link of the logical rule,
+            // including children that carry no tag of their own.
+            let tag_actions = chain_state
+                .chain_start
+                .map_or(rule.actions.as_slice(), |start| {
+                    rules[start].actions.as_slice()
+                });
+            let outcome = self.evaluate_rule(rule, tag_actions)?;
             let matched = !outcome.matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
             let captures = outcome
@@ -769,7 +776,7 @@ impl Transaction {
     }
 
     /// Evaluate a single rule.
-    fn evaluate_rule(&self, rule: &CompiledRule) -> Result<RuleOutcome> {
+    fn evaluate_rule(&self, rule: &CompiledRule, tag_actions: &[Action]) -> Result<RuleOutcome> {
         let resolver = VariableResolver::new(
             &self.request,
             &self.response,
@@ -795,17 +802,21 @@ impl Transaction {
         // effectively all of them -- pay one comparison rather than a scan per
         // variable.
         let filter_targets = self.controls.has_target_removals(rule.id.as_deref());
+        let filter_tag_targets = self.controls.has_tag_target_removals(tag_actions);
 
         let mut all_values = Vec::new();
         let mut any_excluded = false;
         for spec in &rule.variables {
             let mut resolved = resolver.resolve(spec);
-            if filter_targets {
+            if filter_targets || filter_tag_targets {
                 let before = resolved.len();
                 resolved.retain(|(name, _)| {
-                    !self
-                        .controls
-                        .is_target_removed(rule.id.as_deref(), spec, name)
+                    !(filter_targets
+                        && self
+                            .controls
+                            .is_target_removed(rule.id.as_deref(), spec, name)
+                        || filter_tag_targets
+                            && self.controls.is_tag_target_removed(tag_actions, spec, name))
                 });
                 any_excluded |= resolved.len() != before;
             }

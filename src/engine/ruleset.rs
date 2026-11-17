@@ -179,7 +179,7 @@ impl CompiledRuleset {
             })
             .flatten()
             .collect();
-        let mut target_updates: Vec<UpdateTargetById> = Vec::new();
+        let mut target_updates: Vec<(Option<String>, UpdateTargetById)> = Vec::new();
         // When a removed rule is a chain head, its continuation rules (which
         // usually carry no id of their own) must be dropped with it.
         let mut skipping_removed_chain = false;
@@ -292,7 +292,10 @@ impl CompiledRuleset {
                     // Applied after every rule is compiled: the directive may
                     // appear before or after the rule it targets, and CRS
                     // exclusion files are conventionally included last.
-                    target_updates.push(update.clone());
+                    target_updates.push((None, update));
+                }
+                Directive::SecRuleUpdateTargetByTag(update) => {
+                    target_updates.push((Some(update.tag), update.targets));
                 }
                 Directive::SecMarker(marker) => {
                     ruleset.rules.add_marker(marker.name);
@@ -371,17 +374,25 @@ fn id_is_removed(id: &Option<String>, removals: &[RuleIdSelector]) -> bool {
 /// The update applies to the rule carrying the ID. For a chained rule that is
 /// the chain starter, matching ModSecurity, which identifies a chain by the
 /// starter's ID.
-fn apply_target_updates(ruleset: &mut CompiledRuleset, updates: &[UpdateTargetById]) {
+fn apply_target_updates(
+    ruleset: &mut CompiledRuleset,
+    updates: &[(Option<String>, UpdateTargetById)],
+) {
     if updates.is_empty() {
         return;
     }
     for rules in ruleset.rules.by_phase.values_mut() {
         for rule in rules.iter_mut() {
-            let Some(numeric) = rule.id.as_ref().and_then(|s| s.parse::<u64>().ok()) else {
-                continue;
-            };
-            for update in updates {
-                if !update.ids.iter().any(|selector| selector.matches(numeric)) {
+            for (tag, update) in updates {
+                let selected = match tag {
+                    Some(tag) => has_tag(&rule.actions, tag),
+                    None => rule
+                        .id
+                        .as_ref()
+                        .and_then(|id| id.parse::<u64>().ok())
+                        .is_some_and(|id| update.ids.iter().any(|selector| selector.matches(id))),
+                };
+                if !selected {
                     continue;
                 }
                 if let Some(replaced) = &update.replaced {
@@ -395,10 +406,19 @@ fn apply_target_updates(ruleset: &mut CompiledRuleset, updates: &[UpdateTargetBy
                         }
                     }
                 }
+                report_unimplemented_variables(&update.additions, &rule.id);
                 rule.variables.extend(update.additions.iter().cloned());
             }
         }
     }
+}
+
+/// Tags are exact and case-sensitive, as in Coraza's tag exclusions.
+pub(crate) fn has_tag(actions: &[Action], tag: &str) -> bool {
+    actions.iter().any(|action| {
+        matches!(action,
+        Action::Metadata(MetadataAction::Tag(value)) if value == tag)
+    })
 }
 
 /// Whether a rule variable refers to the target named by a directive argument
@@ -417,6 +437,7 @@ fn variable_matches_target(var: &VariableSpec, target: &str) -> bool {
     }
     match (&var.selection, &parsed.selection) {
         (None, None) => true,
+        (Some(Selection::Regex(existing)), Some(Selection::Regex(wanted))) => existing == wanted,
         (Some(Selection::Key(existing)), Some(Selection::Key(wanted))) => {
             existing.eq_ignore_ascii_case(wanted.as_str())
         }
@@ -531,14 +552,21 @@ fn compile_operator_reporting(
 /// of rules, and one line per rule would bury the message it is trying to
 /// deliver.
 fn report_unsupported_controls(directives: &[Directive]) {
-    let mut seen: std::collections::BTreeMap<String, (&'static str, usize)> =
+    let mut seen: std::collections::BTreeMap<String, (&'static str, Vec<String>)> =
         std::collections::BTreeMap::new();
 
+    let mut chain_id: Option<String> = None;
     for directive in directives {
         let actions = match directive {
             Directive::SecRule(rule) => &rule.actions,
             Directive::SecAction(action) => &action.actions,
             _ => continue,
+        };
+        let rule_id = extract_id(actions).or_else(|| chain_id.clone());
+        chain_id = if has_chain(actions) {
+            rule_id.clone()
+        } else {
+            None
         };
         for (name, value, reason) in super::control::unsupported_controls(actions) {
             let key = if value.is_empty() {
@@ -546,15 +574,18 @@ fn report_unsupported_controls(directives: &[Directive]) {
             } else {
                 format!("{name}={value}")
             };
-            let entry = seen.entry(key).or_insert((reason, 0));
-            entry.1 += 1;
+            let entry = seen.entry(key).or_insert_with(|| (reason, Vec::new()));
+            entry
+                .1
+                .push(rule_id.clone().unwrap_or_else(|| "(no id)".into()));
         }
     }
 
-    for (spec, (reason, count)) in seen {
+    for (spec, (reason, ids)) in seen {
         tracing::warn!(
             directive = %spec,
-            rules_affected = count,
+            rules_affected = ids.len(),
+            rule_ids = %ids.join(","),
             reason = %reason,
             "ctl: directive is not implemented and will have no effect"
         );
