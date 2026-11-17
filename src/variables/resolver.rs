@@ -17,8 +17,9 @@ use std::sync::RwLock;
 ///
 /// Patterns come only from loaded rules, so the cache is bounded by the rule
 /// set. A pattern that does not compile is cached as `None` and never matches,
-/// as before. `Regex` clones share the compiled program.
-fn cached_regex(pattern: &str) -> Option<Regex> {
+/// as before. `Regex` clones share the compiled program. Load diagnostics use
+/// this same cache to catch program-size failures before request processing.
+pub(crate) fn cached_regex(pattern: &str) -> Option<Regex> {
     static CACHE: Lazy<RwLock<HashMap<String, Option<Regex>>>> = Lazy::new(Default::default);
     if let Some(hit) = CACHE.read().unwrap_or_else(|e| e.into_inner()).get(pattern) {
         return hit.clone();

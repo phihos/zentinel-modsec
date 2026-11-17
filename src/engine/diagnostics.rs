@@ -207,7 +207,10 @@ fn report_variables(found: &mut Diagnostics, variables: &[VariableSpec], id: &st
 }
 
 fn report_regex(found: &mut Diagnostics, pattern: &str, id: &str) {
-    if regex_syntax::Parser::new().parse(pattern).is_err() {
+    // Syntax alone is insufficient: valid regexes may exceed the compiled
+    // program limit. Reuse the resolver cache so this also warms successful
+    // selectors once, and failed compilations remain cached for evaluation.
+    if crate::variables::cached_regex(pattern).is_none() {
         record(
             found,
             "variable-regex",
