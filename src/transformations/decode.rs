@@ -30,26 +30,32 @@ pub struct UrlDecodeUni;
 
 impl Transformation for UrlDecodeUni {
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // Handle %uXXXX unicode escapes in addition to standard URL encoding
-        let mut result = String::new();
-        let mut chars = input.chars().peekable();
+        // Decode original input positions exactly once. Invalid/truncated
+        // escapes must not swallow the following character (which may itself
+        // be a '+' or the start of a valid escape).
+        let mut result = String::with_capacity(input.len());
         let mut modified = false;
-
-        while let Some(c) = chars.next() {
-            if c == '%' {
-                if chars.peek() == Some(&'u') || chars.peek() == Some(&'U') {
-                    chars.next(); // consume 'u'
-                                  // Read 4 hex digits
-                    let mut hex = String::new();
-                    for _ in 0..4 {
-                        if let Some(h) = chars.next() {
-                            hex.push(h);
-                        }
-                    }
-                    if let Ok(code) = u32::from_str_radix(&hex, 16) {
-                        // IIS %u full-width ASCII encodings represent their
-                        // narrow equivalents (FF01..FF5E -> 21..7E). CRS
-                        // applies this after utf8toUnicode as well.
+        let mut offset = 0;
+        while offset < input.len() {
+            let tail = &input[offset..];
+            if tail.starts_with('+') {
+                result.push(' ');
+                modified = true;
+                offset += 1;
+                continue;
+            }
+            if tail.starts_with('%') {
+                if tail
+                    .as_bytes()
+                    .get(1)
+                    .is_some_and(|c| *c == b'u' || *c == b'U')
+                {
+                    if let Some(code) = tail.get(2..6).and_then(|hex| {
+                        hex.bytes()
+                            .all(|b| b.is_ascii_hexdigit())
+                            .then(|| u32::from_str_radix(hex, 16).ok())
+                            .flatten()
+                    }) {
                         let code = if (0xff01..=0xff5e).contains(&code) {
                             code - 0xfee0
                         } else {
@@ -58,31 +64,25 @@ impl Transformation for UrlDecodeUni {
                         if let Some(decoded) = char::from_u32(code) {
                             result.push(decoded);
                             modified = true;
+                            offset += 6;
                             continue;
                         }
                     }
-                    result.push('%');
-                    result.push('u');
-                    result.push_str(&hex);
-                } else {
-                    // Standard URL encoding
-                    let mut hex = String::new();
-                    for _ in 0..2 {
-                        if let Some(h) = chars.next() {
-                            hex.push(h);
-                        }
-                    }
-                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                        result.push(byte as char);
-                        modified = true;
-                    } else {
-                        result.push('%');
-                        result.push_str(&hex);
-                    }
+                } else if let Some(byte) = tail.get(1..3).and_then(|hex| {
+                    hex.bytes()
+                        .all(|b| b.is_ascii_hexdigit())
+                        .then(|| u8::from_str_radix(hex, 16).ok())
+                        .flatten()
+                }) {
+                    result.push(byte as char);
+                    modified = true;
+                    offset += 3;
+                    continue;
                 }
-            } else {
-                result.push(c);
             }
+            let literal = tail.chars().next().expect("nonempty tail");
+            result.push(literal);
+            offset += literal.len_utf8();
         }
 
         if modified {
