@@ -148,3 +148,71 @@ SecRule ARGS "@contains alert" "id:13,phase:2,pass""#,
 fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
     ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }
+
+#[test]
+fn first_content_type_selects_form_processor_before_phase_one_even_when_empty() {
+    for (first, second, expected) in [
+        ("application/x-www-form-urlencoded", None, "URLENCODED"),
+        (
+            "\u{a0}Application/X-WWW-Form-Urlencoded; charset=UTF-8",
+            Some("multipart/form-data; boundary=x"),
+            "URLENCODED",
+        ),
+        (
+            "multipart/form-data; boundary=x",
+            Some("application/x-www-form-urlencoded"),
+            "MULTIPART",
+        ),
+        ("text/plain", Some("application/x-www-form-urlencoded"), ""),
+        ("application/json", None, ""),
+    ] {
+        let engine = load_with_request_body(&format!(
+            r#"SecRule REQBODY_PROCESSOR "@streq {expected}" "id:1,phase:1,pass"
+SecRule REQBODY_PROCESSOR "@streq {expected}" "id:2,phase:2,pass""#
+        ))
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+        tx.add_request_header("Content-Type", first).unwrap();
+        if let Some(second) = second {
+            tx.add_request_header("content-type", second).unwrap();
+        }
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.matched_rules(), ["1", "2"], "{first:?}");
+    }
+}
+
+#[test]
+fn explicit_phase_one_ctl_overrides_the_automatic_header_processor() {
+    let engine = load_with_request_body(r#"SecRule REQBODY_PROCESSOR "@streq URLENCODED" "id:1,phase:1,pass,ctl:requestBodyProcessor=JSON"
+SecRule REQBODY_PROCESSOR "@streq JSON" "id:2,phase:1,pass"
+SecRule REQBODY_PROCESSOR "@streq JSON" "id:3,phase:2,pass""#).unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+    tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "3"]);
+}
+
+#[test]
+fn opaque_content_type_suffix_does_not_hide_a_form_processor() {
+    let engine = load_with_request_body(
+        r#"SecRule REQBODY_PROCESSOR "@streq URLENCODED" "id:1,phase:1,pass"
+SecRule ARGS_POST:x "@streq attack" "id:2,phase:2,pass""#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+    tx.add_request_header_bytes(
+        b"Content-Type",
+        b"\xc2\xa0application/x-www-form-urlencoded\xff",
+    )
+    .unwrap();
+    tx.process_request_headers().unwrap();
+    tx.append_request_body(b"x=attack").unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2"]);
+}
