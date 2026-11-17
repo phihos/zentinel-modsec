@@ -25,6 +25,7 @@ path = "src/main.rs"
 # Pattern matching
 regex = "1.10"
 aho-corasick = "1.1"
+memchr = "2"
 
 # IP address matching
 ipnetwork = "0.21"

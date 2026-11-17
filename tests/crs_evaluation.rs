@@ -278,9 +278,9 @@ fn an_unimplemented_variable_is_classified_as_such() {
     assert!(VariableName::RequestLine.is_implemented());
     assert!(VariableName::RequestBasename.is_implemented());
     assert!(VariableName::ArgsCombinedSize.is_implemented());
-    // `XML:` resolves against the flattened XML body; see tests/xml_targets.rs.
+    // XML selectors read independent text/attribute collections.
     assert!(VariableName::Xml.is_implemented());
-    // Still unimplemented; a rule targeting only these is reported at load time.
+    assert!(VariableName::FilesCombinedSize.is_implemented());
+    // Still unimplemented; selecting this variable produces a load warning.
     assert!(!VariableName::UniqueId.is_implemented());
-    assert!(!VariableName::FilesCombinedSize.is_implemented());
 }

@@ -30,6 +30,9 @@ pub(crate) fn cached_bytes_regex(
 }
 
 fn named(prefix: &str, key: &[u8]) -> ByteValue {
+    if key.is_empty() {
+        return ByteValue::from(prefix);
+    }
     let mut name = prefix.as_bytes().to_vec();
     name.push(b':');
     name.extend_from_slice(key);
@@ -177,7 +180,24 @@ impl<'a> VariableResolver<'a> {
                 false,
             ),
             VariableName::Files => collection(&request.files, "FILES", false),
-            VariableName::FilesNames => collection(&request.files, "FILES_NAMES", true),
+            VariableName::FilesNames => collection(&request.files_names, "FILES_NAMES", false),
+            VariableName::FilesSizes => collection(&request.files_sizes, "FILES_SIZES", false),
+            VariableName::MultipartName => {
+                collection(&request.multipart_names, "MULTIPART_NAME", false)
+            }
+            VariableName::MultipartFilename => {
+                collection(&request.multipart_filenames, "MULTIPART_FILENAME", false)
+            }
+            VariableName::MultipartFilenameCharset => collection(
+                &request.multipart_filename_charsets,
+                "MULTIPART_FILENAME_CHARSET",
+                false,
+            ),
+            VariableName::MultipartFilenameLanguage => collection(
+                &request.multipart_filename_languages,
+                "MULTIPART_FILENAME_LANGUAGE",
+                false,
+            ),
             VariableName::Tx => collection(self.tx, "TX", false),
             VariableName::Xml => match XmlTarget::from_selection(selection.as_ref()) {
                 Some(XmlTarget::Elements) => collection_values(

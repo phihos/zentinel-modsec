@@ -358,8 +358,12 @@ impl Transaction {
             .headers
             .get_bytes(b"content-type")
             .and_then(|v| {
-                v.first()
-                    .and_then(|value| std::str::from_utf8(value).ok().map(str::to_owned))
+                v.first().and_then(|value| {
+                    // Only the media type controls processor selection. Opaque
+                    // boundary parameter bytes must not require UTF-8.
+                    let media = value.split(|&byte| byte == b';').next().unwrap_or_default();
+                    std::str::from_utf8(media).ok().map(str::to_owned)
+                })
             });
         let ct_lower = content_type
             .as_deref()
@@ -379,10 +383,7 @@ impl Transaction {
         if let Some(forced) = self.controls.request_body_processor() {
             match forced {
                 "MULTIPART" => {
-                    if !self
-                        .request
-                        .parse_multipart_body(content_type.as_deref().unwrap_or_default())
-                    {
+                    if !self.process_multipart_body() {
                         tracing::warn!(
                             "ctl:requestBodyProcessor=MULTIPART, but the body has no parseable \
                              boundary; body arguments were not extracted"
@@ -407,10 +408,7 @@ impl Transaction {
             // Multipart body processor: populates ARGS_POST, FILES and
             // MULTIPART_PART_HEADERS. Never fall back to the urlencoded
             // parser for multipart payloads — that would produce bogus ARGS.
-            if !self
-                .request
-                .parse_multipart_body(content_type.as_deref().unwrap_or_default())
-            {
+            if !self.process_multipart_body() {
                 tracing::warn!(
                     "multipart/form-data request without a parseable boundary; \
                      body arguments were not extracted"
@@ -437,6 +435,17 @@ impl Transaction {
 
         self.run_phase(Phase::RequestBody)?;
         Ok(())
+    }
+
+    /// Select the original Content-Type bytes for multipart boundary parsing.
+    fn process_multipart_body(&mut self) -> bool {
+        let content_type = self
+            .request
+            .headers
+            .get_bytes(b"content-type")
+            .and_then(|values| values.first().map(|value| value.to_vec()))
+            .unwrap_or_default();
+        self.request.parse_multipart_body_bytes(&content_type)
     }
 
     /// Run the XML body processor, recording any failure.

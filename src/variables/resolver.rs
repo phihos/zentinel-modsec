@@ -226,8 +226,60 @@ impl<'a> VariableResolver<'a> {
             ),
             VariableName::Files => self.resolve_collection(&self.request.files, "FILES", selection),
             VariableName::FilesNames => {
-                self.resolve_collection_names(&[&self.request.files], "FILES_NAMES", selection)
+                self.resolve_collection(&self.request.files_names, "FILES_NAMES", selection)
             }
+            VariableName::FilesSizes => {
+                self.resolve_collection(&self.request.files_sizes, "FILES_SIZES", selection)
+            }
+            VariableName::FilesCombinedSize => vec![(
+                "FILES_COMBINED_SIZE".into(),
+                self.request.files_combined_size.to_string(),
+            )],
+            VariableName::MultipartName => {
+                self.resolve_collection(&self.request.multipart_names, "MULTIPART_NAME", selection)
+            }
+            VariableName::MultipartFilename => self.resolve_collection(
+                &self.request.multipart_filenames,
+                "MULTIPART_FILENAME",
+                selection,
+            ),
+            VariableName::MultipartFilenameCharset => self.resolve_collection(
+                &self.request.multipart_filename_charsets,
+                "MULTIPART_FILENAME_CHARSET",
+                selection,
+            ),
+            VariableName::MultipartFilenameLanguage => self.resolve_collection(
+                &self.request.multipart_filename_languages,
+                "MULTIPART_FILENAME_LANGUAGE",
+                selection,
+            ),
+            VariableName::MultipartStrictCheck | VariableName::MultipartStrictError => vec![(
+                "MULTIPART_STRICT_ERROR".into(),
+                if self.request.multipart_strict_error {
+                    "1"
+                } else {
+                    ""
+                }
+                .into(),
+            )],
+            VariableName::MultipartDuplicatePartHeader => vec![(
+                "MULTIPART_DUPLICATE_PART_HEADER".into(),
+                if self.request.multipart_duplicate_part_header {
+                    "1"
+                } else {
+                    "0"
+                }
+                .into(),
+            )],
+            VariableName::MultipartInvalidQuoting => vec![(
+                "MULTIPART_INVALID_QUOTING".into(),
+                if self.request.multipart_invalid_quoting {
+                    "1"
+                } else {
+                    "0"
+                }
+                .into(),
+            )],
             VariableName::ReqBodyProcessor => vec![(
                 "REQBODY_PROCESSOR".to_string(),
                 self.request.body_processor.clone(),
@@ -378,7 +430,16 @@ impl<'a> VariableResolver<'a> {
                 if let Some(values) = collection.get(&lookup) {
                     values
                         .into_iter()
-                        .map(|v| (format!("{}:{}", prefix, key), v.to_string()))
+                        .map(|v| {
+                            (
+                                if key.is_empty() {
+                                    prefix.to_string()
+                                } else {
+                                    format!("{}:{}", prefix, key)
+                                },
+                                v.to_string(),
+                            )
+                        })
                         .collect()
                 } else {
                     vec![]
@@ -389,7 +450,16 @@ impl<'a> VariableResolver<'a> {
                     collection
                         .get_regex(&re)
                         .into_iter()
-                        .map(|(k, v)| (format!("{}:{}", prefix, k), v.to_string()))
+                        .map(|(k, v)| {
+                            (
+                                if k.is_empty() {
+                                    prefix.to_string()
+                                } else {
+                                    format!("{}:{}", prefix, k)
+                                },
+                                v.to_string(),
+                            )
+                        })
                         .collect()
                 } else {
                     vec![]
@@ -398,7 +468,16 @@ impl<'a> VariableResolver<'a> {
             None => collection
                 .all()
                 .into_iter()
-                .map(|(k, v)| (format!("{}:{}", prefix, k), v.to_string()))
+                .map(|(k, v)| {
+                    (
+                        if k.is_empty() {
+                            prefix.to_string()
+                        } else {
+                            format!("{}:{}", prefix, k)
+                        },
+                        v.to_string(),
+                    )
+                })
                 .collect(),
         }
     }
@@ -455,7 +534,14 @@ impl<'a> VariableResolver<'a> {
                     None => true,
                 };
                 if selected {
-                    result.push((format!("{}:{}", prefix, key), key.to_string()));
+                    result.push((
+                        if key.is_empty() {
+                            prefix.to_string()
+                        } else {
+                            format!("{}:{}", prefix, key)
+                        },
+                        key.to_string(),
+                    ));
                 }
             }
         }
