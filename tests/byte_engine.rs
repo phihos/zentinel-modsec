@@ -116,3 +116,23 @@ SecRule ARGS:x "@rx (ff|\xff)" "id:1,phase:2,pass,multiMatch,t:hexDecode,t:hexEn
     assert_eq!(tx.tx().get_bytes(b"count"), Some(vec![&b"3"[..]]));
     assert_eq!(tx.tx().get_bytes(b"1"), Some(vec![&b"ff"[..]]));
 }
+
+#[test]
+fn invalid_decoded_filename_bytes_observe_absolute_target_and_fragment_rules() {
+    let ms = ModSecurity::from_string(
+        r#"SecRuleEngine DetectionOnly
+SecRule REQUEST_FILENAME "@rx ^/\xff$" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    for uri in [
+        &b"/%FF"[..],
+        &b"http://example/%FF"[..],
+        &b"/%FF#ignore"[..],
+        &b"http://example/\xff#ignore"[..],
+    ] {
+        let mut tx = ms.new_transaction();
+        tx.process_uri_bytes(uri, b"GET", b"HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.matched_rules(), ["1"], "{uri:?}");
+    }
+}

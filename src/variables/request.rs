@@ -99,28 +99,20 @@ impl RequestData {
 
     /// Set a request target without replacing invalid UTF-8 or decoded bytes.
     pub fn set_uri_bytes(&mut self, uri: &[u8]) {
-        let presentation = ByteValue::from(uri);
-        self.set_uri(presentation.display_text());
+        match std::str::from_utf8(uri) {
+            Ok(text) => self.set_uri(text),
+            Err(_) => self.set_uri(ByteValue::from(uri).display_text()),
+        }
         let path_end = uri.iter().position(|&b| b == b'?').unwrap_or(uri.len());
         let raw_path = &uri[..path_end];
-        // The text helper defines absolute-form and malformed-path handling.
-        // For a valid textual request target, percent-decoding can still
-        // produce arbitrary bytes, which the text helper cannot expose.
-        let decoded = if raw_path.iter().enumerate().any(|(i, &b)| {
-            b == b'%'
-                && !raw_path
-                    .get(i + 1..i + 3)
-                    .is_some_and(|pair| pair.iter().all(u8::is_ascii_hexdigit))
-        }) {
-            raw_path.to_vec()
-        } else {
-            percent_encoding::percent_decode(raw_path).collect::<Vec<u8>>()
-        };
-        if std::str::from_utf8(&decoded).is_err() {
-            self.binary_path = Some(ByteValue::from(decoded));
+        if raw_path.contains(&b'%') || std::str::from_utf8(raw_path).is_err() {
+            let decoded = decoded_request_path_bytes(raw_path);
+            if std::str::from_utf8(&decoded).is_err() {
+                self.binary_path = Some(ByteValue::from(decoded));
+            }
         }
         if std::str::from_utf8(uri).is_err() {
-            self.binary_uri = Some(presentation);
+            self.binary_uri = Some(ByteValue::from(uri));
             self.args_get.clear();
             if path_end < uri.len() {
                 let query = &uri[path_end + 1..];
@@ -441,38 +433,40 @@ impl RequestData {
 /// Decode only the path component. Query delimiters are split by the caller
 /// before decoding, and a literal plus in a path is never form-decoded.
 fn decoded_request_path(input: &str) -> String {
-    let without_fragment = input.split('#').next().unwrap_or(input);
-    let path = if let Some((scheme, rest)) = without_fragment.split_once("://") {
+    String::from_utf8(decoded_request_path_bytes(input.as_bytes()))
+        .unwrap_or_else(|_| input.to_string())
+}
+
+fn decoded_request_path_bytes(input: &[u8]) -> Vec<u8> {
+    let without_fragment = input.split(|&b| b == b'#').next().unwrap_or(input);
+    let path = if let Some(scheme_end) = without_fragment.windows(3).position(|part| part == b"://")
+    {
+        let scheme = &without_fragment[..scheme_end];
+        let rest = &without_fragment[scheme_end + 3..];
         if !scheme.is_empty()
-            && scheme.bytes().enumerate().all(|(i, b)| {
-                b.is_ascii_alphabetic() || i > 0 && (b.is_ascii_digit() || b"+-.".contains(&b))
+            && scheme.iter().enumerate().all(|(i, b)| {
+                b.is_ascii_alphabetic() || i > 0 && (b.is_ascii_digit() || b"+-.".contains(b))
             })
         {
-            rest.find('/').map_or("", |offset| &rest[offset..])
+            rest.iter()
+                .position(|&b| b == b'/')
+                .map_or(&b""[..], |offset| &rest[offset..])
         } else {
             without_fragment
         }
     } else {
         without_fragment
     };
-    let bytes = path.as_bytes();
-    for (index, byte) in bytes.iter().enumerate() {
-        if *byte == b'%'
-            && !bytes
-                .get(index + 1..index + 3)
-                .is_some_and(|pair| pair.iter().all(|byte| byte.is_ascii_hexdigit()))
+    for (i, &byte) in path.iter().enumerate() {
+        if byte == b'%'
+            && !path
+                .get(i + 1..i + 3)
+                .is_some_and(|pair| pair.iter().all(u8::is_ascii_hexdigit))
         {
-            // Match the reference parser's whole-path fallback on malformed
-            // escapes, rather than partially decoding an invalid path.
-            return input.to_string();
+            return input.to_vec();
         }
     }
-    percent_encoding::percent_decode_str(path)
-        .decode_utf8()
-        .map(|decoded| decoded.into_owned())
-        // Preserve the source at the current string API boundary instead of
-        // replacing an invalid decoded byte with a replacement character.
-        .unwrap_or_else(|_| input.to_string())
+    percent_encoding::percent_decode(path).collect()
 }
 
 fn trim_ascii(mut value: &[u8]) -> &[u8] {
