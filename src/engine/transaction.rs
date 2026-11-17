@@ -278,6 +278,12 @@ impl Transaction {
     pub fn process_request_body(&mut self) -> Result<()> {
         self.phase = Phase::RequestBody;
 
+        // Coraza does not select a fallback processor for an empty body.
+        if self.request.body.is_empty() {
+            self.run_phase(Phase::RequestBody)?;
+            return Ok(());
+        }
+
         let content_type = self
             .request
             .headers
@@ -317,6 +323,7 @@ impl Transaction {
                 }
                 "JSON" => self.process_json_body(),
                 "XML" => self.process_xml_body(),
+                "RAW" => self.request.body_processor = "RAW".to_string(),
                 // CtlDirective::parse admits no other value.
                 other => debug_assert!(false, "unsupported forced body processor: {other}"),
             }
@@ -346,11 +353,14 @@ impl Transaction {
             // to inspect. An injection payload was blocked in a form body and
             // passed unexamined in a JSON body.
             self.process_json_body();
-        } else {
+        } else if ct_lower.starts_with("application/x-www-form-urlencoded")
+            || self.controls.force_request_body_variable()
+        {
+            // Pinned Coraza selects URLENCODED for forceRequestBodyVariable
+            // when no other processor exists. It exposes the acquired body and
+            // extracts form arguments; explicit RAW deliberately does not.
             self.request.parse_form_body();
-            if ct_lower.starts_with("application/x-www-form-urlencoded") {
-                self.request.body_processor = "URLENCODED".to_string();
-            }
+            self.request.body_processor = "URLENCODED".to_string();
         }
 
         self.run_phase(Phase::RequestBody)?;
