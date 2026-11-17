@@ -1,5 +1,6 @@
 //! Transaction engine for ModSecurity rule processing.
 
+pub mod body;
 pub mod chain;
 pub mod control;
 mod diagnostics;
@@ -9,6 +10,7 @@ pub mod ruleset;
 pub mod scoring;
 pub mod transaction;
 
+pub use body::{BodyConfig, BodyLimitAction, BodyWriteResult};
 pub use control::{CtlDirective, TransactionControls};
 pub use intervention::Intervention;
 pub use ruleset::{CompiledRuleset, Rules};

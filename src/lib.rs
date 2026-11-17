@@ -56,7 +56,9 @@ pub mod variables;
 
 // Re-export main types at crate root
 pub use engine::ruleset::{CompiledRuleset, Rules};
-pub use engine::{Intervention, ModSecurity, Transaction};
+pub use engine::{
+    BodyConfig, BodyLimitAction, BodyWriteResult, Intervention, ModSecurity, Transaction,
+};
 pub use error::{Error, Result};
 
 /// Protocol version for compatibility tracking
