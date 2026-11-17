@@ -981,7 +981,8 @@ impl Transaction {
     /// Expand `%{...}` macros in an operator argument against current TX state.
     ///
     /// Resolved: the `TX` collection (thresholds, `tx.allowed_methods`),
-    /// `REQUEST_HEADERS.<name>` and `MATCHED_VAR`/`MATCHED_VAR_NAME`. Anything
+    /// `ARGS`/`ARGS_GET`/`ARGS_POST`, `REQUEST_HEADERS.<name>` and
+    /// `MATCHED_VAR`/`MATCHED_VAR_NAME`. Anything
     /// else expands to an empty string.
     fn expand_operator_macros(&self, arg: &str) -> String {
         // Compiled once: this runs on every evaluation of an operator whose
@@ -1020,6 +1021,20 @@ impl Transaction {
                         .get(name)
                         .and_then(|v| v.first().map(|s| s.to_string()))
                         .unwrap_or_default(),
+                    "args" | "args_get" | "args_post" => {
+                        let get = || self.request.args_get.get(name);
+                        let post = || self.request.args_post.get(name);
+                        let values = match collection.as_str() {
+                            "args_get" => get(),
+                            "args_post" => post(),
+                            _ => get().or_else(post),
+                        };
+                        values
+                            .and_then(|values| values.first().map(|value| (*value).to_string()))
+                            // The reference preserves a known collection's
+                            // token text when its key is absent.
+                            .unwrap_or_else(|| inner.to_string())
+                    }
                     // CRS 943110: `!@endsWith %{request_headers.host}`.
                     "request_headers" => self
                         .request
