@@ -61,6 +61,13 @@ pub enum CtlDirective {
         /// Target to drop from that rule, e.g. `ARGS:token`.
         target: String,
     },
+    /// `ctl:ruleRemoveTargetByTag=TAG;TARGET` (exact, case-sensitive tag).
+    RuleRemoveTargetByTag {
+        /// Rule tag to select.
+        tag: String,
+        /// Target to drop from the selected rules.
+        target: String,
+    },
     /// `ctl:requestBodyAccess=On|Off`
     RequestBodyAccess(bool),
     /// `ctl:requestBodyProcessor=URLENCODED|MULTIPART|JSON|XML`
@@ -126,6 +133,51 @@ impl CtlDirective {
                     "ruleRemoveTargetById expects ID;TARGET, for example 942100;ARGS:token",
                 ),
             },
+
+            "ruleremovetargetbytag" => {
+                let Some((tag, target)) = value.split_once(';') else {
+                    return Self::unsupported(
+                        directive,
+                        value,
+                        "ruleRemoveTargetByTag expects TAG;TARGET",
+                    );
+                };
+                let (tag, target) = (tag.trim(), target.trim());
+                if tag.is_empty() || target.is_empty() || target.contains('|') {
+                    return Self::unsupported(
+                        directive,
+                        value,
+                        "ruleRemoveTargetByTag expects a nonempty tag and one target",
+                    );
+                }
+                let Ok(spec) = crate::parser::parse_single_variable(target) else {
+                    return Self::unsupported(
+                        directive,
+                        value,
+                        "ruleRemoveTargetByTag target is not a supported variable",
+                    );
+                };
+                if spec.count_mode {
+                    return Self::unsupported(
+                        directive,
+                        value,
+                        "ruleRemoveTargetByTag target cannot use count mode",
+                    );
+                }
+                if let Some(Selection::Regex(pattern)) = &spec.selection {
+                    if regex::Regex::new(pattern).is_err() {
+                        return Self::unsupported(
+                            directive,
+                            value,
+                            "ruleRemoveTargetByTag target has an invalid regex",
+                        );
+                    }
+                }
+                CtlDirective::RuleRemoveTargetByTag {
+                    tag: tag.to_string(),
+                    target: target.to_string(),
+                }
+            }
 
             "requestbodyaccess" => match value.to_ascii_lowercase().as_str() {
                 "on" => CtlDirective::RequestBodyAccess(true),
@@ -211,6 +263,8 @@ pub struct TransactionControls {
     /// resolved value: a rule over a large collection would otherwise re-parse
     /// the same string thousands of times.
     removed_targets: Vec<(String, VariableSpec)>,
+    /// Parsed tag targets and, for regex keys, the compiled key matcher.
+    removed_tag_targets: Vec<(String, VariableSpec, Option<regex::Regex>)>,
     request_body_access: Option<bool>,
     request_body_processor: Option<String>,
     /// Unsupported directives already reported, so a rule that fires on every
@@ -244,6 +298,26 @@ impl TransactionControls {
                             );
                         }
                     }
+                }
+            }
+            CtlDirective::RuleRemoveTargetByTag { tag, target } => {
+                // Normal loading validates these in CtlDirective::parse.
+                // Direct callers receive a visible warning for malformed input.
+                match crate::parser::parse_single_variable(&target) {
+                    Ok(spec) if !spec.count_mode => {
+                        let regex = match &spec.selection {
+                            Some(Selection::Regex(pattern)) => match regex::Regex::new(pattern) {
+                                Ok(regex) => Some(regex),
+                                Err(error) => {
+                                    tracing::warn!(%tag, %target, %error, "invalid ctl:ruleRemoveTargetByTag target");
+                                    return;
+                                }
+                            },
+                            _ => None,
+                        };
+                        self.removed_tag_targets.push((tag, spec, regex));
+                    }
+                    _ => tracing::warn!(%tag, %target, "invalid ctl:ruleRemoveTargetByTag target"),
                 }
             }
             CtlDirective::RequestBodyAccess(on) => self.request_body_access = Some(on),
@@ -326,6 +400,35 @@ impl TransactionControls {
         self.removed_targets
             .iter()
             .any(|(r, target)| r == id && target_matches_resolved(var, target, resolved_name))
+    }
+
+    /// Whether a tag exclusion selects this rule (or its chain starter).
+    pub fn has_tag_target_removals(&self, actions: &[crate::parser::Action]) -> bool {
+        self.removed_tag_targets
+            .iter()
+            .any(|(tag, _, _)| super::ruleset::has_tag(actions, tag))
+    }
+
+    /// Whether a value is excluded by an exact matching rule tag.
+    pub fn is_tag_target_removed(
+        &self,
+        actions: &[crate::parser::Action],
+        var: &VariableSpec,
+        resolved_name: &str,
+    ) -> bool {
+        self.removed_tag_targets.iter().any(|(tag, target, regex)| {
+            if !super::ruleset::has_tag(actions, tag) {
+                return false;
+            }
+            if let Some(regex) = regex {
+                var.name == target.name
+                    && resolved_name
+                        .split_once(':')
+                        .is_some_and(|(_, key)| regex.is_match(key))
+            } else {
+                target_matches_resolved(var, target, resolved_name)
+            }
+        })
     }
 
     /// Whether the request body should be parsed at all.
