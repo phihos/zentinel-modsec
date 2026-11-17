@@ -122,3 +122,21 @@ SecRule &REQUEST_HEADERS:Content-Type "@eq 0" "t:none"
             .any(|id| id == "920640")
     );
 }
+
+#[test]
+fn explicitly_selected_processor_is_visible_before_empty_body_processing() {
+    let engine = zentinel_modsec::ModSecurity::from_string(
+        r#"SecRuleEngine DetectionOnly
+SecAction "id:10,phase:1,pass,ctl:requestBodyProcessor=JSON"
+SecRule REQBODY_PROCESSOR "@streq JSON" "id:11,phase:1,pass"
+SecRule REQBODY_PROCESSOR "@streq JSON" "id:12,phase:2,pass,skip:1"
+SecRule ARGS "@contains alert" "id:13,phase:2,pass""#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/?testarg=alert", "POST", "HTTP/1.1").unwrap();
+    tx.add_request_header("Content-Type", "application/json").unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["10", "11", "12"]);
+}
