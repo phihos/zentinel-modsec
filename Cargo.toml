@@ -110,3 +110,7 @@ harness = false
 name = "libmodsec_compare"
 harness = false
 required-features = ["libmodsec-compare"]
+
+[[example]]
+name = "libinjection_cost"
+required-features = ["libinjection-ffi"]

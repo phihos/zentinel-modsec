@@ -35,6 +35,34 @@ It is the engine behind Zentinel's
 [ModSecurity agent](https://github.com/zentinelproxy/zentinel-agent-modsec) is
 a different thing: it wraps the C++ libmodsecurity.
 
+### Optional upstream libinjection
+
+Enable `libinjection-ffi` to use upstream C libinjection v4.0.2 for
+`@detectSQLi`, `@detectXSS`, and the root `libinjection` API:
+
+```sh
+cargo build --features libinjection-ffi
+```
+
+This feature requires a C compiler, compiles the vendored BSD-3-Clause source
+locally, and adds no Go runtime or dynamic library dependency. The default
+remains pure Rust. The original Rust heuristic backend is also always available
+explicitly through `libinjection::sqli` and `libinjection::xss`; its detection
+semantics differ from upstream. Native parser errors are logged and reported
+as matches rather than silently allowing the input. Source provenance and the
+third-party license are in [vendor/libinjection](vendor/libinjection/README.md).
+
+To compare per-call cost, run
+`cargo run --release --features libinjection-ffi --example libinjection_cost`.
+The example reports raw FFI, the public API including result conversion, and
+the original Rust backend. A standalone native C control is provided in
+`examples/libinjection_native_cost.c`; compile with `cc -O3 -Ivendor/libinjection
+examples/libinjection_native_cost.c vendor/libinjection/libinjection_sqli.c
+vendor/libinjection/libinjection_xss.c vendor/libinjection/libinjection_html5.c
+-o /tmp/libinjection-native-cost`. Alternate repeated runs on a quiet host:
+subtracting raw FFI and native C timings estimates crossing overhead but is
+sensitive to scheduling and clock noise.
+
 ## Quick start
 
 ```toml
