@@ -49,8 +49,8 @@ impl Collection for TxCollection {
         self.data.get(&normalize(key))
     }
 
-    /// Regex selection (`TX:/^foo/`) matches against the stored, lowercased
-    /// key, so a pattern anchored on uppercase will not match.
+    /// Match a selector compiled by the resolver with TX's case-insensitive
+    /// default; explicit inline flags in the regex may override that default.
     fn get_regex(&self, pattern: &Regex) -> Vec<(&str, &str)> {
         self.data.get_regex(pattern)
     }
