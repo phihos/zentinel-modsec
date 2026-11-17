@@ -19,6 +19,18 @@ pub trait Transformation: Send + Sync {
     /// Apply the transformation.
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str>;
 
+    /// Apply to original bytes. Custom text-only transforms must override this
+    /// method to support invalid UTF-8; unsupported binary input is an error.
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        let text = std::str::from_utf8(input).map_err(|_| Error::UnsupportedBinaryInput {
+            component: format!("t:{}", self.name()),
+        })?;
+        Ok(match self.transform(text) {
+            Cow::Borrowed(value) => Cow::Borrowed(value.as_bytes()),
+            Cow::Owned(value) => Cow::Owned(value.into_bytes()),
+        })
+    }
+
     /// Get the transformation name.
     fn name(&self) -> &'static str;
 }

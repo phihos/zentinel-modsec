@@ -66,6 +66,21 @@ impl TransformationPipeline {
         current
     }
 
+    /// Apply each transformation without converting binary values into text.
+    pub fn apply_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        let mut current = Cow::Borrowed(input);
+        for transformation in &self.transformations {
+            current = match current {
+                Cow::Borrowed(value) => transformation.transform_bytes(value)?,
+                Cow::Owned(value) => match transformation.transform_bytes(&value)? {
+                    Cow::Borrowed(_) => Cow::Owned(value),
+                    Cow::Owned(next) => Cow::Owned(next),
+                },
+            };
+        }
+        Ok(current)
+    }
+
     /// Check if the pipeline is empty.
     pub fn is_empty(&self) -> bool {
         self.transformations.is_empty()
