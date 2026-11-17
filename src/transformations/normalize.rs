@@ -251,15 +251,9 @@ pub struct NormalizePathWin;
 
 impl Transformation for NormalizePathWin {
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // Same as NormalizePath but preserves backslashes
-        let np = NormalizePath;
-        let result = np.transform(input);
-        // Convert back to backslashes
-        if result.contains('/') {
-            Cow::Owned(result.replace('/', "\\"))
-        } else {
-            result
-        }
+        // Windows separators must become forward slashes before resolving
+        // components. CRS LFI phrase files and regexes use forward slashes.
+        NormalizePath.transform(input)
     }
 
     fn name(&self) -> &'static str {
@@ -630,6 +624,20 @@ mod tests {
         assert_eq!(t.transform("/a/b/../c"), "/a/c");
         assert_eq!(t.transform("/a//b/./c"), "/a/b/c");
         assert_eq!(t.transform("a\\b\\c"), "a/b/c");
+    }
+
+    #[test]
+    fn normalize_path_win_uses_forward_slashes_for_crs_lfi_targets() {
+        let t = NormalizePathWin;
+        for (input, expected) in [
+            ("/.git/config", "/.git/config"),
+            ("/sys/class/net", "/sys/class/net"),
+            ("/etc/subuid", "/etc/subuid"),
+            (r"C:\temp\..\Windows\win.ini", "C:/Windows/win.ini"),
+            (r"a\b/c", "a/b/c"),
+        ] {
+            assert_eq!(t.transform(input), expected, "input: {input}");
+        }
     }
 
     #[test]
