@@ -94,8 +94,15 @@ fn excluded(key: &[u8], exclusion: &str) -> bool {
                 return false;
             }
             if selection.starts_with('/') && selection.ends_with('/') && selection.len() >= 2 {
-                cached_bytes_regex(&selection[1..selection.len() - 1], VariableName::Args)
-                    .is_some_and(|re| re.is_match(member))
+                cached_bytes_regex(
+                    &selection[1..selection.len() - 1],
+                    if collection.eq_ignore_ascii_case(b"TX") {
+                        VariableName::Tx
+                    } else {
+                        VariableName::Args
+                    },
+                )
+                .is_some_and(|re| re.is_match(member))
             } else {
                 member.eq_ignore_ascii_case(selection.as_bytes())
             }
