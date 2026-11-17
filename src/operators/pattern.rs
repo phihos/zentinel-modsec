@@ -34,7 +34,7 @@ impl RegexCache {
         }
         entries.retain(|_, regex| regex.strong_count() > 0);
         let regex = Arc::new(
-            RegexBuilder::new(pattern)
+            RegexBuilder::new(&normalize_binary_braced_escapes(pattern, binary))
                 .unicode(!binary)
                 .dot_matches_new_line(!binary)
                 .multi_line(!binary)
@@ -84,6 +84,58 @@ fn matches_arbitrary_bytes(pattern: &str) -> bool {
         i += 1;
     }
     std::str::from_utf8(&decoded).is_err()
+}
+
+/// Rust's byte grammar accepts `\\xFF`, but rejects the Unicode-escape
+/// spelling `\\x{FF}` with Unicode mode disabled. Coraza's binary grammar
+/// accepts both for byte values. Normalize only unescaped braced byte escapes;
+/// backslash pairs and class/range punctuation retain their original meaning.
+fn normalize_binary_braced_escapes(pattern: &str, binary: bool) -> std::borrow::Cow<'_, str> {
+    if !binary {
+        return std::borrow::Cow::Borrowed(pattern);
+    }
+    let input = pattern.as_bytes();
+    let mut out = Vec::with_capacity(input.len());
+    let mut i = 0;
+    let mut changed = false;
+    while i < input.len() {
+        if input[i] == b'\\' && i + 1 < input.len() {
+            if input[i + 1] == b'\\' {
+                out.extend_from_slice(&input[i..i + 2]);
+                i += 2;
+                continue;
+            }
+            if input[i + 1] == b'x' && input.get(i + 2) == Some(&b'{') {
+                if let Some(close) = input[i + 3..].iter().position(|&b| b == b'}') {
+                    let end = i + 3 + close;
+                    if let Ok(hex) = std::str::from_utf8(&input[i + 3..end]) {
+                        if let Ok(value) = u8::from_str_radix(hex, 16) {
+                            const HEX: &[u8; 16] = b"0123456789abcdef";
+                            out.extend_from_slice(&[
+                                b'\\',
+                                b'x',
+                                HEX[usize::from(value >> 4)],
+                                HEX[usize::from(value & 15)],
+                            ]);
+                            i = end + 1;
+                            changed = true;
+                            continue;
+                        }
+                    }
+                }
+            }
+            out.extend_from_slice(&input[i..i + 2]);
+            i += 2;
+            continue;
+        }
+        out.push(input[i]);
+        i += 1;
+    }
+    if changed {
+        std::borrow::Cow::Owned(String::from_utf8(out).expect("only ASCII escapes were replaced"))
+    } else {
+        std::borrow::Cow::Borrowed(pattern)
+    }
 }
 
 /// Regex operator (@rx) with process-wide compilation sharing.
