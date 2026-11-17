@@ -59,6 +59,50 @@ pub(crate) fn url_decode(input: &[u8], unicode: bool, plus: bool) -> Vec<u8> {
     out
 }
 
+fn base64_decode(input: &[u8], forgiving: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity(input.len() / 4 * 3);
+    let mut count = 0;
+    let mut bits = 0u32;
+    for &byte in input {
+        if byte == b'=' {
+            break;
+        }
+        if matches!(byte, b'\r' | b'\n') {
+            continue;
+        }
+        let decoded = match byte {
+            b'A'..=b'Z' => Some(byte - b'A'),
+            b'a'..=b'z' => Some(byte - b'a' + 26),
+            b'0'..=b'9' => Some(byte - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            b'-' if forgiving => Some(62),
+            b'_' if forgiving => Some(63),
+            _ => None,
+        };
+        let Some(decoded) = decoded else {
+            if forgiving {
+                continue;
+            } else {
+                break;
+            }
+        };
+        bits = (bits << 6) | u32::from(decoded);
+        count += 1;
+        if count == 4 {
+            out.extend_from_slice(&[(bits >> 16) as u8, (bits >> 8) as u8, bits as u8]);
+            bits = 0;
+            count = 0;
+        }
+    }
+    match count {
+        2 => out.push((bits >> 4) as u8),
+        3 => out.extend_from_slice(&[(bits >> 10) as u8, (bits >> 2) as u8]),
+        _ => {}
+    }
+    out
+}
+
 fn escape_decode(input: &[u8], css: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(input.len());
     let mut i = 0;
@@ -138,17 +182,8 @@ pub(super) fn apply<'a>(
             Ok(value) => value,
             Err(_) => return Ok(Cow::Borrowed(input)),
         },
-        "base64decode" => match base64::engine::general_purpose::STANDARD.decode(input) {
-            Ok(value) => value,
-            Err(_) => return Ok(Cow::Borrowed(input)),
-        },
-        "base64decodeext" => match base64::engine::general_purpose::URL_SAFE
-            .decode(input)
-            .or_else(|_| base64::engine::general_purpose::STANDARD.decode(input))
-        {
-            Ok(value) => value,
-            Err(_) => return Ok(Cow::Borrowed(input)),
-        },
+        "base64decode" => base64_decode(input, false),
+        "base64decodeext" => base64_decode(input, true),
         "base64encode" => base64::engine::general_purpose::STANDARD
             .encode(input)
             .into_bytes(),
