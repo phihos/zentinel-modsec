@@ -144,7 +144,7 @@ impl HashMapCollection {
             Entry::Vacant(entry) => {
                 entry.insert(CollectionValues {
                     values: vec![value],
-                    original_names: differs.then_some(vec![original_name]),
+                    original_names: differs.then(|| vec![original_name]),
                 });
             }
             Entry::Occupied(mut entry) => {
