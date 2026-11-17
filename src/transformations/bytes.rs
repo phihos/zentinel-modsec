@@ -40,7 +40,7 @@ pub(crate) fn url_decode(input: &[u8], unicode: bool, plus: bool) -> Vec<u8> {
         if input[i] == b'%' {
             if unicode && i + 5 < input.len() && matches!(input[i + 1], b'u' | b'U') {
                 if let Some(code) = hex(&input[i + 2..i + 6]) {
-                    out.push(width(code));
+                    out.push(super::unicode_bestfit::ascii(code).unwrap_or_else(|| width(code)));
                     i += 6;
                     continue;
                 }
