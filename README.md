@@ -247,10 +247,22 @@ it match. These operators produce load-time warnings with rule IDs.
 The three parity transformations are placeholders and warn with affected IDs.
 
 **Body processors:** URL-encoded forms, multipart (including
-`MULTIPART_PART_HEADERS`), JSON and XML. XML is read with `quick-xml`, which
-does not expand entities. XPath is not supported: `XML:/*` and `XML://@*`
-(every `XML:` target in stock CRS) resolve against the flattened body, and
-richer XPath expressions are reported when the rules load.
+`MULTIPART_PART_HEADERS`), JSON, XML and explicit RAW. Missing or unknown body
+types remain unprocessed unless `ctl:forceRequestBodyVariable=On` selects the
+URLENCODED fallback used by Coraza 3.8.1. RAW exposes the body without form
+argument extraction. Only RAW and URLENCODED populate `REQUEST_BODY` and its
+length; structured processors leave these scalar values empty and zero.
+
+XML values are stored separately from HTTP arguments. `XML:/*` selects text
+tokens and `XML://@*` selects attribute values, including namespace values.
+Element and attribute names do not become argument names. Streaming extraction
+handles empty elements, text split around entities, CDATA and truncated input
+without discarding text already inspected. The predefined XML and reference
+HTML4 entities are decoded, without using DTD definitions or resolving external
+resources. Suppressed custom entities remain literal and set `REQBODY_ERROR`;
+this deliberately retains stronger hidden-content reporting than Coraza's
+permissive parser. Bounds on depth and extracted values also report errors.
+General XPath is unsupported and produces load-time warnings with rule IDs.
 
 Unsupported variables, including `UNIQUE_ID` and `FILES_COMBINED_SIZE`, are
 reported at load even when a rule also selects implemented variables. Invalid
