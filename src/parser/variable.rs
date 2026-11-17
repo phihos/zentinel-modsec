@@ -203,6 +203,16 @@ pub enum VariableName {
     MultipartUnmatchedBoundary,
     /// `MULTIPART_PART_HEADERS`
     MultipartPartHeaders,
+    /// Multipart part names, keyed by part name.
+    MultipartName,
+    /// Primary and alternative multipart filenames.
+    MultipartFilename,
+    /// Extended filename charset.
+    MultipartFilenameCharset,
+    /// Extended filename language.
+    MultipartFilenameLanguage,
+    /// Duplicate header or conflicting parameter flag.
+    MultipartDuplicatePartHeader,
 
     // XML
     /// `XML`
@@ -323,6 +333,16 @@ impl VariableName {
             | VariableName::MatchedVarsNames
             | VariableName::Files
             | VariableName::FilesNames
+            | VariableName::FilesSizes
+            | VariableName::FilesCombinedSize
+            | VariableName::MultipartStrictCheck
+            | VariableName::MultipartStrictError
+            | VariableName::MultipartInvalidQuoting
+            | VariableName::MultipartName
+            | VariableName::MultipartFilename
+            | VariableName::MultipartFilenameCharset
+            | VariableName::MultipartFilenameLanguage
+            | VariableName::MultipartDuplicatePartHeader
             | VariableName::MultipartPartHeaders
             | VariableName::ReqBodyProcessor
             | VariableName::ReqBodyError
@@ -350,9 +370,7 @@ impl VariableName {
             | VariableName::TimeWday
             | VariableName::TimeMon
             | VariableName::TimeYear
-            | VariableName::FilesSizes
             | VariableName::FilesTmpnames
-            | VariableName::FilesCombinedSize
             | VariableName::UniqueId
             | VariableName::InboundAnomalyScore
             | VariableName::OutboundAnomalyScore
@@ -365,18 +383,15 @@ impl VariableName {
             | VariableName::MultipartHeaderFolding
             | VariableName::MultipartInvalidHeaderFolding
             | VariableName::MultipartInvalidPart
-            | VariableName::MultipartInvalidQuoting
             | VariableName::MultipartLfLine
             | VariableName::MultipartMissingSemicolon
-            | VariableName::MultipartStrictError
             | VariableName::MultipartUnmatchedBoundary
             | VariableName::WebserverErrorLog
             | VariableName::HighestSeverity
             | VariableName::StatusLine
             | VariableName::FullRequest
             | VariableName::FullRequestLength
-            | VariableName::AuthType
-            | VariableName::MultipartStrictCheck => false,
+            | VariableName::AuthType => false,
         }
     }
 }
@@ -459,6 +474,12 @@ static VARIABLE_MAP: phf::Map<&'static str, VariableName> = phf_map! {
     "REQBODY_PROCESSOR_ERROR_MSG" => VariableName::ReqBodyProcessorErrorMsg,
     "MULTIPART_STRICT_ERROR" => VariableName::MultipartStrictCheck,
     "MULTIPART_PART_HEADERS" => VariableName::MultipartPartHeaders,
+    "MULTIPART_NAME" => VariableName::MultipartName,
+    "MULTIPART_FILENAME" => VariableName::MultipartFilename,
+    "MULTIPART_FILENAME_CHARSET" => VariableName::MultipartFilenameCharset,
+    "MULTIPART_FILENAME_LANGUAGE" => VariableName::MultipartFilenameLanguage,
+    "MULTIPART_DUPLICATE_PART_HEADER" => VariableName::MultipartDuplicatePartHeader,
+    "MULTIPART_INVALID_QUOTING" => VariableName::MultipartInvalidQuoting,
 };
 
 impl VariableName {
@@ -513,6 +534,10 @@ impl VariableName {
                 | Self::FilesTmpnames
                 | Self::FilesNames
                 | Self::MultipartPartHeaders
+                | Self::MultipartName
+                | Self::MultipartFilename
+                | Self::MultipartFilenameCharset
+                | Self::MultipartFilenameLanguage
         )
     }
 }
