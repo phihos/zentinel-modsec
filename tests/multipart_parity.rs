@@ -328,3 +328,94 @@ fn base64_transfer_encoding_remains_raw_as_in_the_reference() {
         Some(vec![b"YXR0YWNr".as_slice()])
     );
 }
+
+#[test]
+fn extended_and_continued_part_names_match_the_reference() {
+    for disposition in [
+        br#"form-data; name="plain"; name*=utf-8''evil%3Bfield; filename="x""#.as_slice(),
+        br#"form-data; name*0="evil;"; name*1="field"; filename="x""#.as_slice(),
+    ] {
+        let request = parsed(&body(disposition, b"abc"));
+        assert_eq!(
+            request.files_names.get_bytes(b""),
+            Some(vec![b"evil;field".as_slice()])
+        );
+    }
+}
+
+#[test]
+fn filename_continuations_preserve_the_plain_and_resolved_readings() {
+    let input = body(br#"form-data; name="f"; filename="plain.txt"; filename*0*=utf-8''evil%3B; filename*1*=.txt"#, b"abc");
+    let request = parsed(&input);
+    assert_eq!(
+        request.files.get_bytes(b""),
+        Some(vec![b"plain.txt".as_slice(), b"evil;.txt".as_slice()])
+    );
+    assert!(request.multipart_strict_error);
+    let tx = run(
+        r#"SecRule FILES "@contains ;" "id:920120,phase:2,pass""#,
+        &input,
+    );
+    assert_eq!(tx.matched_rules(), ["920120"]);
+}
+
+#[test]
+fn continuation_only_filenames_reassemble_raw_bytes_without_transcoding() {
+    let request = parsed(&body(
+        br#"form-data; name="f"; filename*0*=utf-8''x%FF; filename*1*=.txt"#,
+        b"abc",
+    ));
+    assert_eq!(
+        request.files.get_bytes(b""),
+        Some(vec![b"x\xff.txt".as_slice()])
+    );
+    assert!(request.multipart_strict_error);
+    assert_eq!(request.files_combined_size, 3);
+}
+
+#[test]
+fn an_extended_boundary_parameter_selects_the_actual_delimiter() {
+    let mut request = RequestData::new();
+    request.append_body(&body(br#"form-data; name="f""#, b"attack"));
+    assert!(request.parse_multipart_body("multipart/form-data; boundary*=utf-8''B"));
+    assert_eq!(
+        request.args_post.get_bytes(b"f"),
+        Some(vec![b"attack".as_slice()])
+    );
+    assert!(!request.multipart_strict_error);
+}
+
+#[test]
+fn unsupported_extended_name_charsets_keep_the_plain_parameter() {
+    let request = parsed(&body(
+        br#"form-data; name="plain"; name*=iso-8859-1''evil%3Bfield; filename="x""#,
+        b"abc",
+    ));
+    assert_eq!(
+        request.files_names.get_bytes(b""),
+        Some(vec![b"plain".as_slice()])
+    );
+}
+
+#[test]
+fn invalid_continuation_pieces_do_not_hide_later_parameter_content() {
+    for (disposition, expected) in [
+        (
+            br#"form-data; name="plain"; name*0*=iso-8859-1''evil; name*1=";field"; filename="x""#.as_slice(),
+            b";field".as_slice(),
+        ),
+        (
+            br#"form-data; name="plain"; name*0*=utf-8''evil; name*1*=%GG; name*2=";field"; filename="x""#.as_slice(),
+            b"evil;field".as_slice(),
+        ),
+    ] {
+        let input = body(disposition, b"abc");
+        let request = parsed(&input);
+        assert_eq!(request.files_names.get_bytes(b""), Some(vec![expected]));
+        assert!(!request.multipart_strict_error);
+        assert_eq!(
+            run(r#"SecRule FILES_NAMES "@contains ;" "id:920120,phase:2,pass""#, &input).matched_rules(),
+            ["920120"]
+        );
+    }
+}

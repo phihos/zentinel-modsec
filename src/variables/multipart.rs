@@ -26,18 +26,91 @@ struct Parameter {
     key: Vec<u8>,
     value: Vec<u8>,
     quoted: bool,
+    raw_quoted: Option<Vec<u8>>,
 }
 #[derive(Default)]
 struct Parameters {
     media: Vec<u8>,
     values: Vec<Parameter>,
+    lookup: HashMap<Vec<u8>, usize>,
     malformed: bool,
     duplicate: bool,
 }
 impl Parameters {
     fn get(&self, key: &[u8]) -> Option<&Parameter> {
-        self.values.iter().find(|parameter| parameter.key == key)
+        self.lookup.get(key).map(|&index| &self.values[index])
     }
+
+    /// Match mime.ParseMediaType's RFC2231 resolution for ordinary parameters.
+    fn standard_value(&self, key: &[u8]) -> Option<Vec<u8>> {
+        let plain = self.get(key).map(|parameter| parameter.value.clone());
+        let mut encoded = key.to_vec();
+        encoded.push(b'*');
+        if let Some(parameter) = self.get(&encoded) {
+            return extended_value(&parameter.value).or(plain);
+        }
+        let mut output = Vec::new();
+        let mut present = false;
+        for index in 0..self.values.len() {
+            let mut piece = encoded.clone();
+            piece.extend_from_slice(index.to_string().as_bytes());
+            if let Some(parameter) = self.get(&piece) {
+                output.extend_from_slice(&parameter.value);
+            } else {
+                piece.push(b'*');
+                let Some(parameter) = self.get(&piece) else {
+                    break;
+                };
+                let decoded = if index == 0 {
+                    extended_value(&parameter.value)
+                } else {
+                    let (value, invalid) = percent_decode(&parameter.value);
+                    (!invalid).then_some(value)
+                };
+                // Go keeps later continuation pieces even when this encoded
+                // piece is invalid; omitting them could hide a dangerous name.
+                if let Some(decoded) = decoded {
+                    output.extend_from_slice(&decoded);
+                }
+            }
+            present = true;
+        }
+        if present {
+            Some(output)
+        } else {
+            plain
+        }
+    }
+}
+
+fn extended_value(value: &[u8]) -> Option<Vec<u8>> {
+    let mut parts = value.splitn(3, |&byte| byte == b'\'');
+    let charset = parts.next()?;
+    let _language = parts.next()?;
+    let value = parts.next()?;
+    if !charset.eq_ignore_ascii_case(b"utf-8") && !charset.eq_ignore_ascii_case(b"us-ascii") {
+        return None;
+    }
+    let (value, invalid) = percent_decode(value);
+    (!invalid).then_some(value)
+}
+
+/// Coraza's independent raw-parameter reading unquotes every quoted pair,
+/// including backslashes that mime.ParseMediaType preserves for Windows paths.
+fn raw_parameter_value(parameter: &Parameter) -> Vec<u8> {
+    let Some(raw) = &parameter.raw_quoted else {
+        return parameter.value.clone();
+    };
+    let mut value = Vec::with_capacity(raw.len());
+    let mut position = 0;
+    while position < raw.len() {
+        if raw[position] == b'\\' && position + 1 < raw.len() {
+            position += 1;
+        }
+        value.push(raw[position]);
+        position += 1;
+    }
+    value
 }
 
 fn trim(value: &[u8]) -> &[u8] {
@@ -73,7 +146,6 @@ fn parameters(raw: &[u8]) -> Parameters {
         parsed.malformed = true;
     }
     let mut position = end;
-    let mut seen: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     while position < raw.len() {
         if raw[position] != b';' {
             parsed.malformed = true;
@@ -107,6 +179,7 @@ fn parameters(raw: &[u8]) -> Parameters {
             position += 1;
         }
         let quoted = raw.get(position) == Some(&b'"');
+        let quoted_start = position + 1;
         let mut value = Vec::new();
         if quoted {
             position += 1;
@@ -142,15 +215,21 @@ fn parameters(raw: &[u8]) -> Parameters {
             }
             value.extend_from_slice(&raw[start..position]);
         }
-        if let Some(previous) = seen.get(&key) {
+        if let Some(&index) = parsed.lookup.get(&key) {
             parsed.duplicate = true;
-            if previous != &value {
+            if parsed.values[index].value != value {
                 parsed.malformed = true;
             }
         } else {
-            seen.insert(key.clone(), value.clone());
+            parsed.lookup.insert(key.clone(), parsed.values.len());
         }
-        parsed.values.push(Parameter { key, value, quoted });
+        let raw_quoted = quoted.then(|| raw[quoted_start..position - 1].to_vec());
+        parsed.values.push(Parameter {
+            key,
+            value,
+            quoted,
+            raw_quoted,
+        });
         while raw.get(position).is_some_and(u8::is_ascii_whitespace) {
             position += 1;
         }
@@ -433,8 +512,7 @@ fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
     }
     let name = valid
         .filter(|parameters| parameters.media == b"form-data")
-        .and_then(|parameters| parameters.get(b"name"))
-        .map(|parameter| parameter.value.clone())
+        .and_then(|parameters| parameters.standard_value(b"name"))
         .unwrap_or_default();
     for (key, value) in headers {
         let mut header = key;
@@ -444,8 +522,7 @@ fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
     }
     parsed.names.add_bytes(name.clone(), name.clone());
     let mut filename = valid
-        .and_then(|parameters| parameters.get(b"filename"))
-        .map(|parameter| parameter.value.clone())
+        .and_then(|parameters| parameters.standard_value(b"filename"))
         .unwrap_or_default();
     let mut alternative = Vec::new();
     if let Some(parameters) = valid {
@@ -460,13 +537,21 @@ fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
         });
         if continuation {
             parsed.strict = true;
+            if let Some(plain) = parameters.get(b"filename") {
+                let raw = raw_parameter_value(plain);
+                if !filename.is_empty() && filename != raw {
+                    alternative = filename;
+                }
+                filename = raw;
+            }
         }
         if let Some(extended) = parameters.get(b"filename*") {
             if extended.quoted {
                 parsed.invalid_quoting = true;
                 parsed.strict = true;
             }
-            let mut split = extended.value.splitn(3, |&byte| byte == b'\'');
+            let raw = raw_parameter_value(extended);
+            let mut split = raw.splitn(3, |&byte| byte == b'\'');
             if let (Some(charset), Some(language), Some(value)) =
                 (split.next(), split.next(), split.next())
             {
@@ -474,9 +559,11 @@ fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
                 if invalid_escape {
                     parsed.strict = true;
                 }
-                if filename != decoded {
-                    alternative = filename;
-                }
+                alternative = parameters
+                    .get(b"filename")
+                    .map(raw_parameter_value)
+                    .filter(|plain| !plain.is_empty() && plain != &decoded)
+                    .unwrap_or_default();
                 filename = decoded;
                 parsed.charsets.add_bytes(name.clone(), charset);
                 parsed.languages.add_bytes(name.clone(), language);
@@ -531,8 +618,8 @@ pub(super) fn parse(body: &[u8], content_type: &[u8], partial: bool) -> Multipar
     let mut parsed = Multipart::default();
     let params = parameters(content_type);
     let boundary = params
-        .get(b"boundary")
-        .filter(|parameter| !parameter.value.is_empty());
+        .standard_value(b"boundary")
+        .filter(|value| !value.is_empty());
     if params.malformed || !params.media.starts_with(b"multipart/") || boundary.is_none() {
         parsed.strict = true;
         parsed.error = Some("multipart Content-Type has no valid boundary".into());
@@ -540,7 +627,7 @@ pub(super) fn parse(body: &[u8], content_type: &[u8], partial: bool) -> Multipar
     }
     parsed.has_boundary = true;
     let mut delimiter = b"--".to_vec();
-    delimiter.extend_from_slice(&boundary.unwrap().value);
+    delimiter.extend_from_slice(&boundary.unwrap());
     let finder = memchr::memmem::Finder::new(&delimiter);
     let Some(mut boundary) = next_boundary(body, &delimiter, &finder, 0, None) else {
         if !partial {
