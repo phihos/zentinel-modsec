@@ -134,8 +134,10 @@ SecRule ARGS "@contains alert" "id:13,phase:2,pass""#,
     )
     .unwrap();
     let mut tx = engine.new_transaction();
-    tx.process_uri("/?testarg=alert", "POST", "HTTP/1.1").unwrap();
-    tx.add_request_header("Content-Type", "application/json").unwrap();
+    tx.process_uri("/?testarg=alert", "POST", "HTTP/1.1")
+        .unwrap();
+    tx.add_request_header("Content-Type", "application/json")
+        .unwrap();
     tx.process_request_headers().unwrap();
     tx.process_request_body().unwrap();
     assert_eq!(tx.matched_rules(), ["10", "11", "12"]);
