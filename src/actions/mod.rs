@@ -143,6 +143,10 @@ pub fn execute_actions(
             Action::Disruptive(d) => {
                 result.disruptive = Some(execute_disruptive(d));
             }
+            Action::Flow(FlowAction::MultiMatch) => {
+                // This controls operator evaluation, and must not overwrite a
+                // skip/skipAfter/chain flow action that appeared before it.
+            }
             Action::Flow(f) => {
                 result.flow = execute_flow(f);
             }

@@ -90,7 +90,6 @@ fn ignored_transformations_are_reported_with_rule_ids() {
 #[test]
 fn ignored_actions_on_chain_children_name_the_chain_starter() {
     for action in [
-        "multiMatch",
         "initcol:ip=%{REMOTE_ADDR}",
         "setuid:user",
         "setsid:session",
@@ -177,6 +176,18 @@ SecRule ARGS "@contains attack" "id:109,phase:2,pass,t:lowercase,setvar:tx.score
 "#,
     );
     assert!(log.is_empty(), "{log}");
+}
+
+#[test]
+fn supported_multi_match_does_not_warn_and_keeps_the_initial_match() {
+    let (engine, log) =
+        load_logs(r#"SecRule ARGS:x "@contains x" "id:1,phase:2,pass,multiMatch,t:uppercase""#);
+    assert!(log.is_empty(), "{log}");
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/?x=x", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["1"]);
 }
 
 #[test]

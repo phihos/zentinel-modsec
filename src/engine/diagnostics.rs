@@ -233,10 +233,6 @@ fn report_action(found: &mut Diagnostics, action: &Action, id: &str) {
             record(found, "action", name, ignored, id);
             return;
         }
-        Action::Flow(FlowAction::MultiMatch) => (
-            "multiMatch",
-            "matching before and between transformations is not implemented",
-        ),
         Action::Data(DataAction::InitCol { .. }) => ("initcol", ignored),
         Action::Data(DataAction::SetUid(_)) => ("setuid", ignored),
         Action::Data(DataAction::SetSid(_)) => ("setsid", ignored),

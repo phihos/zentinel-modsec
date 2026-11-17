@@ -14,7 +14,7 @@ use crate::actions::{
 };
 use crate::error::Result;
 use crate::operators::{compile_operator, Operator};
-use crate::parser::{Action, DataAction, OperatorSpec};
+use crate::parser::{Action, DataAction, FlowAction, OperatorSpec};
 use crate::variables::{Collection, RequestData, ResponseData, TxCollection, VariableResolver};
 
 /// Whether a lowercased Content-Type denotes a JSON body.
@@ -896,7 +896,32 @@ impl Transaction {
 
         // Apply transformations and match every value
         let mut matches = Vec::new();
+        let multi_match = rule
+            .actions
+            .iter()
+            .any(|action| matches!(action, Action::Flow(FlowAction::MultiMatch)));
         for (name, value) in all_values {
+            if multi_match {
+                rule.transformations.for_each_stage(&value, |transformed| {
+                    let result = operator.execute(transformed);
+                    let matched = if rule.operator_negated {
+                        !result.matched
+                    } else {
+                        result.matched
+                    };
+                    if matched {
+                        matches.push(RuleMatch {
+                            captures: result.captures,
+                            matched_variable: Some(MatchedVariable {
+                                name: name.clone(),
+                                value: transformed.to_string(),
+                                portion: result.matched_value,
+                            }),
+                        });
+                    }
+                });
+                continue;
+            }
             let transformed = rule.transformations.apply(&value);
             let result = operator.execute(&transformed);
 
