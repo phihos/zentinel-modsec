@@ -2,6 +2,7 @@
 
 pub mod chain;
 pub mod control;
+mod diagnostics;
 pub mod intervention;
 pub mod phase;
 pub mod ruleset;

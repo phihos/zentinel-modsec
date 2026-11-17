@@ -673,7 +673,12 @@ impl Transaction {
                 // that ctl:ruleEngine=DetectionOnly on the same rule governs
                 // whether that rule blocks.
                 for ctl in &action_result.control_ops {
-                    self.controls.apply(CtlDirective::parse(ctl));
+                    let directive = CtlDirective::parse(ctl);
+                    // Known limitations were reported with rule IDs at load;
+                    // repeating those warnings for every request adds no evidence.
+                    if !matches!(directive, CtlDirective::Unsupported { .. }) {
+                        self.controls.apply(directive);
+                    }
                 }
 
                 // Handle flow control

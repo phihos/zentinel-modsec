@@ -156,12 +156,32 @@ impl Parser {
             "secruleremovebyid" => self.parse_secruleremovebyid(lexer),
             "secruleupdatetargetbyid" => self.parse_secruleupdatetargetbyid(lexer),
             "secruleupdatetargetbytag" => self.parse_secruleupdatetargetbytag(lexer),
+            "secruleupdateactionbyid" => {
+                // Preserve the target ID for the load diagnostic. Applying the
+                // action update remains unsupported.
+                let id_text = self.expect_argument(lexer, "SecRuleUpdateActionById id")?;
+                let id = id_text
+                    .trim_matches(|c| c == '\'' || c == '"')
+                    .parse()
+                    .map_err(|_| {
+                        Error::parse(
+                            "SecRuleUpdateActionById requires a numeric rule ID",
+                            self.location.to_string(),
+                        )
+                    })?;
+                let actions =
+                    self.expect_quoted_argument(lexer, "SecRuleUpdateActionById actions")?;
+                Ok(Directive::SecRuleUpdateActionById {
+                    id,
+                    actions: action::parse_actions(&actions)?,
+                })
+            }
             "secrequestbodyaccess" => self.parse_boolean_directive(lexer, "SecRequestBodyAccess"),
             "secresponsebodyaccess" => self.parse_boolean_directive(lexer, "SecResponseBodyAccess"),
             "include" => self.parse_include(lexer),
             // Recognized engine-config/metadata directives that have no effect on
             // rule evaluation — skip quietly rather than warning.
-            "seccomponentsignature" | "seccollectiontimeout" => {
+            "seccomponentsignature" => {
                 self.skip_to_end_of_line(lexer);
                 Ok(Directive::Unknown(name.to_string()))
             }

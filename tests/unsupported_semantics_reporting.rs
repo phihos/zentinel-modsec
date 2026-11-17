@@ -1,0 +1,269 @@
+//! Accepted limitations must be visible before any request is processed.
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+use zentinel_modsec::ModSecurity;
+
+#[derive(Clone)]
+struct Log(Arc<Mutex<Vec<u8>>>);
+impl Write for Log {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+fn load_logs(config: &str) -> (ModSecurity, String) {
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let writer = Log(bytes.clone());
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(move || writer.clone())
+        .finish();
+    let engine =
+        tracing::subscriber::with_default(subscriber, || ModSecurity::from_string(config).unwrap());
+    let log = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+    (engine, log)
+}
+
+#[test]
+fn placeholder_operators_report_the_affected_rule_at_load() {
+    for operator in [
+        "verifyCC",
+        "verifySSN",
+        "verifyCPF",
+        "validateHash",
+        "validateDTD",
+        "validateSchema",
+        "rbl",
+        "geoLookup",
+        "gsbLookup",
+        "inspectFile",
+        "fuzzyHash",
+        "rsub",
+    ] {
+        let (_, log) = load_logs(&format!(
+            r#"SecRule ARGS "@{operator} example" "id:101,phase:2,pass""#
+        ));
+        assert!(
+            log.contains("operator") && log.contains("rule_ids=101"),
+            "{operator}: {log}"
+        );
+    }
+}
+
+#[test]
+fn approximated_operators_report_the_affected_rule_at_load() {
+    for operator in ["containsWord", "strmatch", "pmf", "ipMatchF"] {
+        let argument = if operator == "ipMatchF" {
+            "127.0.0.1"
+        } else {
+            "example"
+        };
+        let (_, log) = load_logs(&format!(
+            r#"SecRule ARGS "@{operator} {argument}" "id:102,phase:2,pass""#
+        ));
+        assert!(
+            log.contains("operator") && log.contains("rule_ids=102"),
+            "{operator}: {log}"
+        );
+    }
+}
+
+#[test]
+fn ignored_transformations_are_reported_with_rule_ids() {
+    for transform in ["parityEven7bit", "parityOdd7bit", "parityZero7bit"] {
+        let (_, log) = load_logs(&format!(
+            r#"SecRule ARGS "@contains attack" "id:103,phase:2,pass,t:{transform}""#
+        ));
+        assert!(
+            log.contains("transformation") && log.contains("rule_ids=103"),
+            "{transform}: {log}"
+        );
+    }
+}
+
+#[test]
+fn ignored_actions_on_chain_children_name_the_chain_starter() {
+    for action in [
+        "multiMatch",
+        "initcol:ip=%{REMOTE_ADDR}",
+        "setuid:user",
+        "setsid:session",
+        "expirevar:ip.x=10",
+        "deprecatevar:ip.x=1/10",
+        "exec:/bin/false",
+        "prepend:text",
+        "append:text",
+        "sanitiseMatched",
+        "proxy:example",
+        "pause:10",
+        "xmlns:x=http://example.com",
+        "auditlog",
+        "noauditlog",
+        "log",
+        "nolog",
+        "allow:phase",
+        "allow:request",
+        "setvar:ip.score=+1",
+    ] {
+        let (_, log) = load_logs(&format!(
+            r#"
+SecRule REQUEST_METHOD "@streq GET" "id:104,phase:1,pass,chain"
+SecRule ARGS "@contains attack" "{action}"
+"#
+        ));
+        assert!(
+            log.contains("action") && log.contains("rule_ids=104"),
+            "{action}: {log}"
+        );
+        assert!(!log.contains("rule_ids=(no id)"), "{action}: {log}");
+    }
+}
+
+#[test]
+fn ignored_body_access_and_unknown_directives_name_ruleset_ids() {
+    for directive in [
+        "SecRequestBodyAccess Off",
+        "SecResponseBodyAccess Off",
+        "SecCollectionTimeout 1234",
+        "SecUnknownExample On",
+    ] {
+        let (_, log) = load_logs(&format!(
+            r#"
+{directive}
+SecRule ARGS "@contains attack" "id:105,phase:2,pass"
+SecRule ARGS "@contains attack" "id:106,phase:2,pass"
+"#
+        ));
+        assert!(log.contains("rule_ids=105,106"), "{directive}: {log}");
+    }
+}
+
+#[test]
+fn mixed_supported_and_unsupported_targets_do_not_hide_the_gap() {
+    let (_, log) = load_logs(r#"SecRule ARGS|TIME_EPOCH "@contains attack" "id:107,phase:2,pass""#);
+    assert!(
+        log.contains("TimeEpoch") && log.contains("rule_ids=107"),
+        "{log}"
+    );
+}
+
+#[test]
+fn unsupported_macro_sources_are_reported_in_operator_and_setvar() {
+    for config in [
+        r#"SecRule ARGS "@contains %{rule.msg}" "id:108,phase:2,pass""#,
+        r#"SecAction "id:108,phase:1,pass,setvar:tx.source=%{REMOTE_ADDR}""#,
+        r#"SecRule ARGS "@contains %{ARGS._charset_}" "id:108,phase:2,pass""#,
+    ] {
+        let (_, log) = load_logs(config);
+        assert!(
+            log.contains("macro") && log.contains("rule_ids=108"),
+            "{log}"
+        );
+    }
+}
+
+#[test]
+fn supported_semantics_and_component_metadata_do_not_warn() {
+    let (_, log) = load_logs(
+        r#"
+SecComponentSignature "example"
+SecRule ARGS "@contains attack" "id:109,phase:2,pass,t:lowercase,setvar:tx.score=+1"
+"#,
+    );
+    assert!(log.is_empty(), "{log}");
+}
+
+#[test]
+fn unsupported_sanitization_actions_already_fail_loading() {
+    for action in [
+        "sanitiseArg:x",
+        "sanitiseRequestHeader:X-Test",
+        "sanitiseResponseHeader:X-Test",
+    ] {
+        assert!(
+            ModSecurity::from_string(&format!(r#"SecAction "id:110,phase:1,pass,{action}""#))
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn known_unsupported_controls_warn_only_during_loading() {
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let writer = Log(bytes.clone());
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(move || writer.clone())
+        .finish();
+    tracing::subscriber::with_default(subscriber, || {
+        let engine =
+            ModSecurity::from_string(r#"SecAction "id:111,phase:1,pass,ctl:auditLogParts=+E""#)
+                .unwrap();
+        let loaded = bytes.lock().unwrap().clone();
+        assert!(String::from_utf8_lossy(&loaded).contains("rule_ids=111"));
+        for _ in 0..3 {
+            let mut tx = engine.new_transaction();
+            tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+            tx.process_request_headers().unwrap();
+            tx.process_request_body().unwrap();
+        }
+        assert_eq!(
+            *bytes.lock().unwrap(),
+            loaded,
+            "known limitations must not log per request"
+        );
+    });
+}
+
+#[test]
+fn unsupported_action_update_retains_the_targeted_rule_id() {
+    let (_, log) = load_logs(
+        r#"
+SecRule ARGS "@contains attack" "id:112,phase:2,pass"
+SecRuleUpdateActionById 112 "deny,status:403"
+"#,
+    );
+    assert!(
+        log.contains("SecRuleUpdateActionById") && log.contains("rule_ids=112"),
+        "{log}"
+    );
+}
+
+#[test]
+fn invalid_variable_regexes_warn_before_evaluation() {
+    for variables in ["ARGS:/[/", "ARGS|!ARGS:/[/"] {
+        let (_, log) = load_logs(&format!(
+            r#"SecRule {variables} "@contains attack" "id:113,phase:2,pass""#
+        ));
+        assert!(
+            log.contains("variable-regex") && log.contains("rule_ids=113"),
+            "{log}"
+        );
+    }
+}
+
+#[test]
+fn malformed_id_target_controls_warn_before_evaluation() {
+    for target in [
+        "112;TYPO:key",
+        "112;ARGS:/^key/",
+        "112;&ARGS:key",
+        "wrong;ARGS:key",
+    ] {
+        let (_, log) = load_logs(&format!(
+            r#"SecAction "id:114,phase:1,pass,ctl:ruleRemoveTargetById={target}""#
+        ));
+        assert!(
+            log.contains("ruleRemoveTargetById") && log.contains("rule_ids=114"),
+            "{log}"
+        );
+    }
+}

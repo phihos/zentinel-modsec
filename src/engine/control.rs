@@ -122,6 +122,20 @@ impl CtlDirective {
                 Some((rule_id, target))
                     if !rule_id.trim().is_empty() && !target.trim().is_empty() =>
                 {
+                    let Ok(spec) = crate::parser::parse_single_variable(target.trim()) else {
+                        return Self::unsupported(
+                            directive,
+                            value,
+                            "ruleRemoveTargetById has an invalid target",
+                        );
+                    };
+                    if rule_id.trim().parse::<u64>().is_err()
+                        || spec.count_mode
+                        || matches!(spec.selection, Some(Selection::Regex(_)))
+                    {
+                        return Self::unsupported(directive, value,
+                            "ruleRemoveTargetById requires one numeric ID and a literal, non-count target; regex keys are not implemented for this control");
+                    }
                     CtlDirective::RuleRemoveTargetById {
                         rule_id: rule_id.trim().to_string(),
                         target: target.trim().to_string(),
