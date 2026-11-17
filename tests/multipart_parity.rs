@@ -259,3 +259,72 @@ SecRule ARGS:f "@streq attack" "id:1,phase:2,pass""#,
     tx.process_request_body().unwrap();
     assert_eq!(tx.matched_rules(), ["1"]);
 }
+
+fn transfer_body(encoding: &[u8], value: &[u8]) -> Vec<u8> {
+    let mut input =
+        b"--B\r\nContent-Disposition: form-data; name=\"f\"\r\nContent-Transfer-Encoding: "
+            .to_vec();
+    input.extend_from_slice(encoding);
+    input.extend_from_slice(b"\r\n\r\n");
+    input.extend_from_slice(value);
+    input.extend_from_slice(b"\r\n--B--\r\n");
+    input
+}
+
+#[test]
+fn quoted_printable_transfer_encoding_cannot_hide_an_attack() {
+    let input = transfer_body(b"Quoted-Printable", b"att=61=\r\nck");
+    let tx = run(
+        r#"SecRule ARGS:f "@streq attack" "id:1,phase:2,pass"
+SecRule FILES_COMBINED_SIZE "@eq 6" "id:2,phase:2,pass""#,
+        &input,
+    );
+    assert_eq!(tx.matched_rules(), ["1", "2"]);
+}
+
+#[test]
+fn quoted_printable_values_keep_binary_bytes_and_remove_the_transfer_header() {
+    let request = parsed(&transfer_body(b"quoted-printable", b"\xff=00z"));
+    assert_eq!(
+        request.args_post.get_bytes(b"f"),
+        Some(vec![b"\xff\x00z".as_slice()])
+    );
+    assert_eq!(request.files_combined_size, 3);
+    assert!(request
+        .multipart_part_headers
+        .all_bytes()
+        .iter()
+        .all(|(_, value)| !value.starts_with(b"Content-Transfer-Encoding:")));
+}
+
+#[test]
+fn quoted_printable_whitespace_and_invalid_hex_follow_the_reference() {
+    let request = parsed(&transfer_body(
+        b"quoted-printable",
+        b"a \t\r\nb=20\t\r\nx=GG",
+    ));
+    assert_eq!(
+        request.args_post.get_bytes(b"f"),
+        Some(vec![b"a\r\nb \r\nx=GG".as_slice()])
+    );
+    assert!(!request.multipart_strict_error);
+}
+
+#[test]
+fn invalid_quoted_printable_controls_report_a_visible_body_error() {
+    let tx = run(
+        r#"SecRule REQBODY_ERROR "@eq 1" "id:200002,phase:2,pass"
+SecRule MULTIPART_STRICT_ERROR "@eq 1" "id:200003,phase:2,pass""#,
+        &transfer_body(b"quoted-printable", b"good\x00bad"),
+    );
+    assert_eq!(tx.matched_rules(), ["200002", "200003"]);
+}
+
+#[test]
+fn base64_transfer_encoding_remains_raw_as_in_the_reference() {
+    let request = parsed(&transfer_body(b"base64", b"YXR0YWNr"));
+    assert_eq!(
+        request.args_post.get_bytes(b"f"),
+        Some(vec![b"YXR0YWNr".as_slice()])
+    );
+}
