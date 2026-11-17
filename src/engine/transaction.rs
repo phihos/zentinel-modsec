@@ -1556,14 +1556,17 @@ impl Transaction {
                     }
                     SetVarKind::Add | SetVarKind::Subtract => {
                         let n = std::str::from_utf8(&operand).map(leading_int).unwrap_or(0);
-                        let n = if matches!(kind, SetVarKind::Subtract) {
-                            -n
+                        // Coraza's signed native-int arithmetic wraps at the
+                        // boundary. Keep the original operand for audit effects:
+                        // negating MIN is also a wrapping operation.
+                        let delta = if matches!(kind, SetVarKind::Subtract) {
+                            n.wrapping_neg()
                         } else {
                             n
                         };
-                        self.tx.increment_bytes(&name, n);
+                        self.tx.increment_bytes(&name, delta);
                         if matches!(kind, SetVarKind::Subtract) {
-                            SetVarChange::Decrement(-n)
+                            SetVarChange::Decrement(n)
                         } else {
                             SetVarChange::Increment(n)
                         }
@@ -1575,7 +1578,7 @@ impl Transaction {
                 SetVarChange::Increment(*n)
             }
             SetVarOperation::Decrement(n) => {
-                self.tx.increment_bytes(&name, -*n);
+                self.tx.increment_bytes(&name, n.wrapping_neg());
                 SetVarChange::Decrement(*n)
             }
             SetVarOperation::Delete => {

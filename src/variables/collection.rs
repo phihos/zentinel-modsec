@@ -240,11 +240,11 @@ impl MutableCollection for HashMapCollection {
             .and_then(|v| v.first())
             .and_then(|s| s.as_utf8().ok()?.parse().ok())
             .unwrap_or(0);
-        self.set(key.to_string(), (current + amount).to_string());
+        self.set(key.to_string(), current.wrapping_add(amount).to_string());
     }
 
     fn decrement(&mut self, key: &str, amount: i64) {
-        self.increment(key, -amount);
+        self.increment(key, amount.wrapping_neg());
     }
 }
 
