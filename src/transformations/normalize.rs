@@ -410,8 +410,22 @@ pub struct Utf8ToUnicode;
 
 impl Transformation for Utf8ToUnicode {
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // In Rust strings are already UTF-8, this is a no-op
-        Cow::Borrowed(input)
+        // SecLang's transformation serializes non-ASCII code points as
+        // IIS-style %u escapes; valid Rust UTF-8 is still subject to this
+        // normalization. The following urlDecodeUni can then fold width.
+        if input.is_ascii() {
+            return Cow::Borrowed(input);
+        }
+        use std::fmt::Write;
+        let mut result = String::with_capacity(input.len());
+        for c in input.chars() {
+            if c.is_ascii() {
+                result.push(c);
+            } else {
+                write!(&mut result, "%u{:04x}", c as u32).expect("writing to a String");
+            }
+        }
+        Cow::Owned(result)
     }
 
     fn name(&self) -> &'static str {
@@ -638,6 +652,15 @@ mod tests {
         ] {
             assert_eq!(t.transform(input), expected, "input: {input}");
         }
+    }
+
+    #[test]
+    fn utf8_to_unicode_encodes_non_ascii_for_crs_xss_chain() {
+        let t = Utf8ToUnicode;
+        assert_eq!(t.transform("＜script＞"), "%uff1cscript%uff1e");
+        assert_eq!(t.transform("ĤéllŌ"), "%u0124%u00e9ll%u014c");
+        assert_eq!(t.transform("hello 🍺"), "hello %u1f37a");
+        assert!(matches!(t.transform("plain ASCII%20\0"), Cow::Borrowed(_)));
     }
 
     #[test]
