@@ -1,6 +1,6 @@
 //! Network operators (@ipMatch).
 
-use super::traits::{Operator, OperatorResult};
+use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 use crate::error::{Error, Result};
 use ipnetwork::IpNetwork;
 use std::net::IpAddr;
@@ -91,6 +91,13 @@ impl IpMatchOperator {
 }
 
 impl Operator for IpMatchOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Ok(ip) = value.parse::<IpAddr>() {
             if self.contains(&ip) {
