@@ -1,15 +1,6 @@
-//! Tests for the XML request body processor.
-//!
-//! XML bodies were not inspected at all: they fell through to the urlencoded
-//! parser, which finds nothing in them, so `ARGS` was empty and rules like
-//! CRS 942100 had nothing to look at — the same gap the JSON processor
-//! closed, and the last one from zentinelproxy/zentinel#340.
-//!
-//! XML brings hazards JSON does not, and most of this file is about them.
-//! Expanding attacker-supplied entity definitions is the mechanism behind
-//! both XXE and billion-laughs, so this engine does not expand them — and
-//! says so through `REQBODY_ERROR` rather than quietly inspecting less than
-//! the origin application will.
+//! XML values are inspected through Coraza's XML selectors, independently of
+//! HTTP argument collections. Entity handling remains bounded and never reads
+//! external resources.
 
 use zentinel_modsec::ModSecurity;
 
@@ -27,13 +18,14 @@ fn run(rules: &str, content_type: &str, body: &[u8]) -> bool {
 }
 
 fn contains(body: &[u8], needle: &str) -> bool {
-    let rules =
-        format!("SecRuleEngine On\nSecRule ARGS \"@contains {needle}\" \"id:1,phase:2,deny\"");
+    let rules = format!(
+        "SecRuleEngine On\nSecRule XML:/*|XML://@* \"@contains {needle}\" \"id:1,phase:2,deny\""
+    );
     run(&rules, "application/xml", body)
 }
 
 const SQLI_RULE: &str = "SecRuleEngine On\n\
-     SecRule ARGS \"@detectSQLi\" \"id:942100,phase:2,deny,status:403\"";
+     SecRule XML:/*|XML://@* \"@detectSQLi\" \"id:942100,phase:2,deny,status:403\"";
 
 const BODY_ERROR_RULE: &str = "SecRuleEngine On\n\
      SecRule REQBODY_ERROR \"!@eq 0\" \"id:200002,phase:2,deny,status:400\"";
@@ -109,7 +101,7 @@ fn xml_content_types_are_recognised() {
 fn ctl_can_force_the_xml_processor() {
     let rules = "SecRuleEngine On\n\
          SecAction \"id:1,phase:1,pass,nolog,ctl:requestBodyProcessor=XML\"\n\
-         SecRule ARGS \"@detectSQLi\" \"id:942100,phase:2,deny\"";
+         SecRule XML:/*|XML://@* \"@detectSQLi\" \"id:942100,phase:2,deny\"";
     assert!(run(
         rules,
         "",
@@ -129,9 +121,9 @@ fn reqbody_processor_reports_xml() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn elements_are_named_by_their_path() {
+fn element_text_is_available_through_the_xml_selector() {
     let rules = "SecRuleEngine On\n\
-         SecRule ARGS:xml.order.item \"@streq widget\" \"id:1,phase:2,deny\"";
+         SecRule XML:/* \"@streq widget\" \"id:1,phase:2,deny\"";
     assert!(run(
         rules,
         "application/xml",
@@ -140,9 +132,9 @@ fn elements_are_named_by_their_path() {
 }
 
 #[test]
-fn attributes_are_named_with_an_at_sign() {
+fn attribute_values_are_available_through_the_xml_selector() {
     let rules = "SecRuleEngine On\n\
-         SecRule ARGS:xml.order.item.@id \"@streq 7\" \"id:1,phase:2,deny\"";
+         SecRule XML://@* \"@streq 7\" \"id:1,phase:2,deny\"";
     assert!(run(
         rules,
         "application/xml",
@@ -190,7 +182,7 @@ fn an_external_entity_is_not_resolved() {
 
     assert!(
         !contains(xxe, "root:"),
-        "external entity content must never reach ARGS"
+        "external entity content must never reach XML values"
     );
 }
 
@@ -301,6 +293,6 @@ fn a_malformed_body_does_not_abort_the_transaction() {
 #[test]
 fn a_non_xml_content_type_is_not_parsed_as_xml() {
     let rules = "SecRuleEngine On\n\
-         SecRule ARGS:xml.a \"@rx .\" \"id:1,phase:2,deny\"";
+         SecRule XML:/* \"@rx .\" \"id:1,phase:2,deny\"";
     assert!(!run(rules, "text/plain", b"<a>value</a>"));
 }
