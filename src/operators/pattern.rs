@@ -1,38 +1,57 @@
 //! Pattern matching operators (@rx, @pm).
 //!
-//! Optimized with lazy regex compilation for fast rule parsing.
+//! Compiled regexes are shared across live rulesets in the process.
 
 use super::traits::{Operator, OperatorResult};
 use crate::error::{Error, Result};
 use aho_corasick::AhoCorasick;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use regex::Regex;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, Weak};
 
-/// Regex operator (@rx) with lazy compilation.
+/// A cache does not own the regexes: dropping the last rule using a pattern
+/// releases its compiled automata and search caches. Stale pattern keys are
+/// removed on a miss so repeated configuration reloads cannot accumulate them.
+#[derive(Default)]
+struct RegexCache {
+    entries: Mutex<HashMap<String, Weak<Regex>>>,
+}
+
+impl RegexCache {
+    fn get(&self, pattern: &str) -> Result<Arc<Regex>> {
+        // Compilation is serialized with insertion, preventing concurrent
+        // loads of the same pattern from building duplicate automata. Matching
+        // never takes this lock.
+        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(regex) = entries.get(pattern).and_then(Weak::upgrade) {
+            return Ok(regex);
+        }
+        entries.retain(|_, regex| regex.strong_count() > 0);
+        let regex = Arc::new(Regex::new(pattern).map_err(|source| Error::RegexCompile {
+            pattern: pattern.to_string(),
+            source,
+        })?);
+        entries.insert(pattern.to_string(), Arc::downgrade(&regex));
+        Ok(regex)
+    }
+}
+
+static REGEX_CACHE: Lazy<RegexCache> = Lazy::new(RegexCache::default);
+
+/// Regex operator (@rx) with process-wide compilation sharing.
 ///
-/// The pattern's *syntax* is validated when the rule is loaded, but the
-/// automaton is only built on first use — CRS defines hundreds of regex rules
-/// and most requests exercise few of them.
-///
-/// The distinction matters: an invalid pattern must be a load error. If it
-/// were discovered at match time there would be nothing useful to do about it,
-/// and the rule would silently never match — a dead rule that looks alive.
+/// The exact pattern is the cache key, including every inline flag (such as
+/// `(?i)` and `(?-u)`). All operators use the same `Regex::new` builder defaults;
+/// if external flags or limits are added, those settings must join the key.
+/// Compilation happens at load time so an oversized program, like a syntax
+/// error, is reported by the loader with the affected rule ID.
 pub struct RxOperator {
-    pattern_str: String,
-    /// `None` once compilation has been attempted and failed, so a pattern
-    /// that passes syntax validation but cannot be built (an oversized
-    /// program, say) is reported once rather than retried per request.
-    compiled: OnceCell<Option<Regex>>,
+    compiled: Arc<Regex>,
 }
 
 impl RxOperator {
-    /// Create a new regex operator, validating the pattern's syntax.
-    ///
-    /// Parsing with `regex-syntax` catches every syntax error the full
-    /// compiler would, without building the automaton, so loading stays fast
-    /// while a malformed pattern fails loudly at load instead of turning into
-    /// a rule that can never match.
-    #[inline]
+    /// Compile a regex or share the compiled object of an existing live rule.
     pub fn new(pattern: &str) -> Result<Self> {
         if pattern.is_empty() {
             return Err(Error::RegexCompile {
@@ -40,51 +59,15 @@ impl RxOperator {
                 source: regex::Error::Syntax("empty pattern".to_string()),
             });
         }
-
-        if let Err(e) = regex_syntax::Parser::new().parse(pattern) {
-            return Err(Error::RegexCompile {
-                pattern: pattern.to_string(),
-                source: regex::Error::Syntax(e.to_string()),
-            });
-        }
-
         Ok(Self {
-            pattern_str: pattern.to_string(),
-            compiled: OnceCell::new(),
+            compiled: REGEX_CACHE.get(pattern)?,
         })
-    }
-
-    /// Get or compile the regex pattern.
-    ///
-    /// Returns `None` if compilation failed. Syntax was already validated in
-    /// [`RxOperator::new`], so reaching this is rare — a program too large to
-    /// build, for instance. It is reported once, because a rule that cannot
-    /// match must not do so silently.
-    #[inline]
-    fn get_regex(&self) -> Option<&Regex> {
-        self.compiled
-            .get_or_init(|| match Regex::new(&self.pattern_str) {
-                Ok(regex) => Some(regex),
-                Err(e) => {
-                    tracing::error!(
-                        pattern = %self.pattern_str,
-                        error = %e,
-                        "regex could not be compiled at first use; this rule can never match"
-                    );
-                    None
-                }
-            })
-            .as_ref()
     }
 }
 
 impl Operator for RxOperator {
     fn execute(&self, value: &str) -> OperatorResult {
-        let Some(regex) = self.get_regex() else {
-            return OperatorResult::no_match();
-        };
-
-        if let Some(captures) = regex.captures(value) {
+        if let Some(captures) = self.compiled.captures(value) {
             let matched_value = captures.get(0).map(|m| m.as_str().to_string());
             let capture_groups: Vec<String> = captures
                 .iter()
@@ -234,6 +217,88 @@ mod tests {
         let result = op.execute("user=john");
         assert!(result.matched);
         assert_eq!(result.captures, vec!["john"]);
+    }
+
+    #[test]
+    fn identical_patterns_share_the_compiled_regex() {
+        let first = RxOperator::new(r"(?i:shared-regex)-(\d+)").unwrap();
+        let second = RxOperator::new(r"(?i:shared-regex)-(\d+)").unwrap();
+        assert!(Arc::ptr_eq(&first.compiled, &second.compiled));
+        assert_eq!(second.execute("SHARED-REGEX-42").captures, vec!["42"]);
+    }
+
+    #[test]
+    fn different_flags_do_not_share_or_change_matching() {
+        let sensitive = RxOperator::new("^cache-flags$").unwrap();
+        let insensitive = RxOperator::new("(?i)^cache-flags$").unwrap();
+        assert!(!Arc::ptr_eq(&sensitive.compiled, &insensitive.compiled));
+        assert!(!sensitive.execute("CACHE-FLAGS").matched);
+        assert!(insensitive.execute("CACHE-FLAGS").matched);
+    }
+
+    #[test]
+    fn rulesets_with_different_exclusions_share_regexes() {
+        let rules = r#"SecRuleEngine On
+SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
+        let original = crate::ModSecurity::from_string(rules).unwrap();
+        let excluded = crate::ModSecurity::from_string(&format!(
+            "{rules}\nSecRuleUpdateTargetById 1001 \"!ARGS:skip\""
+        ))
+        .unwrap();
+        let owners =
+            REGEX_CACHE.entries.lock().unwrap()["^shared-exclusion-pattern$"].strong_count();
+        assert_eq!(owners, 2, "one shared regex owned by both loaded rulesets");
+        for (engine, should_block) in [(&original, true), (&excluded, false)] {
+            let mut tx = engine.new_transaction();
+            tx.process_uri("/?skip=shared-exclusion-pattern", "GET", "HTTP/1.1")
+                .unwrap();
+            tx.process_request_headers().unwrap();
+            tx.process_request_body().unwrap();
+            assert_eq!(tx.has_intervention(), should_block);
+        }
+    }
+
+    #[test]
+    fn concurrent_loads_share_a_single_compiled_regex() {
+        let barrier = Arc::new(std::sync::Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    RxOperator::new(r"^concurrent-cache-(\w+)$").unwrap()
+                })
+            })
+            .collect();
+        let operators: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        for operator in &operators[1..] {
+            assert!(Arc::ptr_eq(&operators[0].compiled, &operator.compiled));
+        }
+    }
+
+    #[test]
+    fn dropped_regexes_are_released_and_stale_keys_are_pruned() {
+        // A local cache keeps this lifetime assertion independent of other
+        // tests running against the process-wide cache concurrently.
+        let cache = RegexCache::default();
+        let compiled = cache.get("^dropped-cache-pattern$").unwrap();
+        let weak = Arc::downgrade(&compiled);
+        drop(compiled);
+        assert!(weak.upgrade().is_none());
+        let live = cache.get("^replacement-cache-pattern$").unwrap();
+        let entries = cache.entries.lock().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(Arc::ptr_eq(
+            &live,
+            &entries["^replacement-cache-pattern$"].upgrade().unwrap()
+        ));
+    }
+
+    #[test]
+    fn program_size_failure_is_reported_at_load_time() {
+        // Valid syntax, but the default regex compiler cannot build the
+        // expanded Unicode repetitions within its program size limit.
+        assert!(RxOperator::new(r"\w{100000}").is_err());
     }
 
     #[test]
