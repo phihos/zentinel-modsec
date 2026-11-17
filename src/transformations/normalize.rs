@@ -579,75 +579,58 @@ impl Transformation for EscapeSeqDecode {
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // Decode escape sequences like \n, \r, \t, \xHH, \uHHHH
-        let mut result = String::new();
+        // ModSecurity's ANSI C escape decoding: fixed controls, quotes,
+        // two-digit hex, up to three octal digits, and unknown-escape slash
+        // removal. Unicode escapes belong to jsDecode, not this transform.
+        let mut result = String::with_capacity(input.len());
         let mut chars = input.chars().peekable();
         let mut modified = false;
-
-        while let Some(c) = chars.next() {
-            if c == '\\' {
-                if let Some(&next) = chars.peek() {
-                    modified = true;
-                    chars.next();
-                    match next {
-                        'n' => result.push('\n'),
-                        'r' => result.push('\r'),
-                        't' => result.push('\t'),
-                        '\\' => result.push('\\'),
-                        '0' => result.push('\0'),
-                        'x' => {
-                            // Hex escape \xHH
-                            let mut hex = String::new();
-                            for _ in 0..2 {
-                                if let Some(&h) = chars.peek() {
-                                    if h.is_ascii_hexdigit() {
-                                        hex.push(chars.next().unwrap());
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-                            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                                result.push(byte as char);
-                            } else {
-                                result.push('x');
-                                result.push_str(&hex);
-                            }
+        while let Some(character) = chars.next() {
+            if character != '\\' {
+                result.push(character);
+                continue;
+            }
+            let Some(escaped) = chars.next() else {
+                result.push('\\');
+                break;
+            };
+            modified = true;
+            match escaped {
+                'a' => result.push('\x07'),
+                'b' => result.push('\x08'),
+                'f' => result.push('\x0c'),
+                'n' => result.push('\n'),
+                'r' => result.push('\r'),
+                't' => result.push('\t'),
+                'v' => result.push('\x0b'),
+                '\\' | '\'' | '"' | '?' => result.push(escaped),
+                'x' | 'X' => {
+                    let mut candidate = chars.clone();
+                    match (candidate.next(), candidate.next()) {
+                        (Some(high), Some(low))
+                            if high.is_ascii_hexdigit() && low.is_ascii_hexdigit() =>
+                        {
+                            let byte = high.to_digit(16).unwrap() * 16 + low.to_digit(16).unwrap();
+                            result.push(byte as u8 as char);
+                            chars = candidate;
                         }
-                        'u' => {
-                            // Unicode escape \uHHHH
-                            let mut hex = String::new();
-                            for _ in 0..4 {
-                                if let Some(&h) = chars.peek() {
-                                    if h.is_ascii_hexdigit() {
-                                        hex.push(chars.next().unwrap());
-                                    } else {
-                                        break;
-                                    }
-                                }
+                        _ => result.push(escaped),
+                    }
+                }
+                '0'..='7' => {
+                    let mut value = escaped as u16 - '0' as u16;
+                    for _ in 0..2 {
+                        match chars.peek().copied() {
+                            Some(digit @ '0'..='7') => {
+                                chars.next();
+                                value = value * 8 + digit as u16 - '0' as u16;
                             }
-                            if let Ok(code) = u32::from_str_radix(&hex, 16) {
-                                if let Some(c) = char::from_u32(code) {
-                                    result.push(c);
-                                } else {
-                                    result.push('u');
-                                    result.push_str(&hex);
-                                }
-                            } else {
-                                result.push('u');
-                                result.push_str(&hex);
-                            }
-                        }
-                        _ => {
-                            result.push('\\');
-                            result.push(next);
+                            _ => break,
                         }
                     }
-                } else {
-                    result.push(c);
+                    result.push((value & 0xff) as u8 as char);
                 }
-            } else {
-                result.push(c);
+                other => result.push(other),
             }
         }
 
