@@ -84,7 +84,26 @@ impl Operator for ByteArgument {
             _ => false, // An invalid-UTF-8 argument cannot be a decimal number.
         };
         Ok(if matched {
-            ByteOperatorResult::matched(value.to_vec())
+            let portion = match self.kind {
+                OperatorName::Contains
+                | OperatorName::ContainsWord
+                | OperatorName::StrMatch
+                | OperatorName::BeginsWith
+                | OperatorName::EndsWith => self.argument.clone(),
+                OperatorName::Pm => self
+                    .argument
+                    .split(u8::is_ascii_whitespace)
+                    .find(|part| {
+                        !part.is_empty()
+                            && value
+                                .windows(part.len())
+                                .any(|candidate| candidate.eq_ignore_ascii_case(part))
+                    })
+                    .expect("matched phrase")
+                    .to_vec(),
+                _ => value.to_vec(),
+            };
+            ByteOperatorResult::matched(portion)
         } else {
             ByteOperatorResult::no_match()
         })
