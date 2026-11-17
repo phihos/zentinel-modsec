@@ -49,8 +49,7 @@ fn different_inline_modes_remain_isolated_in_the_shared_cache() {
 
 #[test]
 fn exact_crs_php_comment_and_sql_newline_cases_match() {
-    let engine =
-        ModSecurity::from_string(include_str!("fixtures/crs-regex-defaults.conf")).unwrap();
+    let engine = load_with_request_body(include_str!("fixtures/crs-regex-defaults.conf")).unwrap();
     for (method, uri, body, id) in [
         (
             "GET",
@@ -74,4 +73,10 @@ fn exact_crs_php_comment_and_sql_newline_cases_match() {
             "missing {id}"
         );
     }
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

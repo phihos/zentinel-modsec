@@ -18,7 +18,7 @@ use std::sync::Arc;
 use zentinel_modsec::ModSecurity;
 
 fn engine(rules: &str) -> ModSecurity {
-    ModSecurity::from_string(rules).expect("rules should load")
+    load_with_request_body(rules).expect("rules should load")
 }
 
 /// Run one request through its own transaction.
@@ -432,4 +432,10 @@ fn an_unsupported_ctl_does_not_disable_the_engine() {
          SecRule REQUEST_URI \"@contains /attack\" \"id:3,phase:1,deny\"";
 
     assert!(blocked(rules, "/attack"));
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

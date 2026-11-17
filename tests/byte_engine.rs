@@ -14,7 +14,7 @@ fn request(ms: &ModSecurity, uri: &str, body: &[u8]) -> Vec<String> {
 
 #[test]
 fn invalid_utf8_from_form_and_query_is_not_replaced_before_validation() {
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule ARGS|ARGS_NAMES "@validateUtf8Encoding" "id:920250,phase:2,pass""#,
     )
@@ -30,7 +30,7 @@ SecRule ARGS|ARGS_NAMES "@validateUtf8Encoding" "id:920250,phase:2,pass""#,
 
 #[test]
 fn raw_java_signature_is_detected_in_binary_request_body() {
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule REQUEST_BODY|ARGS "@rx \xac\xed\x00\x05" "id:944200,phase:2,pass""#,
     )
@@ -40,7 +40,7 @@ SecRule REQUEST_BODY|ARGS "@rx \xac\xed\x00\x05" "id:944200,phase:2,pass""#,
 
 #[test]
 fn raw_capture_reaches_tx_and_setvar_macro_without_display_roundtrip() {
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@rx (\xff)" "id:1,phase:2,pass,capture,setvar:tx.raw=%{tx.1}"
 SecRule TX:raw "@rx ^\xff$" "id:2,phase:2,pass"
@@ -53,7 +53,7 @@ SecRule TX:raw "@streq \\xff" "id:3,phase:2,pass""#,
 #[test]
 fn binary_names_and_literal_escape_text_are_distinct_engine_inputs() {
     use zentinel_modsec::variables::ByteCollection;
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule ARGS_NAMES "@rx ^\xff$" "id:1,phase:2,pass"
 SecRule &ARGS "@eq 2" "id:2,phase:2,pass""#,
@@ -72,7 +72,7 @@ SecRule &ARGS "@eq 2" "id:2,phase:2,pass""#,
 #[test]
 fn captured_binary_macros_can_be_operator_arguments_and_binary_tx_keys() {
     use zentinel_modsec::variables::ByteCollection;
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@rx (\xff)" "id:1,phase:2,pass,capture,setvar:tx.key_%{tx.1}=%{tx.1}"
 SecRule ARGS:y "@streq %{tx.1}" "id:2,phase:2,pass""#,
@@ -89,7 +89,7 @@ SecRule ARGS:y "@streq %{tx.1}" "id:2,phase:2,pass""#,
 
 #[test]
 fn arbitrary_header_and_request_line_bytes_reach_their_variables() {
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule REQUEST_HEADERS "@rx \xff" "id:1,phase:1,pass"
 SecRule REQUEST_HEADERS_NAMES "@rx \x80" "id:2,phase:1,pass"
@@ -106,7 +106,7 @@ SecRule REQUEST_URI_RAW|REQUEST_FILENAME "@rx \xfe" "id:3,phase:1,pass""#,
 #[test]
 fn multimatch_retains_binary_stages_and_revisits_changed_cycles() {
     use zentinel_modsec::variables::ByteCollection;
-    let ms=ModSecurity::from_string(r#"SecRuleEngine DetectionOnly
+    let ms=load_with_request_body(r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@rx (ff|\xff)" "id:1,phase:2,pass,multiMatch,t:hexDecode,t:hexEncode,capture,setvar:tx.count=+1""#).unwrap();
     let mut tx = ms.new_transaction();
     tx.process_uri("/?x=ff", "GET", "HTTP/1.1").unwrap();
@@ -119,7 +119,7 @@ SecRule ARGS:x "@rx (ff|\xff)" "id:1,phase:2,pass,multiMatch,t:hexDecode,t:hexEn
 
 #[test]
 fn invalid_decoded_filename_bytes_observe_absolute_target_and_fragment_rules() {
-    let ms = ModSecurity::from_string(
+    let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule REQUEST_FILENAME "@rx ^/\xff$" "id:1,phase:1,pass""#,
     )
@@ -135,4 +135,10 @@ SecRule REQUEST_FILENAME "@rx ^/\xff$" "id:1,phase:1,pass""#,
         tx.process_request_headers().unwrap();
         assert_eq!(tx.matched_rules(), ["1"], "{uri:?}");
     }
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

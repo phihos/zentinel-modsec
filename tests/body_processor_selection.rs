@@ -2,7 +2,7 @@
 use zentinel_modsec::{engine::Transaction, ModSecurity};
 
 fn run(config: &str, content_type: Option<&str>, body: &[u8]) -> Transaction {
-    let engine = ModSecurity::from_string(config).unwrap();
+    let engine = load_with_request_body(config).unwrap();
     let mut tx = engine.new_transaction();
     tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
     if let Some(content_type) = content_type {
@@ -125,7 +125,7 @@ SecRule &REQUEST_HEADERS:Content-Type "@eq 0" "t:none"
 
 #[test]
 fn explicitly_selected_processor_is_visible_before_empty_body_processing() {
-    let engine = zentinel_modsec::ModSecurity::from_string(
+    let engine = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecAction "id:10,phase:1,pass,ctl:requestBodyProcessor=JSON"
 SecRule REQBODY_PROCESSOR "@streq JSON" "id:11,phase:1,pass"
@@ -141,4 +141,10 @@ SecRule ARGS "@contains alert" "id:13,phase:2,pass""#,
     tx.process_request_headers().unwrap();
     tx.process_request_body().unwrap();
     assert_eq!(tx.matched_rules(), ["10", "11", "12"]);
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }
