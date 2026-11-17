@@ -337,7 +337,80 @@ fn hex(value: u8) -> Option<u8> {
     }
 }
 
-fn process_part(parsed: &mut Multipart, headers: Headers, content: &[u8]) {
+/// The reference Go quotedprintable.Reader's permissive decoding rules.
+fn quoted_printable(content: &[u8]) -> Result<Vec<u8>, String> {
+    let mut output = Vec::with_capacity(content.len());
+    for raw in content.split_inclusive(|&byte| byte == b'\n') {
+        let has_lf = raw.ends_with(b"\n");
+        let has_crlf = raw.ends_with(b"\r\n");
+        // Go's decoder reads one line with a 4096-byte bufio.Reader.
+        if raw.len() > 4096 || (raw.len() == 4096 && !has_lf) {
+            return Err("quoted-printable line exceeds the reference reader buffer".into());
+        }
+        let end = raw
+            .iter()
+            .rposition(|byte| !matches!(byte, b'\n' | b'\r' | b' ' | b'\t'))
+            .map_or(0, |position| position + 1);
+        let mut line = &raw[..end];
+        let soft = line.ends_with(b"=");
+        if soft {
+            line = &line[..line.len() - 1];
+            let after = &raw[end..];
+            let suffix = after
+                .iter()
+                .position(|byte| !matches!(byte, b' ' | b'\t'))
+                .map_or(&b""[..], |position| &after[position..]);
+            let valid_suffix = suffix.starts_with(b"\n")
+                || suffix.starts_with(b"\r\n")
+                || (suffix.is_empty() && !line.is_empty());
+            if !valid_suffix {
+                return Err("invalid bytes after quoted-printable soft break".into());
+            }
+        }
+        let mut position = 0;
+        while position < line.len() {
+            let byte = line[position];
+            if byte == b'=' {
+                if let Some(pair) = line.get(position + 1..position + 3) {
+                    if let (Some(hi), Some(lo)) = (hex(pair[0]), hex(pair[1])) {
+                        output.push(hi * 16 + lo);
+                        position += 3;
+                        continue;
+                    }
+                }
+                // Malformed hex inside a line is a literal '=' in Go.
+                if !line
+                    .get(position + 1)
+                    .is_some_and(|byte| !matches!(byte, b'\r' | b'\n'))
+                {
+                    return Err("truncated quoted-printable escape".into());
+                }
+            } else if (byte < 32 && !matches!(byte, b'\t' | b'\r' | b'\n')) || byte == 127 {
+                return Err("invalid unescaped quoted-printable control byte".into());
+            }
+            output.push(byte);
+            position += 1;
+        }
+        if !soft && has_lf {
+            if has_crlf {
+                output.push(b'\r');
+            }
+            output.push(b'\n');
+        }
+    }
+    Ok(output)
+}
+
+fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
+    // mime/multipart.NextPart decodes quoted-printable and removes this
+    // header before exposing the part. Other encodings remain opaque.
+    let transfer_decoded = headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(b"Content-Transfer-Encoding"))
+        .is_some_and(|(_, value)| value.eq_ignore_ascii_case(b"quoted-printable"));
+    if transfer_decoded {
+        headers.retain(|(name, _)| !name.eq_ignore_ascii_case(b"Content-Transfer-Encoding"));
+    }
     let mut seen = HashSet::new();
     if headers.iter().any(|(name, _)| !seen.insert(name.clone())) {
         parsed.duplicate = true;
@@ -423,6 +496,19 @@ fn process_part(parsed: &mut Multipart, headers: Headers, content: &[u8]) {
     if filename.is_empty() && !alternative.is_empty() {
         filename = std::mem::take(&mut alternative);
     }
+    let decoded = if transfer_decoded {
+        match quoted_printable(content) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                parsed.strict = true;
+                parsed.error = Some(error);
+                return;
+            }
+        }
+    } else {
+        None
+    };
+    let content = decoded.as_deref().unwrap_or(content);
     parsed.combined_size += content.len();
     if filename.is_empty() {
         parsed.fields.add_bytes(name, content);
@@ -482,6 +568,9 @@ pub(super) fn parse(body: &[u8], content_type: &[u8], partial: bool) -> Multipar
                 let framing = if style { 2 } else { 1 };
                 let end = next.position.saturating_sub(framing).max(start);
                 process_part(&mut parsed, headers, &body[start..end]);
+                if parsed.error.is_some() {
+                    break;
+                }
                 boundary = next;
             }
             None => {

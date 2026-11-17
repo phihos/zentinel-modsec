@@ -275,7 +275,8 @@ The three parity transformations are placeholders and warn with affected IDs.
 Multipart fields, names and filenames retain their original bytes. The parser
 honors quoted parameters and extended filenames, preserves repeated parts, and
 reports malformed framing/header/parameter states through
-`MULTIPART_STRICT_ERROR`. `FILES_SIZES` is keyed by filename;
+`MULTIPART_STRICT_ERROR`. Quoted-printable transfer encoding is decoded before
+inspection; other transfer encodings stay raw, as in Coraza's NextPart API. `FILES_SIZES` is keyed by filename;
 `FILES_COMBINED_SIZE` counts all multipart payload bytes (files and fields),
 excluding MIME framing, matching Coraza. Intentional `ProcessPartial` prefixes
 suppress only the EOF strict error, while other malformed states remain visible.
