@@ -845,7 +845,11 @@ impl Transaction {
         Ok(())
     }
 
-    /// Process logging phase (Phase 5).
+    /// Process logging phase (Phase 5), including after a denial.
+    ///
+    /// Matching pinned Coraza, repeated calls rerun phase 5, and a disruptive
+    /// logging rule can replace an earlier intervention without ending phase 5.
+    /// An earlier `allow` still suppresses the phase.
     pub fn process_logging(&mut self) -> Result<()> {
         self.phase = Phase::Logging;
         self.run_phase(Phase::Logging)?;
@@ -904,7 +908,7 @@ impl Transaction {
 
     /// Run rules for a specific phase.
     fn run_phase(&mut self, phase: Phase) -> Result<()> {
-        if self.allowed || self.intervention.is_some() {
+        if self.allowed || (self.intervention.is_some() && phase != Phase::Logging) {
             return Ok(());
         }
 
@@ -1182,7 +1186,9 @@ impl Transaction {
                                     Intervention::deny(status, phase, rule.id.clone());
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
-                                return Ok(());
+                                if phase != Phase::Logging {
+                                    return Ok(());
+                                }
                             }
                         }
                         DisruptiveOutcome::Block => {
@@ -1191,7 +1197,9 @@ impl Transaction {
                                     Intervention::deny(self.default_status, phase, rule.id.clone());
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
-                                return Ok(());
+                                if phase != Phase::Logging {
+                                    return Ok(());
+                                }
                             }
                         }
                         DisruptiveOutcome::Allow => {
@@ -1204,7 +1212,9 @@ impl Transaction {
                                     Intervention::redirect(url, phase, rule.id.clone());
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
-                                return Ok(());
+                                if phase != Phase::Logging {
+                                    return Ok(());
+                                }
                             }
                         }
                         DisruptiveOutcome::Drop => {
@@ -1212,7 +1222,9 @@ impl Transaction {
                                 let mut intervention = Intervention::drop(phase, rule.id.clone());
                                 intervention.add_metadata(action_result.metadata);
                                 self.intervention = Some(intervention);
-                                return Ok(());
+                                if phase != Phase::Logging {
+                                    return Ok(());
+                                }
                             }
                         }
                         DisruptiveOutcome::Pass => {
