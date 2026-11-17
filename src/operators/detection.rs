@@ -1,6 +1,6 @@
 //! Detection operators (@detectSQLi, @detectXSS).
 //!
-//! These use our pure Rust libinjection implementation.
+//! These use the selected backend in `crate::libinjection`.
 
 use super::traits::{Operator, OperatorResult};
 use crate::libinjection;
@@ -10,7 +10,7 @@ pub struct DetectSqliOperator;
 
 impl Operator for DetectSqliOperator {
     fn execute(&self, value: &str) -> OperatorResult {
-        let result = libinjection::sqli::detect_sqli(value);
+        let result = libinjection::detect_sqli(value);
         if result.is_injection {
             OperatorResult::matched(result.fingerprint.unwrap_or_default())
         } else {
@@ -28,7 +28,7 @@ pub struct DetectXssOperator;
 
 impl Operator for DetectXssOperator {
     fn execute(&self, value: &str) -> OperatorResult {
-        let result = libinjection::xss::detect_xss(value);
+        let result = libinjection::detect_xss(value);
         if result.is_injection {
             OperatorResult::matched(result.fingerprint.unwrap_or_default())
         } else {
