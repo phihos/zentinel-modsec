@@ -5,7 +5,7 @@ use crate::operators::{compile_operator, Operator};
 use crate::parser::{
     Action, Directive, FlowAction, MetadataAction, OperatorName, OperatorSpec, Parser,
     RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection, UpdateTargetById,
-    VariableName, VariableSpec, XmlTarget,
+    VariableSpec,
 };
 use crate::transformations::TransformationPipeline;
 
@@ -165,6 +165,7 @@ impl CompiledRuleset {
         // startup, because the alternative -- finding out from a rule that
         // never fired -- is the failure this reporting exists to prevent.
         report_unsupported_controls(&directives);
+        super::diagnostics::report(&directives);
 
         // SecRuleRemoveById and SecRuleUpdateTargetById are applied against
         // the whole ruleset once loading completes (like ModSecurity, where
@@ -217,8 +218,6 @@ impl CompiledRuleset {
                     }
 
                     let transformations = extract_transformations(&rule.actions)?;
-
-                    report_unimplemented_variables(&rule.variables, &id);
 
                     let operator_spec = rule.operator.clone();
                     let (operator, operator_negated) =
@@ -406,7 +405,7 @@ fn apply_target_updates(
                         }
                     }
                 }
-                report_unimplemented_variables(&update.additions, &rule.id);
+                super::diagnostics::report_added_targets(&update.additions, rule.id.as_deref());
                 rule.variables.extend(update.additions.iter().cloned());
             }
         }
@@ -460,63 +459,6 @@ fn variable_matches_target(var: &VariableSpec, target: &str) -> bool {
 /// operator keeps failing the load, as it did before: those arguments come
 /// from the same config the operator is editing, not from a third-party
 /// ruleset.
-/// Warn about rule targets this engine parses but cannot resolve.
-///
-/// Such a variable always resolves to nothing, so the rule is dead. Under a
-/// negated operator it used to be worse than dead: an empty result was reported
-/// as a match, so `SecRule REQUEST_LINE "!@rx ..."` -- CRS 920100 -- denied
-/// every request. The evaluator no longer inverts absence into a match, but a
-/// rule that can never fire is still worth saying out loud at load time rather
-/// than leaving it to be inferred from traffic that was never inspected.
-///
-/// Only rules whose targets are *all* unresolvable are reported. CRS routinely
-/// writes `ARGS|ARGS_NAMES|XML:/*`, where the unsupported target costs nothing
-/// because the rule still inspects the others.
-fn report_unimplemented_variables(variables: &[VariableSpec], rule_id: &Option<String>) {
-    report_unsupported_xml_selectors(variables, rule_id);
-
-    if variables.is_empty() || variables.iter().any(|v| v.name.is_implemented()) {
-        return;
-    }
-    let targets: Vec<String> = variables.iter().map(|v| format!("{:?}", v.name)).collect();
-    tracing::warn!(
-        rule_id = %rule_id.as_deref().unwrap_or("(no id)"),
-        targets = %targets.join("|"),
-        "rule targets only variables this engine does not implement and can \
-         never match; the rest of the ruleset was loaded"
-    );
-}
-
-/// Warn about `XML:` targets that name an XPath expression this engine cannot
-/// express.
-///
-/// `XML:/*` and `XML://@*` are answered from the flattened body and cover every
-/// `XML:` target in the stock OWASP CRS. Anything richer needs a real XPath
-/// evaluator, and a rule asking for one inspects nothing through that target --
-/// worth saying at load time rather than leaving to be inferred from traffic.
-fn report_unsupported_xml_selectors(variables: &[VariableSpec], rule_id: &Option<String>) {
-    for var in variables {
-        if var.name != VariableName::Xml {
-            continue;
-        }
-        if XmlTarget::from_selection(var.selection.as_ref()).is_some() {
-            continue;
-        }
-        let selector = match &var.selection {
-            Some(Selection::Key(k)) => k.clone(),
-            Some(Selection::Regex(r)) => format!("/{r}/"),
-            None => String::new(),
-        };
-        tracing::warn!(
-            rule_id = %rule_id.as_deref().unwrap_or("(no id)"),
-            selector = %selector,
-            "rule selects XML with an XPath expression this engine cannot \
-             evaluate; only XML:/* and XML://@* are supported, and this target \
-             will match nothing"
-        );
-    }
-}
-
 fn compile_operator_reporting(
     spec: &OperatorSpec,
     rule_id: &Option<String>,
