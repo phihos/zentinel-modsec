@@ -459,6 +459,33 @@ impl TransactionControls {
         })
     }
 
+    /// Filter an original byte-valued target without matching its display text.
+    pub fn is_target_removed_bytes(
+        &self,
+        rule_id: Option<&str>,
+        var: &VariableSpec,
+        name: &[u8],
+    ) -> bool {
+        rule_id.is_some_and(|id| {
+            self.removed_targets.iter().any(|(rule, target)| {
+                rule == id && target_matches_resolved_bytes(var, target, name)
+            })
+        })
+    }
+
+    /// Apply tag target exclusions to original collection-key bytes.
+    pub fn is_tag_target_removed_bytes(
+        &self,
+        actions: &[crate::parser::Action],
+        var: &VariableSpec,
+        name: &[u8],
+    ) -> bool {
+        self.removed_tag_targets.iter().any(|(tag, target, _)| {
+            super::ruleset::has_tag(actions, tag)
+                && target_matches_resolved_bytes(var, target, name)
+        })
+    }
+
     /// Whether the request body should be parsed at all.
     pub fn request_body_access(&self) -> bool {
         self.request_body_access.unwrap_or(true)
@@ -505,6 +532,26 @@ fn target_matches_resolved(var: &VariableSpec, target: &VariableSpec, resolved_n
         // A regex selection in a ctl: target is not something ModSecurity
         // accepts here; refuse rather than guess.
         Some(Selection::Regex(_)) => false,
+    }
+}
+
+fn target_matches_resolved_bytes(var: &VariableSpec, target: &VariableSpec, name: &[u8]) -> bool {
+    if var.name != target.name {
+        return false;
+    }
+    match &target.selection {
+        None => true,
+        Some(Selection::Key(wanted)) => name.iter().position(|&b| b == b':').is_some_and(|i| {
+            if header_keys_are_case_insensitive(var) {
+                name[i + 1..].eq_ignore_ascii_case(wanted.as_bytes())
+            } else {
+                &name[i + 1..] == wanted.as_bytes()
+            }
+        }),
+        Some(Selection::Regex(pattern)) => name.iter().position(|&b| b == b':').is_some_and(|i| {
+            crate::variables::cached_bytes_regex(pattern, var.name)
+                .is_some_and(|regex| regex.is_match(&name[i + 1..]))
+        }),
     }
 }
 

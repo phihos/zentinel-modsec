@@ -98,6 +98,24 @@ impl TransformationPipeline {
         }
     }
 
+    /// Visit original bytes and each changed stage for `multiMatch`.
+    pub fn for_each_byte_stage(
+        &self,
+        input: &[u8],
+        mut visit: impl FnMut(&[u8]) -> Result<()>,
+    ) -> Result<()> {
+        let mut current: Cow<'_, [u8]> = Cow::Borrowed(input);
+        visit(&current)?;
+        for transformation in &self.transformations {
+            let next = transformation.transform_bytes(&current)?;
+            if next.as_ref() != current.as_ref() {
+                visit(&next)?;
+                current = Cow::Owned(next.into_owned());
+            }
+        }
+        Ok(())
+    }
+
     /// Check if the pipeline is empty.
     pub fn is_empty(&self) -> bool {
         self.transformations.is_empty()

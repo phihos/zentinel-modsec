@@ -14,8 +14,8 @@ mod xml_entities;
 
 pub use collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
 pub use request::RequestData;
-pub(crate) use resolver::cached_collection_regex;
 pub use resolver::VariableResolver;
+pub(crate) use resolver::{cached_bytes_regex, cached_collection_regex};
 pub use response::ResponseData;
 pub use tx::TxCollection;
 pub use value::ByteValue;
