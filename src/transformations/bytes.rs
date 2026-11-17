@@ -240,9 +240,175 @@ pub(super) fn apply<'a>(
                     Cow::Owned(value) => Cow::Owned(value.into_bytes()),
                 });
             }
-            return Err(Error::UnsupportedBinaryInput {
-                component: format!("t:{}", transformation.name()),
-            });
+            match name.as_str() {
+                "lowercase" => input.iter().map(u8::to_ascii_lowercase).collect(),
+                "uppercase" => input.iter().map(u8::to_ascii_uppercase).collect(),
+                "removenulls" => input.iter().copied().filter(|&b| b != 0).collect(),
+                "replacenulls" => input
+                    .iter()
+                    .map(|&b| if b == 0 { b' ' } else { b })
+                    .collect(),
+                "removewhitespace" => input.iter().copied().filter(|&b| !space(b)).collect(),
+                "trim" | "trimleft" | "trimright" => {
+                    let mut start = 0;
+                    let mut end = input.len();
+                    if name != "trimright" {
+                        while start < end && space(input[start]) {
+                            start += 1;
+                        }
+                    }
+                    if name != "trimleft" {
+                        while end > start && space(input[end - 1]) {
+                            end -= 1;
+                        }
+                    }
+                    input[start..end].to_vec()
+                }
+                "compresswhitespace" => {
+                    let mut out = Vec::new();
+                    let mut last = false;
+                    for &b in input {
+                        if space(b) {
+                            if !last {
+                                out.push(b' ');
+                            }
+                            last = true;
+                        } else {
+                            out.push(b);
+                            last = false;
+                        }
+                    }
+                    out
+                }
+                "cmdline" => {
+                    let mut out = Vec::with_capacity(input.len());
+                    let mut pending = false;
+                    for &b in input {
+                        match b {
+                            b'\\' | b'"' | b'\'' | b'^' => {}
+                            b',' | b';' => {
+                                if !pending {
+                                    out.push(b' ');
+                                    pending = true;
+                                }
+                            }
+                            b if space(b) => {
+                                if !pending {
+                                    out.push(b' ');
+                                    pending = true;
+                                }
+                            }
+                            b'/' | b'(' => {
+                                if pending {
+                                    out.pop();
+                                }
+                                out.push(b);
+                                pending = false;
+                            }
+                            _ => {
+                                out.push(b.to_ascii_lowercase());
+                                pending = false;
+                            }
+                        }
+                    }
+                    out
+                }
+                "normalizepath" | "normalizepathwin" => {
+                    let normalized: Vec<u8> = input
+                        .iter()
+                        .map(|&b| if b == b'\\' { b'/' } else { b })
+                        .collect();
+                    let mut parts: Vec<&[u8]> = Vec::new();
+                    for p in normalized.split(|&b| b == b'/') {
+                        match p {
+                            b"." => {}
+                            b".." => {
+                                parts.pop();
+                            }
+                            b"" if !parts.is_empty() => {}
+                            _ => parts.push(p),
+                        }
+                    }
+                    let mut out = Vec::new();
+                    for (i, p) in parts.iter().enumerate() {
+                        if i > 0 {
+                            out.push(b'/');
+                        }
+                        out.extend_from_slice(p);
+                    }
+                    out
+                }
+                "removecomments" | "replacecomments" => {
+                    let mut out = Vec::new();
+                    let mut i = 0;
+                    while i < input.len() {
+                        if input[i..].starts_with(b"/*") {
+                            i += 2;
+                            while i < input.len() && !input[i..].starts_with(b"*/") {
+                                i += 1;
+                            }
+                            if i < input.len() {
+                                i += 2;
+                                if name == "replacecomments" {
+                                    out.push(b' ');
+                                }
+                            }
+                        } else {
+                            out.push(input[i]);
+                            i += 1;
+                        }
+                    }
+                    out
+                }
+                "removecommentschar" => {
+                    let mut out = input.to_vec();
+                    for marker in [&b"/*"[..], &b"*/"[..], &b"--"[..], &b"#"[..]] {
+                        let mut next = Vec::new();
+                        let mut i = 0;
+                        while i < out.len() {
+                            if out[i..].starts_with(marker) {
+                                i += marker.len();
+                            } else {
+                                next.push(out[i]);
+                                i += 1;
+                            }
+                        }
+                        out = next;
+                    }
+                    out
+                }
+                "utf8tounicode" => {
+                    let mut out = Vec::new();
+                    let mut remaining = input;
+                    while !remaining.is_empty() {
+                        match std::str::from_utf8(remaining) {
+                            Ok(text) => {
+                                out.extend_from_slice(transformation.transform(text).as_bytes());
+                                break;
+                            }
+                            Err(error) => {
+                                let good = error.valid_up_to();
+                                if good > 0 {
+                                    let text = std::str::from_utf8(&remaining[..good])
+                                        .expect("validated prefix");
+                                    out.extend_from_slice(
+                                        transformation.transform(text).as_bytes(),
+                                    );
+                                }
+                                let bad = error.error_len().unwrap_or(remaining.len() - good);
+                                out.extend_from_slice(&remaining[good..good + bad]);
+                                remaining = &remaining[good + bad..];
+                            }
+                        }
+                    }
+                    out
+                }
+                _ => {
+                    return Err(Error::UnsupportedBinaryInput {
+                        component: format!("t:{}", transformation.name()),
+                    })
+                }
+            }
         }
     };
     Ok(if out == input {

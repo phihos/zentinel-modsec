@@ -7,6 +7,10 @@ use std::borrow::Cow;
 pub struct Lowercase;
 
 impl Transformation for Lowercase {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let lower = input.to_lowercase();
         if lower == input {
@@ -25,6 +29,10 @@ impl Transformation for Lowercase {
 pub struct Uppercase;
 
 impl Transformation for Uppercase {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let upper = input.to_uppercase();
         if upper == input {
@@ -43,6 +51,10 @@ impl Transformation for Uppercase {
 pub struct CompressWhitespace;
 
 impl Transformation for CompressWhitespace {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut last_was_space = false;
@@ -80,6 +92,10 @@ impl Transformation for CompressWhitespace {
 pub struct RemoveWhitespace;
 
 impl Transformation for RemoveWhitespace {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let result: String = input.chars().filter(|c| !c.is_whitespace()).collect();
         if result == input {
@@ -98,6 +114,10 @@ impl Transformation for RemoveWhitespace {
 pub struct RemoveNulls;
 
 impl Transformation for RemoveNulls {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         if !input.contains('\0') {
             return Cow::Borrowed(input);
@@ -114,6 +134,10 @@ impl Transformation for RemoveNulls {
 pub struct ReplaceNulls;
 
 impl Transformation for ReplaceNulls {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         if !input.contains('\0') {
             return Cow::Borrowed(input);
@@ -130,6 +154,10 @@ impl Transformation for ReplaceNulls {
 pub struct Trim;
 
 impl Transformation for Trim {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let trimmed = input.trim();
         if trimmed.len() == input.len() {
@@ -148,6 +176,10 @@ impl Transformation for Trim {
 pub struct TrimLeft;
 
 impl Transformation for TrimLeft {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let trimmed = input.trim_start();
         if trimmed.len() == input.len() {
@@ -166,6 +198,10 @@ impl Transformation for TrimLeft {
 pub struct TrimRight;
 
 impl Transformation for TrimRight {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let trimmed = input.trim_end();
         if trimmed.len() == input.len() {
@@ -184,6 +220,10 @@ impl Transformation for TrimRight {
 pub struct NormalizePath;
 
 impl Transformation for NormalizePath {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut modified = false;
@@ -250,6 +290,10 @@ impl Transformation for NormalizePath {
 pub struct NormalizePathWin;
 
 impl Transformation for NormalizePathWin {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Windows separators must become forward slashes before resolving
         // components. CRS LFI phrase files and regexes use forward slashes.
@@ -265,6 +309,10 @@ impl Transformation for NormalizePathWin {
 pub struct RemoveComments;
 
 impl Transformation for RemoveComments {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut in_comment = false;
@@ -300,6 +348,10 @@ impl Transformation for RemoveComments {
 pub struct ReplaceComments;
 
 impl Transformation for ReplaceComments {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut in_comment = false;
@@ -338,6 +390,10 @@ impl Transformation for ReplaceComments {
 pub struct RemoveCommentsChar;
 
 impl Transformation for RemoveCommentsChar {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Remove /*, */, --, and #
         let mut result = input.to_string();
@@ -362,6 +418,10 @@ impl Transformation for RemoveCommentsChar {
 pub struct SqlHexDecode;
 
 impl Transformation for SqlHexDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Decode SQL hex strings like 0x41424344 to ABCD
         let mut result = String::new();
@@ -409,6 +469,10 @@ impl Transformation for SqlHexDecode {
 pub struct Utf8ToUnicode;
 
 impl Transformation for Utf8ToUnicode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // SecLang's transformation serializes non-ASCII code points as
         // IIS-style %u escapes; valid Rust UTF-8 is still subject to this
@@ -437,6 +501,10 @@ impl Transformation for Utf8ToUnicode {
 pub struct CmdLine;
 
 impl Transformation for CmdLine {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     /// Normalise a Windows/Unix command line the way ModSecurity does.
     ///
     /// The steps, and the order, are ModSecurity's:
@@ -506,6 +574,10 @@ impl Transformation for CmdLine {
 pub struct EscapeSeqDecode;
 
 impl Transformation for EscapeSeqDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Decode escape sequences like \n, \r, \t, \xHH, \uHHHH
         let mut result = String::new();
@@ -595,6 +667,10 @@ impl Transformation for EscapeSeqDecode {
 pub struct Sha256;
 
 impl Transformation for Sha256 {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use sha2::{Digest, Sha256 as Sha256Hasher};
         let mut hasher = Sha256Hasher::new();

@@ -32,6 +32,34 @@ fn decoding_never_replaces_binary_intermediate_bytes() {
 }
 
 #[test]
+fn binary_input_survives_normalization_and_hashes_are_raw() {
+    assert_eq!(
+        create_transformation("lowercase")
+            .unwrap()
+            .transform_bytes(b"A\xffZ")
+            .unwrap()
+            .as_ref(),
+        b"a\xffz"
+    );
+    assert_eq!(
+        create_transformation("md5")
+            .unwrap()
+            .transform_bytes(b"hello")
+            .unwrap()
+            .as_ref(),
+        &hex::decode("5d41402abc4b2a76b9719d911017c592").unwrap()
+    );
+    assert_eq!(
+        create_transformation("length")
+            .unwrap()
+            .transform_bytes(b"\xff\0")
+            .unwrap()
+            .as_ref(),
+        b"2"
+    );
+}
+
+#[test]
 fn custom_text_only_transformations_reject_binary_input() {
     struct TextOnly;
     impl Transformation for TextOnly {
