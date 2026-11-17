@@ -391,7 +391,24 @@ impl Transaction {
         Ok(())
     }
 
-    /// Process response headers (Phase 3).
+    /// Supply the received response status and protocol, then run phase 3.
+    ///
+    /// Connectors should use this entry point so response rules inspect the
+    /// actual response metadata rather than the initial empty/default state.
+    pub fn process_response_headers_with_status(
+        &mut self,
+        status: u16,
+        protocol: &str,
+    ) -> Result<()> {
+        self.response.set_status(status);
+        self.response.set_protocol(protocol);
+        self.process_response_headers()
+    }
+
+    /// Process response headers (Phase 3) using the currently stored metadata.
+    ///
+    /// Use [`Self::process_response_headers_with_status`] when supplying a real
+    /// response from an HTTP connector. This method remains for existing callers.
     pub fn process_response_headers(&mut self) -> Result<()> {
         self.phase = Phase::ResponseHeaders;
         self.run_phase(Phase::ResponseHeaders)?;

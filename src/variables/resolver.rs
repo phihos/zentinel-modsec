@@ -259,6 +259,12 @@ impl<'a> VariableResolver<'a> {
             }
 
             // Response variables
+            VariableName::ResponseProtocol => {
+                vec![(
+                    "RESPONSE_PROTOCOL".to_string(),
+                    self.response.protocol.clone(),
+                )]
+            }
             VariableName::ResponseStatus => {
                 vec![(
                     "RESPONSE_STATUS".to_string(),
