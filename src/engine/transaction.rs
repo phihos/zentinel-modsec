@@ -47,6 +47,7 @@ pub struct Transaction {
     /// Matched rules.
     matched_rules: MatchedRules,
     chain_history: Option<Box<multiphase::ChainHistory>>,
+    pending_marker: Option<Box<str>>,
     /// Last phase skipped by a request-wide or transaction-wide allow.
     allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
@@ -271,6 +272,7 @@ impl Transaction {
             default_status,
             matched_rules: MatchedRules::default(),
             chain_history: None,
+            pending_marker: None,
             allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
@@ -552,6 +554,14 @@ impl Transaction {
         // Keep the immutable ruleset alive independently of mutable transaction state.
         let ruleset = Arc::clone(&self.ruleset);
         let rules = ruleset.rules_for_phase(phase);
+        let mut idx = 0;
+        if let Some(marker) = &self.pending_marker {
+            let Some(destination) = ruleset.marker(marker, phase) else {
+                return Ok(());
+            };
+            idx = destination;
+            self.pending_marker = None;
+        }
         if rules.is_empty() {
             return Ok(());
         }
@@ -570,8 +580,8 @@ impl Transaction {
         let mut skip_count: u32 = 0;
         let mut skip_after: Option<usize> = None;
 
-        let mut idx = 0;
-        if phase == Phase::RequestHeaders
+        if idx == 0
+            && phase == Phase::RequestHeaders
             && self.tx.is_empty()
             && !self.record_setvar_effects
             && !self.record_rule_messages
@@ -727,7 +737,23 @@ impl Transaction {
 
                 match starter_dispatch.flow {
                     CompiledFlow::Skip(n) => skip_count = n,
-                    CompiledFlow::SkipAfter(next) => skip_after = Some(next),
+                    CompiledFlow::SkipAfter {
+                        destination,
+                        action,
+                    } => {
+                        if ruleset.multiphase && destination.is_none_or(|next| next <= idx) {
+                            // Coraza keeps looking for the marker in the next phase.
+                            let Action::Flow(crate::parser::FlowAction::SkipAfter(marker)) =
+                                &starter.actions[action]
+                            else {
+                                unreachable!("compiled skipAfter action")
+                            };
+                            self.pending_marker = Some(marker.as_str().into());
+                            phase_end = 0;
+                        } else {
+                            skip_after = Some(destination.unwrap_or(rules.len()));
+                        }
+                    }
                     // Chain links have already been visited by this point.
                     CompiledFlow::Chain | CompiledFlow::Next => {}
                 }

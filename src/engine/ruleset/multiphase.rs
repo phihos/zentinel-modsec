@@ -288,7 +288,13 @@ mod tests {
             let plans = rules.dispatch_for_phase(phase);
             assert_eq!(plans[0].inactive, phase == Phase::RequestBody);
             assert_eq!(plans[2].preceding_markers, 2);
-            assert!(matches!(plans[0].flow, CompiledFlow::SkipAfter(2)));
+            assert!(matches!(
+                plans[0].flow,
+                CompiledFlow::SkipAfter {
+                    destination: Some(2),
+                    ..
+                }
+            ));
         }
     }
 

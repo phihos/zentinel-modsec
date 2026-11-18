@@ -61,7 +61,10 @@ pub(in crate::engine) enum CompiledFlow {
     Next,
     Chain,
     Skip(u32),
-    SkipAfter(usize),
+    SkipAfter {
+        destination: Option<usize>,
+        action: usize,
+    },
 }
 
 impl RuleDispatch {
@@ -164,10 +167,10 @@ impl RuleDispatch {
                 Action::Flow(FlowAction::Chain) => dispatch.flow = CompiledFlow::Chain,
                 Action::Flow(FlowAction::Skip(n)) => dispatch.flow = CompiledFlow::Skip(*n),
                 Action::Flow(FlowAction::SkipAfter(marker)) => {
-                    let destination = rules
-                        .marker(marker, phase)
-                        .unwrap_or(rules.for_phase(phase).len());
-                    dispatch.flow = CompiledFlow::SkipAfter(destination);
+                    dispatch.flow = CompiledFlow::SkipAfter {
+                        destination: rules.marker(marker, phase),
+                        action: index,
+                    };
                 }
                 Action::Disruptive(DisruptiveAction::Pass) => {
                     dispatch.disruptive = rule.actions.len()
