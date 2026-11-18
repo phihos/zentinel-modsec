@@ -12,8 +12,7 @@ use std::borrow::Cow;
 /// `TX:BLOCKING_PARANOIA_LEVEL`, and its anomaly scoring never accumulates if
 /// those are treated as two different keys. Normalising here rather than at the
 /// call sites keeps the guarantee in one place -- every read and write in the
-/// engine goes through this type -- and leaves case-sensitive collections such
-/// as `ARGS` untouched.
+/// engine goes through this type.
 #[derive(Debug, Clone, Default)]
 pub struct TxCollection {
     data: HashMapCollection,
@@ -30,6 +29,10 @@ fn normalize(key: &str) -> Cow<'_, str> {
 }
 
 impl TxCollection {
+    pub(crate) fn members(&self) -> &HashMapCollection {
+        &self.data
+    }
+
     /// Create a new TX collection.
     pub fn new() -> Self {
         Self::default()

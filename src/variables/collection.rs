@@ -142,6 +142,29 @@ impl HashMapCollection {
         }
     }
 
+    /// Visit one indexed bucket or all buckets. The callback sees the lookup
+    /// key, observed name, and original value without allocating a result list.
+    pub(crate) fn visit(&self, literal: Option<&[u8]>, mut f: impl FnMut(&[u8], &[u8], &[u8])) {
+        let mut bucket = |key: &ByteValue, values: &CollectionValues| {
+            for (i, value) in values.iter().enumerate() {
+                f(
+                    key.as_bytes(),
+                    values.name(key, i).as_bytes(),
+                    value.as_bytes(),
+                );
+            }
+        };
+        if let Some(key) = literal {
+            if let Some((key, values)) = self.data.get_key_value(key) {
+                bucket(key, values);
+            }
+        } else {
+            for (key, values) in &self.data {
+                bucket(key, values);
+            }
+        }
+    }
+
     /// Add a value to a key.
     pub fn add(&mut self, key: String, value: String) {
         self.add_bytes(key, value);

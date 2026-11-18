@@ -16,6 +16,7 @@ mod xml_entities;
 
 pub use collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
 pub use request::RequestData;
+pub(crate) use resolver::qualified_name;
 pub use resolver::VariableResolver;
 pub use response::ResponseData;
 pub use tx::TxCollection;

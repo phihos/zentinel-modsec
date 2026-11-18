@@ -4,7 +4,7 @@ use super::{ByteValue, RequestData, ResponseData, TxCollection};
 #[path = "resolver_bytes.rs"]
 mod byte_resolution;
 use crate::parser::{Selection, VariableName, VariableSpec, XmlTarget};
-pub(crate) use byte_resolution::cached_bytes_regex;
+pub(crate) use byte_resolution::qualified_name;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
@@ -56,6 +56,7 @@ pub(crate) fn cached_collection_regex(pattern: &str, collection: VariableName) -
 }
 
 /// Variable resolver for transaction context.
+#[derive(Clone, Copy)]
 pub struct VariableResolver<'a> {
     request: &'a RequestData,
     response: &'a ResponseData,
@@ -66,6 +67,7 @@ pub struct VariableResolver<'a> {
     /// reads it yet (`TX:0`..`TX:9` are served from the TX collection).
     #[allow(dead_code)]
     captures: &'a [String],
+    programs: Option<&'a super::SelectorPrograms>,
     matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
 }
 
@@ -86,6 +88,7 @@ impl<'a> VariableResolver<'a> {
             matched_var,
             matched_vars,
             captures,
+            programs: None,
             matched_bytes: None,
         }
     }
