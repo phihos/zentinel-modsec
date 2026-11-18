@@ -8,6 +8,8 @@ struct Resource<'a> {
     base: Uri<String>,
     root: &'a Value,
     anchors: HashMap<&'a str, &'a Value>,
+    dynamic: Vec<&'a str>,
+    recursive: bool,
 }
 
 /// Outermost bindings are the only part of the evaluation path that can affect
@@ -81,10 +83,15 @@ impl<'a> LocalRefs<'a> {
                     {
                         return None;
                     }
+                    let recursive = draft == Draft::Draft201909
+                        && node.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true);
+                    self.recursive_roots += usize::from(recursive);
                     self.resources.push(Resource {
                         base: canonical,
                         root: node,
                         anchors: HashMap::new(),
+                        dynamic: vec![],
+                        recursive,
                     });
                     scope
                 }
@@ -110,14 +117,10 @@ impl<'a> LocalRefs<'a> {
                     if self.resources[scope].anchors.insert(name, node).is_some() {
                         return None;
                     }
+                    self.resources[scope].dynamic.push(name);
                     let slot = self.dynamic_names.len();
                     self.dynamic_names.entry(name).or_insert((slot, 0)).1 += 1;
                 }
-            }
-            if std::ptr::eq(node, self.resources[scope].root)
-                && node.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true)
-            {
-                self.recursive_roots += 1;
             }
             // The validator supplies the schema-bearing keywords for each dialect.
             pending.extend(
@@ -169,10 +172,7 @@ impl<'a> LocalRefs<'a> {
         let &(idx, _) = self.scopes.get(&std::ptr::from_ref(schema).addr())?;
         let resource = &self.resources[idx];
         let mut scope = parent.clone();
-        for (name, target) in &resource.anchors {
-            if target.get("$dynamicAnchor").and_then(Value::as_str) != Some(name) {
-                continue;
-            }
+        for name in &resource.dynamic {
             if let Some(&(slot, count)) = self.dynamic_names.get(name) {
                 if count > 1 {
                     scope.dynamic.entry(slot).or_insert(idx);
@@ -182,12 +182,7 @@ impl<'a> LocalRefs<'a> {
         // A 2019-09 recursive reference walks consecutive anchored resources,
         // stopping at a resource whose root does not declare the recursive anchor.
         if self.recursive_roots > 1 {
-            if resource
-                .root
-                .get("$recursiveAnchor")
-                .and_then(Value::as_bool)
-                == Some(true)
-            {
+            if resource.recursive {
                 scope.recursive.get_or_insert(idx);
             } else {
                 scope.recursive = None;
@@ -208,6 +203,7 @@ impl<'a> LocalRefs<'a> {
         };
         if name.is_empty()
             || name.starts_with('/')
+            || self.draft_for(target) != Some(Draft::Draft202012)
             || target.get("$dynamicAnchor").and_then(Value::as_str) != Some(name)
         {
             return Some(target);
@@ -231,7 +227,9 @@ impl<'a> LocalRefs<'a> {
             return None;
         }
         let target = self.resolve(from, reference)?;
-        if target.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true) {
+        if self.draft_for(target) == Some(Draft::Draft201909)
+            && target.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true)
+        {
             if let Some(idx) = scope.recursive {
                 return Some(self.resources[idx].root);
             }
@@ -242,7 +240,8 @@ impl<'a> LocalRefs<'a> {
     pub(super) fn resolve_dynamic(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
         let target = self.resolve(from, reference)?;
         if let Some((_, name)) = reference.rsplit_once('#') {
-            if target.get("$dynamicAnchor").and_then(Value::as_str) == Some(name)
+            if self.draft_for(target) == Some(Draft::Draft202012)
+                && target.get("$dynamicAnchor").and_then(Value::as_str) == Some(name)
                 && self
                     .dynamic_names
                     .get(name)
@@ -260,6 +259,7 @@ impl<'a> LocalRefs<'a> {
         }
         let target = self.resolve(from, reference)?;
         if self.recursive_roots > 1
+            && self.draft_for(target) == Some(Draft::Draft201909)
             && target.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true)
         {
             return None;
@@ -331,7 +331,7 @@ mod tests {
         refs.add_document(&other, &base.join("other.json").unwrap())
             .unwrap();
         assert!(refs.resolve_dynamic(&root, "#node").is_none());
-        assert!(refs.resolve_recursive(&root, "#").is_none());
+        assert_eq!(refs.resolve_recursive(&root, "#"), Some(&root));
         assert_eq!(
             refs.resolve_dynamic(&root, "other.json#other"),
             Some(&other)
@@ -371,8 +371,30 @@ mod tests {
             refs.resolve_dynamic_in(child, "#node", &basic_tree),
             Some(tree)
         );
-        assert_eq!(refs.resolve_recursive_in(child, "#", &outer), Some(&root));
+        assert_eq!(refs.resolve_recursive_in(child, "#", &outer), Some(tree));
         assert_eq!(refs.resolve(child, "#node"), Some(tree));
+    }
+
+    #[test]
+    fn recursive_scope_ends_at_a_resource_without_a_draft_2019_recursive_anchor() {
+        let base = Url::parse("file:///root.json").unwrap();
+        let root = json!({"$schema":"https://json-schema.org/draft/2019-09/schema",
+        "$recursiveAnchor":true,"$defs":{
+            "bridge":{"$id":"bridge.json","$schema":"https://json-schema.org/draft/2020-12/schema","$recursiveAnchor":true},
+            "tree":{"$id":"tree.json","$recursiveAnchor":true}
+        }});
+        let refs = LocalRefs::new(&root, &base).unwrap();
+        let tree = &root["$defs"]["tree"];
+        let outer = refs.enter_scope(&DynamicScope::default(), &root).unwrap();
+        let inherited = refs.enter_scope(&outer, tree).unwrap();
+        assert_eq!(
+            refs.resolve_recursive_in(tree, "#", &inherited),
+            Some(&root)
+        );
+        assert!(refs.resolve_recursive(tree, "#").is_none());
+        let bridge = refs.enter_scope(&outer, &root["$defs"]["bridge"]).unwrap();
+        let fresh = refs.enter_scope(&bridge, tree).unwrap();
+        assert_eq!(refs.resolve_recursive_in(tree, "#", &fresh), Some(tree));
     }
 
     #[test]
