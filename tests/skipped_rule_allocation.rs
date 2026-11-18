@@ -274,3 +274,32 @@ fn a_macro_first_value_lookup_does_not_copy_the_duplicate_bucket() {
         "macro allocated by duplicate count: {one} -> {many}"
     );
 }
+
+#[test]
+fn verdict_only_detectors_skip_owned_fingerprints() {
+    use zentinel_modsec::libinjection::{
+        detect_sqli, detect_xss, is_sqli, is_xss, DetectionResult,
+    };
+
+    // Warm both entry points before measuring their positive verdicts.
+    type Detector = (fn(&str) -> bool, fn(&str) -> DetectionResult, &'static str);
+    let detectors: [Detector; 2] = [
+        (is_sqli, detect_sqli, r#"-1839" or "1"="2"#),
+        (is_xss, detect_xss, "<script>"),
+    ];
+    for (verdict, detailed, input) in detectors {
+        assert!(verdict(input));
+        assert!(detailed(input).fingerprint.is_some());
+        ALLOCATIONS.set(0);
+        TRACKING.set(true);
+        let matched = verdict(input);
+        TRACKING.set(false);
+        let verdict_allocations = ALLOCATIONS.get();
+        ALLOCATIONS.set(0);
+        TRACKING.set(true);
+        let result = detailed(input);
+        TRACKING.set(false);
+        assert!(matched && result.is_injection);
+        assert!(ALLOCATIONS.get() > verdict_allocations);
+    }
+}
