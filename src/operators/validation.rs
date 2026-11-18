@@ -103,23 +103,20 @@ impl Operator for ValidateUrlEncodingOperator {
     }
 }
 
-fn is_valid_url_encoding(mut input: &[u8]) -> bool {
-    while !input.is_empty() {
-        // Consecutive escapes are common in encoded data. Search only when
-        // there are literal bytes to skip.
-        if input[0] != b'%' {
-            let Some(percent) = memchr::memchr(b'%', input) else {
-                return true;
-            };
-            input = &input[percent..];
+fn is_valid_url_encoding(input: &[u8]) -> bool {
+    let mut pos = 0;
+    while let Some(offset) = memchr::memchr(b'%', &input[pos..]) {
+        pos += offset;
+        // Validate a whole run before searching the literal bytes again.
+        while pos < input.len() && input[pos] == b'%' {
+            if pos + 2 >= input.len()
+                || !input[pos + 1].is_ascii_hexdigit()
+                || !input[pos + 2].is_ascii_hexdigit()
+            {
+                return false;
+            }
+            pos += 3;
         }
-        let [_, hi, lo, rest @ ..] = input else {
-            return false;
-        };
-        if !hi.is_ascii_hexdigit() || !lo.is_ascii_hexdigit() {
-            return false;
-        }
-        input = rest;
     }
     true
 }
@@ -156,6 +153,8 @@ mod tests {
         assert!(is_valid_url_encoding(b"test%2Fpath"));
         assert!(!is_valid_url_encoding(b"hello%2"));
         assert!(!is_valid_url_encoding(b"hello%GG"));
+        assert!(is_valid_url_encoding(b"ab%00%20cd%0F%FF"));
+        assert!(!is_valid_url_encoding(b"ab%00%20cd%0F%F"));
     }
 
     #[test]
