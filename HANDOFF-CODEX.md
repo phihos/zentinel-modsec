@@ -1,6 +1,26 @@
 # Coraza parity handoff — 2026-11-18
 
-## Current checkpoint
+## Coraza rule and body compatibility
+
+Engine `19cc499` implements ordered load-time exclusions, Coraza TX assignment
+semantics, transaction IDs for CRS sampling, configurable argument and JSON depth
+limits, and JSON response inspection and schema validation. Schema files and
+their references must resolve locally within the rule directory. The README
+documents the schema validator's nesting limits.
+
+Both detector backends reproduced the same 4,655 passes, 17 failures and one
+fixture error as Coraza 3.8.1 on OWASP CRS 4.25.0. All 22 blocking traces
+matched Coraza, and all 24 connector audit records matched the previous Rust
+engine. One additional comparison used Coraza's JSON writer to check the
+transaction ID, rule ID, expanded message and log data on a denial. Fixed
+transaction IDs selected both sides of the 50% stock CRS sampling policy.
+[Verification records and paired request timings](https://github.com/phihos/zentinel-modsec/tree/measure/policy-parity/benches/results/coraza-policy-parity)
+
+The 8,192-field measurements below predate `SecArgumentsLimit` support.
+To repeat them with inspection of all fields, explicitly configure a limit
+of at least 8,192 on both engines.
+
+## Previous performance checkpoint
 
 Engine `cf479a6` parses unescaped query and form fields in groups, bulk inserts
 prepared TX defaults into each transaction’s own map, and reuses known field
@@ -566,14 +586,13 @@ copy first. Manifests bind the actual decompressed input.
 
 No work remains for the stated measured acceptance criteria. Adoption still
 needs a separate, representative integration/traffic and concurrency/reload
-qualification. No installed HAPTIC/cgo replacement or production deployment has
-been tested. Upstream submission/release is not authorized by the completed work.
+qualification. Installed HAPTIC/cgo qualification and production deployment remain open.
+Upstream issue #68 tracks submitted and queued changes.
 
-Known feature gaps remain visible through warnings/errors: `SecRuleUpdateActionById`,
-in-memory body spooling/no-files limits, configurable JSON depth, general XPath,
-persistent collections/audit storage, `UNIQUE_ID`, and the documented `@within`
-approximation. Static tag/message removals apply to preceding logical rules. Transaction-local
-`ctl:ruleRemoveByTag` and tag target exclusions are also implemented. Custom XML DTD/entities remain literal
+Body spooling, persistent collections, general XPath and engine-owned audit
+storage remain outside the implemented feature set. The supported action updates
+and transaction controls are listed in the README. Both static and transaction-local
+tag exclusions work, and `@within` performs a byte substring search. Custom XML DTD/entities remain literal
 with an error; no external entity resolution was added. C libinjection and the
 pinned Go port differ on two XML/XInclude inputs, so universal semantic identity
 is not claimed.
