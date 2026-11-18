@@ -1182,29 +1182,32 @@ impl Transaction {
             &self.response,
             &self.tx,
             &self.matched_vars,
-        );
-        let mut values = resolver.resolve_bytes(spec);
+        )
+        .with_selectors(&self.ruleset.selectors);
         let by_id = self.controls.has_target_removals(logical_id);
         let by_tag = self.controls.has_tag_target_removals(tag_actions);
-        if by_id || by_tag {
-            values.retain(|(name, _)| {
-                !(by_id
-                    && self
-                        .controls
-                        .is_target_removed_bytes(logical_id, spec, name.as_bytes())
-                    || by_tag
-                        && self.controls.is_tag_target_removed_bytes(
-                            tag_actions,
-                            spec,
-                            name.as_bytes(),
-                        ))
-            });
-        }
+        let mut values = Vec::new();
+        let mut count = 0usize;
+        resolver.visit_values(spec, |prefix, member, value| {
+            if (by_id && self.controls.removed_member(logical_id, spec, member))
+                || (by_tag && self.controls.removed_tag_member(tag_actions, spec, member))
+            {
+                return;
+            }
+            if spec.count_mode {
+                count += 1;
+            } else {
+                values.push((
+                    crate::variables::qualified_name(prefix, member),
+                    ByteValue::from(value),
+                ));
+            }
+        });
         if spec.count_mode {
-            return vec![(
-                ByteValue::from(format!("&{:?}", spec.name)),
-                ByteValue::from(values.len().to_string()),
-            )];
+            values.push((
+                crate::variables::count_name(spec),
+                ByteValue::from(count.to_string()),
+            ));
         }
         values
     }
@@ -1277,12 +1280,18 @@ impl Transaction {
                 tx.apply_setvar(op, logical_id);
             }
             for ctl in &outcome.actions.control_ops {
-                let directive = CtlDirective::parse(ctl);
+                let directive = tx
+                    .ruleset
+                    .controls
+                    .get(ctl)
+                    .expect("compiled control action")
+                    .clone();
                 if !matches!(directive, CtlDirective::Unsupported { .. }) {
                     if let CtlDirective::RequestBodyProcessor(ref processor) = directive {
                         tx.request.body_processor = processor.clone();
                     }
-                    tx.controls.apply(directive);
+                    tx.controls
+                        .apply_compiled(directive, Some(&tx.ruleset.selectors));
                 }
             }
             if first && standalone && tx.record_rule_messages {

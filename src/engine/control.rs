@@ -20,7 +20,9 @@
 //! them: rejecting those would make CRS unloadable, which is a worse
 //! outcome than running it with a known and stated gap.
 
+use crate::variables::{compile_selector, folded_key, SelectorPrograms};
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::parser::{ControlAction, Selection, VariableSpec};
 
@@ -183,7 +185,7 @@ impl CtlDirective {
                     );
                 }
                 if let Some(Selection::Regex(pattern)) = &spec.selection {
-                    if regex::Regex::new(pattern).is_err() {
+                    if compile_selector(pattern, spec.name).is_err() {
                         return Self::unsupported(
                             directive,
                             value,
@@ -302,7 +304,7 @@ pub struct TransactionControls {
     /// the same string thousands of times.
     removed_targets: Vec<(String, VariableSpec)>,
     /// Parsed tag targets and, for regex keys, the compiled key matcher.
-    removed_tag_targets: Vec<(String, VariableSpec, Option<regex::Regex>)>,
+    removed_tag_targets: Vec<(String, VariableSpec, Option<Arc<regex::bytes::Regex>>)>,
     request_body_access: Option<bool>,
     request_body_processor: Option<String>,
     force_request_body_variable: bool,
@@ -318,6 +320,14 @@ impl TransactionControls {
     /// removals accumulate, since `ctl:ruleRemoveById` is additive in
     /// ModSecurity.
     pub fn apply(&mut self, directive: CtlDirective) {
+        self.apply_compiled(directive, None);
+    }
+
+    pub(crate) fn apply_compiled(
+        &mut self,
+        directive: CtlDirective,
+        programs: Option<&SelectorPrograms>,
+    ) {
         match directive {
             CtlDirective::RuleEngine(mode) => self.engine_mode = Some(mode),
             CtlDirective::RuleRemoveById(mut ranges) => self.removed_rules.append(&mut ranges),
@@ -345,13 +355,18 @@ impl TransactionControls {
                 match crate::parser::parse_single_variable(&target) {
                     Ok(spec) if !spec.count_mode => {
                         let regex = match &spec.selection {
-                            Some(Selection::Regex(pattern)) => match regex::Regex::new(pattern) {
-                                Ok(regex) => Some(regex),
-                                Err(error) => {
-                                    tracing::warn!(%tag, %target, %error, "invalid ctl:ruleRemoveTargetByTag target");
+                            Some(Selection::Regex(pattern)) => {
+                                let compiled = if let Some(programs) = programs {
+                                    programs.get(pattern, spec.name).cloned()
+                                } else {
+                                    compile_selector(pattern, spec.name).ok().map(Arc::new)
+                                };
+                                if compiled.is_none() {
+                                    tracing::warn!(%tag, %target, "invalid ctl:ruleRemoveTargetByTag target");
                                     return;
                                 }
-                            },
+                                compiled
+                            }
                             _ => None,
                         };
                         self.removed_tag_targets.push((tag, spec, regex));
@@ -435,12 +450,7 @@ impl TransactionControls {
         var: &VariableSpec,
         resolved_name: &str,
     ) -> bool {
-        let Some(id) = rule_id else {
-            return false;
-        };
-        self.removed_targets
-            .iter()
-            .any(|(r, target)| r == id && target_matches_resolved(var, target, resolved_name))
+        self.is_target_removed_bytes(rule_id, var, resolved_name.as_bytes())
     }
 
     /// Whether a tag exclusion selects this rule (or its chain starter).
@@ -457,19 +467,7 @@ impl TransactionControls {
         var: &VariableSpec,
         resolved_name: &str,
     ) -> bool {
-        self.removed_tag_targets.iter().any(|(tag, target, regex)| {
-            if !super::ruleset::has_tag(actions, tag) {
-                return false;
-            }
-            if let Some(regex) = regex {
-                var.name == target.name
-                    && resolved_name
-                        .split_once(':')
-                        .is_some_and(|(_, key)| regex.is_match(key))
-            } else {
-                target_matches_resolved(var, target, resolved_name)
-            }
-        })
+        self.is_tag_target_removed_bytes(actions, var, resolved_name.as_bytes())
     }
 
     /// Filter an original byte-valued target without matching its display text.
@@ -479,10 +477,19 @@ impl TransactionControls {
         var: &VariableSpec,
         name: &[u8],
     ) -> bool {
+        self.removed_member(rule_id, var, member(name))
+    }
+
+    pub(crate) fn removed_member(
+        &self,
+        rule_id: Option<&str>,
+        var: &VariableSpec,
+        key: Option<&[u8]>,
+    ) -> bool {
         rule_id.is_some_and(|id| {
-            self.removed_targets.iter().any(|(rule, target)| {
-                rule == id && target_matches_resolved_bytes(var, target, name)
-            })
+            self.removed_targets
+                .iter()
+                .any(|(rule, target)| rule == id && target_matches_member(var, target, key, None))
         })
     }
 
@@ -493,9 +500,18 @@ impl TransactionControls {
         var: &VariableSpec,
         name: &[u8],
     ) -> bool {
-        self.removed_tag_targets.iter().any(|(tag, target, _)| {
+        self.removed_tag_member(actions, var, member(name))
+    }
+
+    pub(crate) fn removed_tag_member(
+        &self,
+        actions: &[crate::parser::Action],
+        var: &VariableSpec,
+        key: Option<&[u8]>,
+    ) -> bool {
+        self.removed_tag_targets.iter().any(|(tag, target, regex)| {
             super::ruleset::has_tag(actions, tag)
-                && target_matches_resolved_bytes(var, target, name)
+                && target_matches_member(var, target, key, regex.as_deref())
         })
     }
 
@@ -525,77 +541,28 @@ impl TransactionControls {
     }
 }
 
-/// Whether a resolved value falls under the target named by a `ctl:` argument
-/// such as `ARGS:bar` or `REQUEST_HEADERS`.
-///
-/// The target is parsed with the same parser used for rule variables so
-/// collection names round-trip: SecLang writes `REQUEST_HEADERS` where the
-/// enum variant renders as `RequestHeaders`, and comparing rendered names
-/// would silently never match.
-fn target_matches_resolved(var: &VariableSpec, target: &VariableSpec, resolved_name: &str) -> bool {
+fn member(name: &[u8]) -> Option<&[u8]> {
+    name.iter().position(|&b| b == b':').map(|i| &name[i + 1..])
+}
+
+fn target_matches_member(
+    var: &VariableSpec,
+    target: &VariableSpec,
+    member: Option<&[u8]>,
+    regex: Option<&regex::bytes::Regex>,
+) -> bool {
     if var.name != target.name {
         return false;
     }
-
     match &target.selection {
-        // `ctl:...=ID;ARGS` excludes the whole collection from this rule.
         None => true,
         Some(Selection::Key(wanted)) => {
-            // The resolver names collection members `COLLECTION:key`. A bare
-            // name means a scalar variable, which a keyed target cannot select.
-            let Some((_, key)) = resolved_name.split_once(':') else {
-                return false;
-            };
-            if header_keys_are_case_insensitive(var) {
-                key.eq_ignore_ascii_case(wanted.as_str())
-            } else {
-                key == wanted.as_str()
-            }
+            member.is_some_and(|key| folded_key(key) == folded_key(wanted.as_bytes()))
         }
-        // A regex selection in a ctl: target is not something ModSecurity
-        // accepts here; refuse rather than guess.
-        Some(Selection::Regex(_)) => false,
+        Some(Selection::Regex(_)) => {
+            member.is_some_and(|key| regex.is_some_and(|re| re.is_match(&folded_key(key))))
+        }
     }
-}
-
-fn target_matches_resolved_bytes(var: &VariableSpec, target: &VariableSpec, name: &[u8]) -> bool {
-    if var.name != target.name {
-        return false;
-    }
-    match &target.selection {
-        None => true,
-        Some(Selection::Key(wanted)) => name.iter().position(|&b| b == b':').is_some_and(|i| {
-            if header_keys_are_case_insensitive(var) {
-                name[i + 1..].eq_ignore_ascii_case(wanted.as_bytes())
-            } else {
-                &name[i + 1..] == wanted.as_bytes()
-            }
-        }),
-        Some(Selection::Regex(pattern)) => name.iter().position(|&b| b == b':').is_some_and(|i| {
-            let normalized;
-            let member = if header_keys_are_case_insensitive(var) {
-                normalized = name[i + 1..].to_ascii_lowercase();
-                normalized.as_slice()
-            } else {
-                &name[i + 1..]
-            };
-            crate::variables::cached_bytes_regex(pattern, var.name)
-                .is_some_and(|regex| regex.is_match(member))
-        }),
-    }
-}
-
-/// Whether member keys of this variable's collection compare case-insensitively.
-///
-/// Only the HTTP header collections do — the resolver looks those up with a
-/// lowercased key. Argument names are case-sensitive in ModSecurity, and
-/// matching them loosely would silently widen an exclusion beyond what the
-/// operator wrote.
-fn header_keys_are_case_insensitive(var: &VariableSpec) -> bool {
-    matches!(
-        var.name,
-        crate::parser::VariableName::RequestHeaders | crate::parser::VariableName::ResponseHeaders
-    )
 }
 
 /// Collect the unsupported `ctl:` directives in a set of actions.
@@ -794,10 +761,9 @@ mod tests {
         assert!(!controls.is_target_removed(Some("942100"), &whole_args, "ARGS:json.query"));
     }
 
-    /// Argument names are case sensitive in ModSecurity, unlike header names.
-    /// Matching them loosely would widen an exclusion past what was written.
+    /// Coraza GetField folds the original member name for literal exceptions.
     #[test]
-    fn argument_keys_are_matched_case_sensitively() {
+    fn argument_exclusions_fold_the_observed_member_name() {
         let mut controls = TransactionControls::default();
         controls.apply(CtlDirective::parse(&ctl(
             "ruleRemoveTargetById",
@@ -806,7 +772,7 @@ mod tests {
 
         let args = crate::parser::parse_single_variable("ARGS").unwrap();
         assert!(controls.is_target_removed(Some("1"), &args, "ARGS:Token"));
-        assert!(!controls.is_target_removed(Some("1"), &args, "ARGS:token"));
+        assert!(controls.is_target_removed(Some("1"), &args, "ARGS:token"));
     }
 
     /// A keyed target cannot select a scalar variable, which has no members.

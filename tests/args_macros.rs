@@ -19,7 +19,7 @@ SecRule REQUEST_METHOD "@streq %{ARGS._method}" "id:920650,phase:2,pass""#,
 }
 
 #[test]
-fn merged_args_use_first_value_in_get_then_post_order_and_preserve_key_case() {
+fn merged_args_use_first_value_in_get_then_post_order_with_folded_keys() {
     let engine = load_with_request_body(r#"SecRuleEngine DetectionOnly
 SecAction "id:1,phase:2,pass,setvar:tx.merged=%{ARGS.foo},setvar:tx.get=%{args_get.foo},setvar:tx.post=%{ArGs_PoSt.foo},setvar:tx.upper=%{ARGS.Foo}""#).unwrap();
     let mut tx = engine.new_transaction();
@@ -34,7 +34,7 @@ SecAction "id:1,phase:2,pass,setvar:tx.merged=%{ARGS.foo},setvar:tx.get=%{args_g
         ("merged", "first"),
         ("get", "first"),
         ("post", "third"),
-        ("upper", "upper"),
+        ("upper", "first"),
     ] {
         assert_eq!(tx.tx().get(key), Some(vec![value]));
     }

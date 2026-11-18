@@ -4,7 +4,7 @@ use super::collection::{ByteCollection, Collection, HashMapCollection};
 use super::ByteValue;
 
 /// Request data container.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RequestData {
     /// HTTP method.
     pub method: String,
@@ -92,6 +92,50 @@ pub struct RequestData {
     pub server_addr: String,
     /// Server port.
     pub server_port: u16,
+}
+
+impl Default for RequestData {
+    fn default() -> Self {
+        Self {
+            method: Default::default(),
+            uri: Default::default(),
+            uri_raw: Default::default(),
+            path: Default::default(),
+            query_string: Default::default(),
+            protocol: Default::default(),
+            binary_uri: Default::default(),
+            binary_path: Default::default(),
+            binary_query: Default::default(),
+            binary_method: Default::default(),
+            binary_protocol: Default::default(),
+            headers: HashMapCollection::named(),
+            args_get: HashMapCollection::named(),
+            args_post: HashMapCollection::named(),
+            cookies: HashMapCollection::named(),
+            xml: HashMapCollection::named(),
+            multipart_part_headers: HashMapCollection::named(),
+            files: HashMapCollection::named(),
+            files_names: HashMapCollection::named(),
+            files_sizes: HashMapCollection::named(),
+            files_combined_size: Default::default(),
+            multipart_names: HashMapCollection::named(),
+            multipart_filenames: HashMapCollection::named(),
+            multipart_filename_charsets: HashMapCollection::named(),
+            multipart_filename_languages: HashMapCollection::named(),
+            multipart_strict_error: Default::default(),
+            multipart_duplicate_part_header: Default::default(),
+            multipart_invalid_quoting: Default::default(),
+            body_processor: Default::default(),
+            body_error: Default::default(),
+            body: Default::default(),
+            inbound_data_error: Default::default(),
+            client_ip: Default::default(),
+            client_port: Default::default(),
+            server_name: Default::default(),
+            server_addr: Default::default(),
+            server_port: Default::default(),
+        }
+    }
 }
 
 impl RequestData {

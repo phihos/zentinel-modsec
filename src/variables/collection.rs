@@ -73,6 +73,7 @@ pub trait MutableCollection: Collection {
 #[derive(Debug, Clone, Default)]
 pub struct HashMapCollection {
     data: IndexMap<ByteValue, CollectionValues>,
+    fold_keys: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -97,10 +98,71 @@ impl CollectionValues {
     }
 }
 
+/// Lowercase lookup keys without passing opaque bytes through a text rendering.
+/// Use simple Unicode lowercase, as Go strings.ToLower does for named maps.
+pub(crate) fn folded_key(key: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    use std::borrow::Cow;
+    if key.is_ascii() {
+        return if key.iter().any(u8::is_ascii_uppercase) {
+            Cow::Owned(key.to_ascii_lowercase())
+        } else {
+            Cow::Borrowed(key)
+        };
+    }
+    let mut folded = Vec::with_capacity(key.len());
+    for chunk in key.utf8_chunks() {
+        for ch in chunk.valid().chars() {
+            let lower = ch.to_lowercase().next().unwrap_or(ch);
+            folded.extend_from_slice(lower.encode_utf8(&mut [0; 4]).as_bytes());
+        }
+        folded.extend_from_slice(chunk.invalid());
+    }
+    Cow::Owned(folded)
+}
+
 impl HashMapCollection {
     /// Create a new empty collection.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A named map with folded lookup keys and original per-value spellings.
+    pub(crate) fn named() -> Self {
+        Self {
+            fold_keys: true,
+            ..Self::default()
+        }
+    }
+
+    fn lookup_key<'a>(&self, key: &'a [u8]) -> std::borrow::Cow<'a, [u8]> {
+        if self.fold_keys {
+            folded_key(key)
+        } else {
+            key.into()
+        }
+    }
+
+    /// Visit one indexed bucket or all buckets. The callback sees the lookup
+    /// key, observed name, and original value without allocating a result list.
+    pub(crate) fn visit(&self, literal: Option<&[u8]>, mut f: impl FnMut(&[u8], &[u8], &[u8])) {
+        let mut bucket = |key: &ByteValue, values: &CollectionValues| {
+            for (i, value) in values.iter().enumerate() {
+                f(
+                    key.as_bytes(),
+                    values.name(key, i).as_bytes(),
+                    value.as_bytes(),
+                );
+            }
+        };
+        if let Some(key) = literal {
+            if let Some((key, values)) = self.data.get_key_value(key) {
+                bucket(key, values);
+            }
+        } else {
+            for (key, values) in &self.data {
+                bucket(key, values);
+            }
+        }
     }
 
     /// Add a value to a key.
@@ -114,8 +176,12 @@ impl HashMapCollection {
 
     /// Append original bytes, keeping invalid UTF-8 and binary keys distinct.
     pub fn add_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
+        let key = key.into();
+        if let std::borrow::Cow::Owned(folded) = self.lookup_key(key.as_bytes()) {
+            return self.add_named_bytes(folded, key, value);
+        }
         let value = value.into();
-        match self.data.entry(key.into()) {
+        match self.data.entry(key) {
             Entry::Vacant(entry) => {
                 entry.insert(CollectionValues {
                     values: vec![value],
@@ -167,18 +233,23 @@ impl HashMapCollection {
 
     /// Replace values under an original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
+        let original = key.into();
+        let (key, original_names) = match self.lookup_key(original.as_bytes()) {
+            std::borrow::Cow::Borrowed(_) => (original, None),
+            std::borrow::Cow::Owned(key) => (key.into(), Some(vec![original])),
+        };
         self.data.insert(
-            key.into(),
+            key,
             CollectionValues {
                 values: vec![value.into()],
-                original_names: None,
+                original_names,
             },
         );
     }
 
     /// Delete an original byte key without rendering or decoding it.
     pub fn delete_bytes(&mut self, key: &[u8]) {
-        self.data.shift_remove(key);
+        self.data.shift_remove(self.lookup_key(key).as_ref());
     }
 
     /// Clear all data.
@@ -201,7 +272,7 @@ impl Collection for HashMapCollection {
 
     fn get(&self, key: &str) -> Option<Vec<&str>> {
         self.data
-            .get(key.as_bytes())
+            .get(self.lookup_key(key.as_bytes()).as_ref())
             .map(|vs| vs.iter().map(ByteValue::display_text).collect())
     }
 
@@ -222,7 +293,10 @@ impl Collection for HashMapCollection {
     }
 
     fn count_key(&self, key: &str) -> usize {
-        self.data.get(key.as_bytes()).map(|v| v.len()).unwrap_or(0)
+        self.data
+            .get(self.lookup_key(key.as_bytes()).as_ref())
+            .map(|v| v.len())
+            .unwrap_or(0)
     }
 }
 
@@ -234,13 +308,13 @@ impl MutableCollection for HashMapCollection {
     fn delete(&mut self, key: &str) {
         // `shift_remove`, not `swap_remove`: the latter moves the last key
         // into the gap and so reorders what is left.
-        self.data.shift_remove(key.as_bytes());
+        self.delete_bytes(key.as_bytes());
     }
 
     fn increment(&mut self, key: &str, amount: i64) {
         let current: i64 = self
             .data
-            .get(key.as_bytes())
+            .get(self.lookup_key(key.as_bytes()).as_ref())
             .and_then(|v| v.first())
             .and_then(|s| s.as_utf8().ok()?.parse().ok())
             .unwrap_or(0);
@@ -257,9 +331,9 @@ impl ByteCollection for HashMapCollection {
         self.data
             .iter()
             .flat_map(|(key, values)| {
-                values
-                    .iter()
-                    .map(move |value| (key.as_bytes(), value.as_bytes()))
+                values.iter().enumerate().map(move |(index, value)| {
+                    (values.name(key, index).as_bytes(), value.as_bytes())
+                })
             })
             .collect()
     }
@@ -279,7 +353,7 @@ impl ByteCollection for HashMapCollection {
     }
     fn get_bytes(&self, key: &[u8]) -> Option<Vec<&[u8]>> {
         self.data
-            .get(key)
+            .get(self.lookup_key(key).as_ref())
             .map(|values| values.iter().map(ByteValue::as_bytes).collect())
     }
     fn get_regex_bytes(&self, pattern: &regex::bytes::Regex) -> Vec<(&[u8], &[u8])> {
@@ -287,9 +361,9 @@ impl ByteCollection for HashMapCollection {
             .iter()
             .filter(|(key, _)| pattern.is_match(key.as_bytes()))
             .flat_map(|(key, values)| {
-                values
-                    .iter()
-                    .map(move |value| (key.as_bytes(), value.as_bytes()))
+                values.iter().enumerate().map(move |(index, value)| {
+                    (values.name(key, index).as_bytes(), value.as_bytes())
+                })
             })
             .collect()
     }

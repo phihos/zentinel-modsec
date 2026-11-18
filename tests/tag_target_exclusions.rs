@@ -90,7 +90,7 @@ SecRule ARGS_GET "@contains attack" ""
 }
 
 #[test]
-fn runtime_tag_exclusion_supports_regex_keys_and_preserves_case() {
+fn runtime_tag_exclusion_matches_regex_against_folded_member_names() {
     let ms = ModSecurity::from_string(&format!(
         r#"
 SecAction "id:1,phase:1,pass,ctl:ruleRemoveTargetByTag=attack-sqli;ARGS:/^token_/"
@@ -99,7 +99,7 @@ SecAction "id:1,phase:1,pass,ctl:ruleRemoveTargetByTag=attack-sqli;ARGS:/^token_
     ))
     .unwrap();
     assert_eq!(matches(&ms, "/?token_123=secret"), ["1", "12"]);
-    assert_eq!(matches(&ms, "/?Token_123=secret"), ["1", "10", "11", "12"]);
+    assert_eq!(matches(&ms, "/?Token_123=secret"), ["1", "12"]);
 }
 
 #[test]

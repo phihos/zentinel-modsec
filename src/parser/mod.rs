@@ -789,9 +789,11 @@ fn validate_update_target(target: &str) -> Result<()> {
 
 fn validate_target_regex(target: &VariableSpec) -> Result<()> {
     if let Some(Selection::Regex(pattern)) = &target.selection {
-        regex::Regex::new(pattern).map_err(|source| Error::RegexCompile {
-            pattern: pattern.clone(),
-            source,
+        crate::variables::compile_selector(pattern, target.name).map_err(|source| {
+            Error::RegexCompile {
+                pattern: pattern.clone(),
+                source,
+            }
         })?;
     }
     Ok(())
