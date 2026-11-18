@@ -327,10 +327,10 @@ checks `TX:json_response_body`. It falls back to the transformed rule target
 when neither applicable body is available. An empty fallback has no violation.
 Schemas with a proven inspection depth support inputs up to Coraza's 10,000
 nested containers. This includes ordinary object and array constraints, enum
-and const comparisons, boolean combinations, and simple acyclic references to
+and const comparisons, unique array items, boolean combinations, and simple acyclic references to
 definitions within the same document. The complete input still undergoes syntax
 and numeric checks. For schemas requiring unbounded inspection, such as recursive
-references or `uniqueItems: true`, and schemas the depth analysis cannot resolve,
+references, and schemas the depth analysis cannot resolve,
 the operator reports a violation at 128 nested containers.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,

@@ -157,3 +157,41 @@ fn compound_schemas_inspect_nested_fields_and_validate_the_discarded_tail() {
         assert_eq!(!tx.matched_rules().is_empty(), invalid, "{kind} {detail}");
     }
 }
+
+#[test]
+fn deep_unique_items_compare_whole_values() {
+    let dir = tempdir().unwrap();
+    fs::write(
+        dir.path().join("distinct.json"),
+        r#"{"type":"array","uniqueItems":true}"#,
+    )
+    .unwrap();
+    let rule = dir.path().join("policy.conf");
+    fs::write(
+        &rule,
+        r#"SecRule ARGS:q "@validateSchema distinct.json" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    let engine = ModSecurity::from_file(rule.to_str().unwrap()).unwrap();
+    for (first, second, violation) in [
+        ("1", "2", false),
+        ("1", "1", true),
+        ("1", "1.0", true),
+        (r#"{"a":1,"b":"x"}"#, r#"{"b":"\u0078","a":1.0}"#, true),
+        (r#"{"a":0,"a":1}"#, r#"{"a":1}"#, true),
+        (r#"{"a":1}"#, r#"{"b":1}"#, false),
+        ("-0.0", "0", true),
+    ] {
+        let nest = |value| format!("{}{value}{}", "[".repeat(160), "]".repeat(160));
+        let doc = format!("[{},{}]", nest(first), nest(second));
+        let mut tx = engine.new_transaction();
+        tx.process_uri(&format!("/?q={doc}"), "GET", "HTTP/1.1")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(
+            !tx.matched_rules().is_empty(),
+            violation,
+            "{first} vs {second}"
+        );
+    }
+}

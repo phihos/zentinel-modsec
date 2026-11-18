@@ -2,11 +2,12 @@
 use super::{ByteOperatorResult, Operator, OperatorResult};
 use crate::{Error, Result};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
 pub(crate) struct SchemaOperator {
     validator: jsonschema::Validator,
-    inspection_depth: Option<usize>,
+    inspection_depth: Option<(usize, bool)>,
 }
 
 // Pin retrieval to the configuration directory. This overrides any network/file
@@ -97,12 +98,13 @@ fn has_resource_id(value: &Value) -> bool {
     }
 }
 
-fn inspection_depth(schema: &Value) -> Option<usize> {
+fn inspection_depth(schema: &Value) -> Option<(usize, bool)> {
     fn bound(
         schema: &Value,
         root: Option<&Value>,
         budget: &mut usize,
         steps: usize,
+        unique: &mut bool,
     ) -> Option<usize> {
         if schema.is_boolean() {
             return Some(0);
@@ -111,9 +113,15 @@ fn inspection_depth(schema: &Value) -> Option<usize> {
             return None;
         }
         *budget = budget.checked_sub(1)?;
-        let mut child = |value: &Value| bound(value, root, budget, steps - 1);
+
         let mut depth = 0;
         for (key, value) in schema.as_object()? {
+            if key == "uniqueItems" && value == true {
+                *unique = true;
+                depth = depth.max(1);
+                continue;
+            }
+            let mut child = |value: &Value| bound(value, root, budget, steps - 1, unique);
             let needs = match key.as_str() {
                 "$schema" | "$id" | "id" | "$anchor" | "$dynamicAnchor" | "$comment" | "$defs"
                 | "definitions" | "title" | "description" | "examples" | "default" | "type"
@@ -173,19 +181,87 @@ fn inspection_depth(schema: &Value) -> Option<usize> {
     // The graph of references can be cyclic or expand exponentially. Reaching
     // either analysis budget just keeps the normal validation path.
     let local_root = (!has_resource_id(schema)).then_some(schema);
-    bound(schema, local_root, &mut 1024, 64).filter(|depth| *depth < 125)
+    let mut unique = false;
+    let depth = bound(schema, local_root, &mut 1024, 64, &mut unique)?;
+    (depth < 125).then_some((depth, unique))
+}
+
+// Intern exact scalar values and containers of child IDs. Keys in this map
+// are at most one container deep, including during hashing, equality and drop.
+fn intern_subtree(mut bytes: &[u8], ids: &mut HashMap<Value, usize>) -> Option<usize> {
+    let mut frames = Vec::<(Value, Option<String>)>::new();
+    while let Some((&byte, rest)) = bytes.split_first() {
+        let mut node = match byte {
+            b'{' | b'[' => {
+                let container = if byte == b'{' {
+                    Value::Object(Default::default())
+                } else {
+                    Value::Array(Vec::new())
+                };
+                frames.push((container, None));
+                bytes = rest;
+                continue;
+            }
+            b'}' | b']' => {
+                bytes = rest;
+                frames.pop()?.0
+            }
+            b':' | b',' | b' ' | b'\t' | b'\n' | b'\r' => {
+                bytes = rest;
+                continue;
+            }
+            _ => {
+                // The outer RawValue check already validated the grammar. Only
+                // scalar tokens reach this decoder, so it never recurses.
+                let mut tokens = serde_json::Deserializer::from_slice(bytes).into_iter::<Value>();
+                let value = tokens.next()?.ok()?;
+                bytes = &bytes[tokens.byte_offset()..];
+                if let Some((Value::Object(_), key @ None)) = frames.last_mut() {
+                    *key = Some(value.as_str()?.to_owned());
+                    continue;
+                }
+                value
+            }
+        };
+        // JSON Schema compares numeric values, so 1 and 1.0 are equal.
+        if let Value::Number(n) = &node {
+            if n.is_f64() {
+                let f = n.as_f64()?;
+                if f.fract() == 0.0 {
+                    if (0.0..u64::MAX as f64).contains(&f) {
+                        node = Value::from(f as u64);
+                    } else if (i64::MIN as f64..0.0).contains(&f) {
+                        node = Value::from(f as i64);
+                    }
+                }
+            }
+        }
+        let next = ids.len();
+        let id = *ids.entry(node).or_insert(next);
+        match frames.last_mut() {
+            Some((Value::Array(items), _)) => items.push(Value::from(id)),
+            Some((Value::Object(fields), key)) => {
+                fields.insert(key.take()?, Value::from(id));
+            }
+            None => return Some(id),
+            _ => unreachable!("frames hold containers"),
+        }
+    }
+    None
 }
 
 // RawValue validates the complete grammar iteratively. Keep scalar data and
-// visible members unchanged. At the proven cutoff replace container contents
-// with nothing, retaining their type. Only this bounded tree reaches recursive
+// visible members unchanged. At the proven cutoff retain each container's
+// type and, when uniqueness is checked, its identity. Only the bounded tree reaches recursive
 // parsing, the compiled validator, and Value::drop.
-fn project_deep_json(input: &[u8], visible: usize) -> Option<serde_json::Value> {
+fn project_deep_json(input: &[u8], (visible, unique): (usize, bool)) -> Option<serde_json::Value> {
     let raw = serde_json::from_slice::<&serde_json::value::RawValue>(input)
         .ok()?
         .get();
     let mut bytes = raw.as_bytes();
     let mut projected = Vec::new();
+    let mut identities = HashMap::new();
+    let mut omitted_start = 0;
     let mut copy_from = 0;
     let mut depth = 0usize;
     while let Some((&byte, rest)) = bytes.split_first() {
@@ -197,6 +273,7 @@ fn project_deep_json(input: &[u8], visible: usize) -> Option<serde_json::Value> 
                     return None;
                 }
                 if depth == visible + 1 {
+                    omitted_start = raw.len() - bytes.len() - 1;
                     projected
                         .extend_from_slice(&raw.as_bytes()[copy_from..raw.len() - bytes.len()]);
                 }
@@ -205,6 +282,18 @@ fn project_deep_json(input: &[u8], visible: usize) -> Option<serde_json::Value> 
                 depth -= 1;
                 if depth == visible {
                     copy_from = raw.len() - bytes.len() - 1;
+                    if unique {
+                        // Replacing children with their structural identity preserves equality
+                        // among same-level siblings, even when their only difference is deep.
+                        let id = intern_subtree(
+                            &raw.as_bytes()[omitted_start..=copy_from],
+                            &mut identities,
+                        )?;
+                        if byte == b'}' {
+                            projected.extend_from_slice(br#""":"#);
+                        }
+                        projected.extend_from_slice(id.to_string().as_bytes());
+                    }
                 }
             }
             b'"' => loop {
@@ -295,6 +384,7 @@ mod tests {
             }
         }
         let schemas = [
+            json!({"type":"array","uniqueItems":true}),
             json!({"type":"array"}),
             json!({"type":"object","minProperties":1}),
             json!({"properties":{"p":pair},"additionalProperties":false}),
@@ -337,7 +427,7 @@ mod tests {
         ] {
             let text = format!("{}42{}", "[".repeat(levels), "]".repeat(levels));
             assert_eq!(
-                project_deep_json(text.as_bytes(), 2).is_some(),
+                project_deep_json(text.as_bytes(), (2, false)).is_some(),
                 valid,
                 "{levels}"
             );
@@ -347,7 +437,6 @@ mod tests {
     #[test]
     fn unbounded_inspection_does_not_use_a_projection() {
         for schema in [
-            json!({"uniqueItems":true}),
             json!({"$ref":"#/$defs/list","$defs":{"list":{"items":{"$ref":"#/$defs/list"}}}}),
             json!({"$id":"https://example.invalid/schema","$ref":"#/$defs/body","$defs":{"body":true}}),
             json!({"$dynamicRef":"#node"}),
