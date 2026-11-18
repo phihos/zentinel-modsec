@@ -216,69 +216,72 @@ impl Transformation for TrimRight {
     }
 }
 
+// Pinned Coraza uses Linux filepath.Clean, maps a current-directory result
+// to the empty string, and restores an input's trailing separator.
+fn normalize_path(input: &[u8], windows: bool) -> Cow<'_, [u8]> {
+    let separator = |byte: &u8| *byte == b'/' || (windows && *byte == b'\\');
+    if input.is_empty()
+        || (input != b"/"
+            && !(windows && input.contains(&b'\\'))
+            && !input.windows(2).any(|pair| pair == b"//")
+            && !input
+                .split(|b| *b == b'/')
+                .any(|part| matches!(part, b"." | b"..")))
+    {
+        return Cow::Borrowed(input);
+    }
+
+    let absolute = separator(&input[0]);
+    let mut components: Vec<&[u8]> = Vec::new();
+    for part in input.split(separator) {
+        match part {
+            b"" | b"." => {}
+            b".." if components.last().is_some_and(|last| *last != b"..") => {
+                components.pop();
+            }
+            b".." if absolute => {}
+            _ => components.push(part),
+        }
+    }
+    let mut result = Vec::with_capacity(input.len());
+    if absolute {
+        result.push(b'/');
+    }
+    for (i, part) in components.iter().enumerate() {
+        if i > 0 {
+            result.push(b'/');
+        }
+        result.extend_from_slice(part);
+    }
+    if !result.is_empty() && input.last().is_some_and(separator) {
+        result.push(b'/');
+    }
+    if result == input {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(result)
+    }
+}
+
+fn normalize_text_path(input: &str, windows: bool) -> Cow<'_, str> {
+    match normalize_path(input.as_bytes(), windows) {
+        Cow::Borrowed(_) => Cow::Borrowed(input),
+        Cow::Owned(path) => {
+            Cow::Owned(String::from_utf8(path).expect("rearranged UTF-8 components"))
+        }
+    }
+}
+
 /// Normalize path transformation (Unix-style).
 pub struct NormalizePath;
 
 impl Transformation for NormalizePath {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(normalize_path(input, false))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        let mut result = String::new();
-        let mut modified = false;
-
-        // Replace backslashes with forward slashes
-        let normalized = if input.contains('\\') {
-            modified = true;
-            Cow::Owned(input.replace('\\', "/"))
-        } else {
-            Cow::Borrowed(input)
-        };
-
-        // Collapse multiple slashes
-        let mut last_was_slash = false;
-        for c in normalized.chars() {
-            if c == '/' {
-                if !last_was_slash {
-                    result.push('/');
-                } else {
-                    modified = true;
-                }
-                last_was_slash = true;
-            } else {
-                result.push(c);
-                last_was_slash = false;
-            }
-        }
-
-        // Remove . and .. components
-        let parts: Vec<&str> = result.split('/').collect();
-        let mut stack: Vec<&str> = Vec::new();
-
-        for part in parts {
-            match part {
-                "." => {
-                    modified = true;
-                }
-                ".." => {
-                    modified = true;
-                    stack.pop();
-                }
-                "" if !stack.is_empty() => {
-                    // Keep leading empty string for absolute paths
-                }
-                other => {
-                    stack.push(other);
-                }
-            }
-        }
-
-        if modified {
-            Cow::Owned(stack.join("/"))
-        } else {
-            Cow::Borrowed(input)
-        }
+        normalize_text_path(input, false)
     }
 
     fn name(&self) -> &'static str {
@@ -291,13 +294,11 @@ pub struct NormalizePathWin;
 
 impl Transformation for NormalizePathWin {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(normalize_path(input, true))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // Windows separators must become forward slashes before resolving
-        // components. CRS LFI phrase files and regexes use forward slashes.
-        NormalizePath.transform(input)
+        normalize_text_path(input, true)
     }
 
     fn name(&self) -> &'static str {
@@ -696,7 +697,36 @@ mod tests {
         let t = NormalizePath;
         assert_eq!(t.transform("/a/b/../c"), "/a/c");
         assert_eq!(t.transform("/a//b/./c"), "/a/b/c");
-        assert_eq!(t.transform("a\\b\\c"), "a/b/c");
+        assert_eq!(t.transform(r"a\b\c"), r"a\b\c");
+    }
+
+    #[test]
+    fn path_cleaning_preserves_relative_parents_and_trailing_separators() {
+        for (input, expected) in [
+            ("../blue", "../blue"),
+            ("../../a/../blue/", "../../blue/"),
+            ("/../blue", "/blue"),
+            ("a/../", ""),
+            ("/", "//"),
+        ] {
+            for transform in [&NormalizePath as &dyn Transformation, &NormalizePathWin] {
+                assert_eq!(transform.transform(input), expected);
+                assert_eq!(
+                    transform
+                        .transform_bytes(input.as_bytes())
+                        .unwrap()
+                        .as_ref(),
+                    expected.as_bytes()
+                );
+            }
+        }
+        assert_eq!(
+            NormalizePathWin
+                .transform_bytes(b"..\\a\\..\\b\xff")
+                .unwrap()
+                .as_ref(),
+            b"../b\xff"
+        );
     }
 
     #[test]

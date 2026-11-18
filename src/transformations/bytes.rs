@@ -405,31 +405,6 @@ pub(super) fn apply<'a>(
                     }
                     out
                 }
-                "normalizePath" | "normalizePathWin" => {
-                    let normalized: Vec<u8> = input
-                        .iter()
-                        .map(|&b| if b == b'\\' { b'/' } else { b })
-                        .collect();
-                    let mut parts: Vec<&[u8]> = Vec::new();
-                    for p in normalized.split(|&b| b == b'/') {
-                        match p {
-                            b"." => {}
-                            b".." => {
-                                parts.pop();
-                            }
-                            b"" if !parts.is_empty() => {}
-                            _ => parts.push(p),
-                        }
-                    }
-                    let mut out = Vec::new();
-                    for (i, p) in parts.iter().enumerate() {
-                        if i > 0 {
-                            out.push(b'/');
-                        }
-                        out.extend_from_slice(p);
-                    }
-                    out
-                }
                 "removeComments" | "replaceComments" => {
                     let mut out = Vec::new();
                     let mut i = 0;
