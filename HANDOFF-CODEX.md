@@ -2,6 +2,31 @@
 
 ## Current local checkpoint
 
+Engine `3594fa0e54d275449a59e165765438e34bdd0f15` on `spike/crs-parity` scans request-target
+delimiters and copies plain path spans directly. Numeric TX rules can reuse a
+verified collection position for the four most frequently compared keys per
+phase. The engine also borrows the request media type, tracks the active chain
+by its starter, and renders a binary audit value directly into the public
+record when one other snapshot holds the bytes and the cached display is cold.
+
+Against `a22d582` on the warmed 706-rule configuration, GET p50 moved from
+53.02 to 50.68 µs and form POST from 129.34 to 126.30 µs, each lower in eight of
+eight pairs. A complete GET with an 8 KiB plain path moved from 394.53 to 362.64 µs,
+lower in all six pairs. Mixed GET, form and JSON p50 moved from 181.18 to
+175.35 µs on the Rust detector. In a single-rule workload, auditing
+a 64 KiB predominantly high-bit header moved from 241.97 to 54.49 µs.
+With 256 comparisons against four recurring TX keys, p50 moved from 10.95 to 6.66 µs.
+
+Both detector backends reproduced the pinned corpus outcomes, all 22 ordered
+blocking traces and the previous engine's audit bytes on all 24 mixed fixtures.
+All 13 repository checks passed. The two builds also returned identical bytes
+for all observed request fields and arguments in 60,000 generated cases.
+The [local benchmark report](../zentinel-eval/results/latency-499db21/RESULTS.md)
+includes separate measurements for request-target parsing and complete request
+inspection, plus the audit and TX controls, raw samples and verification records.
+
+## TX evaluation and rule removal checkpoint at `a22d582`
+
 Engine commit `a22d582f1d172bbaa9a47467c7bdb8d4e440b725` evaluates single-key static numeric
 TX comparisons directly and prepares literal `setvar` assignments at load time.
 Active rule ID removals form a sorted set of disjoint ranges within each
