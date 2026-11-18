@@ -103,6 +103,9 @@ impl<'a> VariableResolver<'a> {
                               prefix: &str,
                               names: bool,
                               literal: Option<&[u8]>| {
+            if map.is_empty() {
+                return;
+            }
             let selected = match selection {
                 // NamedCollectionNames::FindString indexes the existing canonical
                 // bucket directly. Rule parsing preserves the case of ARGS names selectors.

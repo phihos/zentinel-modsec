@@ -147,6 +147,7 @@ fn normalize_binary_braced_escapes(pattern: &str, binary: bool) -> std::borrow::
 /// error, is reported by the loader with the affected rule ID.
 pub struct RxOperator {
     compiled: Arc<Regex>,
+    has_subgroups: bool,
 }
 
 impl RxOperator {
@@ -158,8 +159,10 @@ impl RxOperator {
                 source: regex::Error::Syntax("empty pattern".to_string()),
             });
         }
+        let compiled = REGEX_CACHE.get(pattern)?;
         Ok(Self {
-            compiled: REGEX_CACHE.get(pattern)?,
+            has_subgroups: compiled.captures_len() > 1,
+            compiled,
         })
     }
 }
@@ -178,7 +181,7 @@ impl Operator for RxOperator {
     }
 
     fn execute_rule_bytes(&self, value: &[u8], capture: bool) -> Result<ByteOperatorResult> {
-        if !capture || self.compiled.captures_len() == 1 {
+        if !capture || !self.has_subgroups {
             return Ok(self
                 .compiled
                 .find(value)
