@@ -46,9 +46,7 @@ fn malformed_static_rules_fail_at_load_and_dynamic_lists_validate_at_evaluation(
         "x", "256", "1-256", "2-3-4", "1-", ",0", "255,", "0,,9", "3 - 4",
     ] {
         let rules = format!(r#"SecRule ARGS:x "@validateByteRange {entry}" "id:1,phase:1,pass""#);
-        let error = ModSecurity::from_string(&rules)
-            .err()
-            .expect("invalid config");
+        let error = ModSecurity::from_string(&rules).expect_err("invalid config");
         assert!(error.to_string().contains("@validateByteRange"), "{error}");
     }
     let ms = ModSecurity::from_string(
