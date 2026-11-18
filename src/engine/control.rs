@@ -38,17 +38,6 @@ pub struct RuleIdRange {
     end: u64,
 }
 
-impl RuleIdRange {
-    fn contains(&self, id: &str) -> bool {
-        match id.trim().parse::<u64>() {
-            Ok(n) => n >= self.start && n <= self.end,
-            // Non-numeric rule IDs are legal in SecLang but cannot fall inside
-            // a numeric range.
-            Err(_) => false,
-        }
-    }
-}
-
 /// A parsed `ctl:` directive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CtlDirective {
@@ -334,6 +323,7 @@ fn parse_id_ranges(value: &str) -> Option<Vec<RuleIdRange>> {
 pub struct TransactionControls {
     engine_mode: Option<RuleEngineMode>,
     response_body_access: Option<bool>,
+    // Sorted, disjoint inclusive intervals for all active ruleRemoveById controls.
     removed_rules: Vec<RuleIdRange>,
     removed_tags: Vec<String>,
     /// `(rule id, parsed target)` pairs from `ctl:ruleRemoveTargetById`.
@@ -369,7 +359,18 @@ impl TransactionControls {
     ) {
         match directive {
             CtlDirective::RuleEngine(mode) => self.engine_mode = Some(mode),
-            CtlDirective::RuleRemoveById(mut ranges) => self.removed_rules.append(&mut ranges),
+            CtlDirective::RuleRemoveById(mut ranges) => {
+                self.removed_rules.append(&mut ranges);
+                self.removed_rules.sort_unstable_by_key(|r| r.start);
+                self.removed_rules.dedup_by(|next, previous| {
+                    if next.start <= previous.end.saturating_add(1) {
+                        previous.end = previous.end.max(next.end);
+                        true
+                    } else {
+                        false
+                    }
+                });
+            }
             CtlDirective::RuleRemoveByTag(tag) => {
                 if !self.removed_tags.contains(&tag) {
                     self.removed_tags.push(tag);
@@ -451,11 +452,14 @@ impl TransactionControls {
 
     /// Whether `ctl:ruleRemoveById` has excluded this rule.
     pub fn is_rule_removed(&self, rule_id: Option<&str>) -> bool {
-        let Some(id) = rule_id else {
-            // A rule with no ID cannot be named by ruleRemoveById.
+        if self.removed_rules.is_empty() {
+            return false;
+        }
+        let Some(id) = rule_id.and_then(|id| id.trim().parse::<u64>().ok()) else {
             return false;
         };
-        self.removed_rules.iter().any(|r| r.contains(id))
+        let index = self.removed_rules.partition_point(|r| r.end < id);
+        self.removed_rules.get(index).is_some_and(|r| r.start <= id)
     }
 
     pub(crate) fn is_tag_removed(&self, actions: &[crate::parser::Action]) -> bool {
@@ -665,6 +669,29 @@ mod tests {
             directive: directive.to_string(),
             value: value.to_string(),
         }
+    }
+
+    #[test]
+    fn overlapping_adjacent_and_repeated_id_removals_remain_a_union() {
+        let mut state = TransactionControls::default();
+        state.apply(CtlDirective::parse(&ctl(
+            "ruleRemoveById",
+            "20-30,8,0,4-7,18446744073709551615",
+        )));
+        state.apply(CtlDirective::parse(&ctl(
+            "ruleRemoveById",
+            "29-33,8-12,21,18446744073709551614",
+        )));
+        for id in 0..40 {
+            assert_eq!(
+                state.is_rule_removed(Some(&id.to_string())),
+                id == 0 || (4..=12).contains(&id) || (20..=33).contains(&id)
+            );
+        }
+        assert!(state.is_rule_removed(Some(" 0005 ")));
+        assert!(state.is_rule_removed(Some(&u64::MAX.to_string())));
+        assert!(!state.is_rule_removed(Some("named-rule")));
+        assert_eq!(state.removed_rules.len(), 4);
     }
 
     #[test]
