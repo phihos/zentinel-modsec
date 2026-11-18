@@ -105,14 +105,6 @@ struct StaticSearch<'a> {
 
 impl StaticSearch<'_> {
     fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
-        if !self.rule.operator_negated
-            && self.rule.transformations.preserves_token_width_bounds()
-            && self
-                .regex
-                .is_some_and(|regex| regex.rejects_short_token(raw))
-        {
-            return Ok(());
-        }
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
             let whole_input = self
                 .numeric
@@ -135,6 +127,24 @@ impl StaticSearch<'_> {
             let result = self.rule.operator.execute_rule_bytes(value, self.capture)?;
             Ok((result.matched != self.rule.operator_negated).then_some(result))
         };
+        if self.rule.transformations.is_empty() {
+            if let Some(result) = execute(raw)? {
+                record(PreparedStage {
+                    value: ByteValue::from(raw),
+                    result,
+                    resume_after: self.multi_match.then_some(0),
+                });
+            }
+            return Ok(());
+        }
+        if !self.rule.operator_negated
+            && self.rule.transformations.preserves_token_width_bounds()
+            && self
+                .regex
+                .is_some_and(|regex| regex.rejects_short_token(raw))
+        {
+            return Ok(());
+        }
         if self.multi_match {
             self.rule
                 .transformations
