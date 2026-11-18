@@ -2,6 +2,23 @@
 
 ## Current local checkpoint
 
+Engine commit `08950153e71fbb68e03c57fca5acec6643bddf73` on
+`spike/crs-parity` moves static rule decisions to configuration loading and
+avoids reprocessing short inputs when all built-in transformations preserve
+every byte. It also reduces work in collection lookup, regex evaluation and
+URL decoding.
+
+Compared with `e6b3518`, the default Rust engine's full-CRS median p50 fell
+from 146.15 to 114.20 µs for GET and from 291.20 to 217.25 µs for form POST.
+Both workloads improved in all eight counterbalanced pairs. Median p99 fell
+from 170.35 to 138.55 µs for GET and from 366.20 to 246.95 µs for form POST.
+These are warmed, in-process measurements. Both backends matched the existing
+CRS corpus outcomes and all 22 blocking traces. The
+[local qualification report](../zentinel-eval/results/latency-3ba717e/RESULTS.md)
+contains samples, workload definitions and build receipts.
+
+## Configuration, whitespace and count checkpoint at `e6b3518`
+
 Engine commit `e6b3518baa37cebe30a1e1e625082ac89f73b0cf` on
 `spike/crs-parity` fixes configuration loading around comments, whitespace
 and includes. Failed appends to a reusable parser restore its previous rules
