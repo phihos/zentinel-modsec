@@ -219,7 +219,20 @@ impl ByteValue {
                         .unwrap_or_else(|| BinaryValue::escaped(&value.bytes));
                     (display, value.bytes)
                 }
-                Err(value) => (value.display_text().to_owned(), value.as_bytes().to_vec()),
+                Err(value) => {
+                    // A single remaining owner often holds MATCHED_VAR until
+                    // the transaction ends. Produce the audit string directly
+                    // unless other readers already use the cached presentation.
+                    let display = match value.as_ref() {
+                        SharedValue::Binary(binary)
+                            if Arc::strong_count(&value) == 2 && binary.display.get().is_none() =>
+                        {
+                            BinaryValue::escaped(&binary.bytes)
+                        }
+                        _ => value.display_text().to_owned(),
+                    };
+                    (display, value.as_bytes().to_vec())
+                }
             },
         }
     }
@@ -395,6 +408,27 @@ mod tests {
             ByteValue::from(bytes.to_vec()).into_display_and_bytes(),
             (expected.into(), bytes.to_vec())
         );
+    }
+
+    #[test]
+    fn binary_audit_populates_the_shared_display_only_with_multiple_remaining_owners() {
+        let bytes = b"x\xff";
+        let value = ByteValue::from(bytes.as_slice());
+        let Storage::Shared(shared) = &value.storage else {
+            panic!("binary storage expected");
+        };
+        let SharedValue::Binary(binary) = shared.as_ref() else {
+            panic!("binary storage expected");
+        };
+        let expected = (r"x\xff".to_owned(), bytes.to_vec());
+        assert_eq!(value.clone().into_display_and_bytes(), expected);
+        assert!(binary.display.get().is_none());
+
+        let reader = value.clone();
+        assert_eq!(value.clone().into_display_and_bytes(), expected);
+        assert_eq!(binary.display.get(), Some(&expected.0));
+        assert_eq!(reader.into_display_and_bytes(), expected);
+        assert_eq!(value.display_text(), expected.0);
     }
 
     #[test]
