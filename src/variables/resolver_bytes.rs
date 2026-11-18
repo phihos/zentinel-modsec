@@ -175,6 +175,7 @@ impl<'a> VariableResolver<'a> {
         let request = self.request;
         use VariableName::*;
         match name {
+            UniqueId => scalar("UNIQUE_ID", request.unique_id().as_bytes()),
             RequestUri => scalar("REQUEST_URI", request.uri_bytes()),
             RequestUriRaw => scalar("REQUEST_URI_RAW", request.uri_bytes()),
             RequestFilename => scalar("REQUEST_FILENAME", request.path_bytes()),

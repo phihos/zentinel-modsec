@@ -73,6 +73,12 @@ impl ModSecurity {
         Transaction::new(Arc::clone(&self.ruleset), self.default_status)
     }
 
+    /// Create a transaction with a connector-supplied identifier.
+    /// Surrounding whitespace is trimmed. An empty ID requests a generated one.
+    pub fn new_transaction_with_id(&self, id: &str) -> Transaction {
+        Transaction::new_with_id(Arc::clone(&self.ruleset), self.default_status, id)
+    }
+
     /// Get the ruleset.
     pub fn ruleset(&self) -> &CompiledRuleset {
         &self.ruleset

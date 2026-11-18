@@ -264,8 +264,10 @@ fn report_macros(found: &mut Diagnostics, value: &str, id: &str) {
                 "tx" | "request_headers" | "args" | "args_get" | "args_post"
             ),
             None => {
-                matches!(lower.as_str(), "matched_var" | "matched_var_name")
-                    || VariableName::from_str(name).is_none()
+                matches!(
+                    lower.as_str(),
+                    "matched_var" | "matched_var_name" | "unique_id"
+                ) || VariableName::from_str(name).is_none()
             }
         };
         if !supported {

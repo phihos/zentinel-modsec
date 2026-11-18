@@ -310,6 +310,7 @@ impl VariableName {
             | VariableName::RequestUriRaw
             | VariableName::RequestFilename
             | VariableName::RequestBasename
+            | VariableName::UniqueId
             | VariableName::RequestLine
             | VariableName::RequestMethod
             | VariableName::RequestProtocol
@@ -377,7 +378,6 @@ impl VariableName {
             | VariableName::TimeMon
             | VariableName::TimeYear
             | VariableName::FilesTmpnames
-            | VariableName::UniqueId
             | VariableName::InboundAnomalyScore
             | VariableName::OutboundAnomalyScore
             | VariableName::Duration

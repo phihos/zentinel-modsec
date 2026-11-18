@@ -346,7 +346,10 @@ this deliberately retains stronger hidden-content reporting than Coraza's
 permissive parser. Bounds on depth and extracted values also report errors.
 General XPath is unsupported and produces load-time warnings with rule IDs.
 
-Unsupported variables, including `UNIQUE_ID`, are
+`UNIQUE_ID` exposes the connector ID passed to `new_transaction_with_id`, or a
+stable generated ID when none is supplied. CRS uses it for fractional sampling.
+
+Unsupported variables are
 reported at load even when a rule also selects implemented variables. Invalid
 selector/exclusion regexes and unsupported macro sources also warn with IDs.
 Only TX writes are implemented; non-TX `setvar` collection names are ignored

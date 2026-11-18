@@ -1,11 +1,17 @@
 //! Request data for variable resolution.
 
+use std::sync::OnceLock;
+
+use rand::distr::{Alphabetic, SampleString};
+
 use super::collection::{Collection, HashMapCollection};
 use super::ByteValue;
 
 /// Request data container.
 #[derive(Debug, Clone)]
 pub struct RequestData {
+    /// Generated on first access when the connector did not provide an ID.
+    pub(crate) unique_id: OnceLock<String>,
     /// HTTP method.
     pub method: String,
     /// Request URI (with query string).
@@ -97,6 +103,7 @@ pub struct RequestData {
 impl Default for RequestData {
     fn default() -> Self {
         Self {
+            unique_id: OnceLock::new(),
             method: Default::default(),
             uri: Default::default(),
             uri_raw: Default::default(),
@@ -142,6 +149,12 @@ impl RequestData {
     /// Create new request data.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The stable transaction identifier exposed to rules as `UNIQUE_ID`.
+    pub fn unique_id(&self) -> &str {
+        self.unique_id
+            .get_or_init(|| Alphabetic.sample_string(&mut rand::rng(), 19))
     }
 
     /// Set the URI and parse path/query string.

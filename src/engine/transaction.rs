@@ -279,6 +279,24 @@ impl Transaction {
         }
     }
 
+    pub(crate) fn new_with_id(
+        ruleset: Arc<CompiledRuleset>,
+        default_status: u16,
+        id: &str,
+    ) -> Self {
+        let mut transaction = Self::new(ruleset, default_status);
+        let id = id.trim();
+        if !id.is_empty() {
+            transaction.request.unique_id = OnceLock::from(id.to_owned());
+        }
+        transaction
+    }
+
+    /// The identifier shared by the connector, rule targets and macros.
+    pub fn id(&self) -> &str {
+        self.request.unique_id()
+    }
+
     /// Enable expanded rule message snapshots for a connector or audit consumer.
     /// Disabled by default; this does not change rule evaluation or log policy.
     pub fn set_record_rule_messages(&mut self, enabled: bool) {
@@ -1586,6 +1604,9 @@ impl Transaction {
 
     fn macro_value_bytes<'a>(&'a self, name: &'a str) -> &'a [u8] {
         let Some((collection, key)) = name.split_once('.') else {
+            if name.eq_ignore_ascii_case("unique_id") {
+                return self.id().as_bytes();
+            }
             if name.eq_ignore_ascii_case("matched_var") {
                 return self
                     .matched_vars

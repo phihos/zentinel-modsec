@@ -282,7 +282,7 @@ fn an_unimplemented_variable_is_classified_as_such() {
     assert!(VariableName::Xml.is_implemented());
     assert!(VariableName::FilesCombinedSize.is_implemented());
     // Still unimplemented; selecting this variable produces a load warning.
-    assert!(!VariableName::UniqueId.is_implemented());
+    assert!(!VariableName::TimeYear.is_implemented());
 }
 
 // These positive body fixtures explicitly request inspection; the engine's
