@@ -26,12 +26,6 @@ fn width(code: u32) -> u8 {
     }
 }
 
-/// Decode one pass of URL bytes. A decoded percent-encoded plus is never
-/// decoded a second time within this transformation.
-pub(crate) fn url_decode(input: &[u8], unicode: bool, plus: bool) -> Vec<u8> {
-    url_decode_from(input, unicode, plus, 0)
-}
-
 fn url_decode_from(input: &[u8], unicode: bool, plus: bool, mut i: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(input.len());
     out.extend_from_slice(&input[..i]);
@@ -208,7 +202,7 @@ fn escape_decode(input: &[u8], css: bool, javascript: bool) -> Vec<u8> {
 }
 
 /// The common unencoded case borrows the input without allocating a buffer.
-pub(super) fn url_decode_stage(input: &[u8], unicode: bool) -> Cow<'_, [u8]> {
+pub(crate) fn url_decode_stage(input: &[u8], unicode: bool) -> Cow<'_, [u8]> {
     let Some(first) = memchr::memchr2(b'%', b'+', input) else {
         return Cow::Borrowed(input);
     };

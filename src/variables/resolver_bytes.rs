@@ -47,13 +47,6 @@ impl<'a> VariableResolver<'a> {
     ) {
         let name = spec.name;
         let request = self.request;
-        let mut emit =
-            |prefix: &str, canonical: Option<&[u8]>, original: Option<&[u8]>, value: &[u8]| {
-                if !selection.excludes(prefix, canonical) {
-                    visit(prefix, original, value);
-                }
-            };
-
         let mut collection =
             |map: &HashMapCollection, prefix: &str, names: bool, literal: Option<&[u8]>| {
                 if map.is_empty() {
@@ -65,16 +58,13 @@ impl<'a> VariableResolver<'a> {
                     MemberSelector::Regex(Some(regex)) => (None, Some(regex)),
                     MemberSelector::Regex(None) => return,
                 };
-                map.visit(literal.or(selected), |key, original, value| {
-                    if regex.is_none_or(|re| re.is_match(key)) {
-                        emit(
-                            prefix,
-                            Some(key),
-                            Some(original),
-                            if names { original } else { value },
-                        );
-                    }
-                });
+                map.visit_filtered(
+                    literal.or(selected),
+                    |key| regex.is_none_or(|re| re.is_match(key)) && !selection.excludes(Some(key)),
+                    |_, original, value| {
+                        visit(prefix, Some(original), if names { original } else { value })
+                    },
+                );
             };
 
         use VariableName::*;
@@ -130,7 +120,9 @@ impl<'a> VariableResolver<'a> {
                 None,
             ),
             Tx => self.tx.visit(&selection.member, |key, value| {
-                emit("TX", Some(key), Some(key), value)
+                if !selection.excludes(Some(key)) {
+                    visit("TX", Some(key), value);
+                }
             }),
             Xml => match XmlTarget::from_selection(spec.selection.as_ref()) {
                 Some(XmlTarget::Elements) => collection(&request.xml, "XML", false, Some(b"/*")),
@@ -152,12 +144,9 @@ impl<'a> VariableResolver<'a> {
                     if !selection.member.matches(Some(&canonical)) {
                         return;
                     }
-                    emit(
-                        prefix,
-                        Some(&canonical),
-                        Some(key),
-                        if names { key } else { value },
-                    );
+                    if !selection.excludes(Some(&canonical)) {
+                        visit(prefix, Some(key), if names { key } else { value });
+                    }
                 };
                 if let Some(values) = self.matched_bytes {
                     for (key, value) in values {
@@ -169,7 +158,11 @@ impl<'a> VariableResolver<'a> {
                     }
                 }
             }
-            _ => self.visit_scalar(name, |prefix, value| emit(prefix, None, None, value)),
+            _ if !selection.excludes(None) => self.visit_scalar(name, |prefix, value| {
+                debug_assert_eq!(prefix, super::super::selectors::emitted_name(name));
+                visit(prefix, None, value);
+            }),
+            _ => (),
         }
     }
 

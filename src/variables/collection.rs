@@ -171,14 +171,31 @@ impl HashMapCollection {
 
     /// Visit one indexed bucket or all buckets. The callback sees the lookup
     /// key, observed name, and original value without allocating a result list.
-    pub(crate) fn visit(&self, literal: Option<&[u8]>, mut f: impl FnMut(&[u8], &[u8], &[u8])) {
+    pub(crate) fn visit(&self, literal: Option<&[u8]>, f: impl FnMut(&[u8], &[u8], &[u8])) {
+        self.visit_filtered(literal, |_| true, f);
+    }
+
+    /// All occurrences in a bucket share their canonical name. Apply name
+    /// selectors once, retaining the observed spelling and order of each value.
+    pub(crate) fn visit_filtered(
+        &self,
+        literal: Option<&[u8]>,
+        mut accepts: impl FnMut(&[u8]) -> bool,
+        mut f: impl FnMut(&[u8], &[u8], &[u8]),
+    ) {
         let mut bucket = |key: &ByteValue, values: &CollectionValues| {
-            for (i, value) in values.iter().enumerate() {
-                f(
-                    key.as_bytes(),
-                    values.name(key, i).as_bytes(),
-                    value.as_bytes(),
-                );
+            let key = key.as_bytes();
+            if !accepts(key) {
+                return;
+            }
+            if let Some(names) = &values.original_names {
+                for (name, value) in names.iter().zip(values.iter()) {
+                    f(key, name.as_bytes(), value.as_bytes());
+                }
+            } else {
+                for value in values.iter() {
+                    f(key, key, value.as_bytes());
+                }
             }
         };
         if let Some(key) = literal {
