@@ -367,7 +367,6 @@ mod tests {
             refs.resolve_recursive_in(tree, "#", &inherited),
             Some(&root)
         );
-        assert!(refs.resolve_recursive(tree, "#").is_none());
         let bridge = refs.enter_scope(&outer, &root["$defs"]["bridge"]).unwrap();
         let fresh = refs.enter_scope(&bridge, tree).unwrap();
         assert_eq!(refs.resolve_recursive_in(tree, "#", &fresh), Some(tree));

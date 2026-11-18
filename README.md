@@ -344,13 +344,18 @@ fail rule loading. A schema violation or malformed nonempty JSON matches the
 operator. From phase 2 it prefers `TX:json_request_body`; from phase 4 it first
 checks `TX:json_response_body`. It falls back to the transformed rule target
 when neither applicable body is available. An empty fallback has no violation.
-Schemas with a proven inspection depth support inputs up to Coraza's 10,000
-nested containers. This includes ordinary object and array constraints, enum
-and const comparisons, unique array items, boolean combinations, and simple acyclic references to
-definitions within the same document. The complete input still undergoes syntax
-and numeric checks. For schemas requiring unbounded inspection, such as recursive
-references, and schemas the depth analysis cannot resolve,
-the operator reports a violation at 128 nested containers.
+The standard JSON Schema validator handles inputs below its 128-container nesting
+limit. For deeper inputs, the operator checks JSON syntax and numeric range
+through Coraza's 10,000-container limit. Finite schemas inspect the prefix they
+can observe. Recursive object and array schemas evaluate on a heap-backed graph
+that tracks references, conditional branches and evaluated properties or items.
+Local companion files, scoped dynamic anchors and recursive anchors use the
+dialect active at each referenced schema.
+
+A deeper input reports a violation when the graph cannot resolve a schema
+unambiguously. This includes reference cycles that never advance to a child,
+unknown dialects or explicit custom vocabularies, and configurations requiring
+more than 16,384 extra specializations for different dynamic anchor scopes.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@rbl`,
