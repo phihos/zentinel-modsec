@@ -102,8 +102,6 @@ fn ignored_actions_on_chain_children_name_the_chain_starter() {
         "noauditlog",
         "log",
         "nolog",
-        "allow:phase",
-        "allow:request",
         "setvar:ip.score=+1",
     ] {
         let (_, log) = load_logs(&format!(
@@ -162,6 +160,8 @@ fn supported_semantics_and_component_metadata_do_not_warn() {
     let (_, log) = load_logs(
         r#"
 SecComponentSignature "example"
+SecAction "id:107,phase:2,allow:phase"
+SecAction "id:108,phase:2,allow:request"
 SecRule ARGS "@contains attack" "id:109,phase:2,pass,t:lowercase,setvar:tx.score=+1"
 "#,
     );

@@ -57,8 +57,8 @@ pub struct Transaction {
     default_status: u16,
     /// Matched rules.
     matched_rules: Vec<String>,
-    /// Allow flag (skip further processing).
-    allowed: bool,
+    /// Last phase skipped by a request-wide or transaction-wide allow.
+    allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
     matched_vars: Vec<(ByteValue, ByteValue)>,
     /// Per-transaction `ctl:` overrides.
@@ -227,7 +227,7 @@ impl Transaction {
             intervention: None,
             default_status,
             matched_rules: Vec::new(),
-            allowed: false,
+            allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
             matched_data: Vec::new(),
@@ -876,7 +876,7 @@ impl Transaction {
     ///
     /// Matching pinned Coraza, repeated calls rerun phase 5, and a disruptive
     /// logging rule can replace an earlier intervention without ending phase 5.
-    /// An earlier `allow` still suppresses the phase.
+    /// An earlier global `allow` suppresses logging rules.
     pub fn process_logging(&mut self) -> Result<()> {
         self.phase = Phase::Logging;
         self.run_phase(Phase::Logging)?;
@@ -935,7 +935,9 @@ impl Transaction {
 
     /// Run rules for a specific phase.
     fn run_phase(&mut self, phase: Phase) -> Result<()> {
-        if self.allowed || (self.intervention.is_some() && phase != Phase::Logging) {
+        if self.allow_through.is_some_and(|last| phase <= last)
+            || (self.intervention.is_some() && phase != Phase::Logging)
+        {
             return Ok(());
         }
 
@@ -1093,15 +1095,19 @@ impl Transaction {
                 }
                 match disruptive {
                     None | Some(DisruptiveAction::Pass) => {}
-                    Some(
-                        DisruptiveAction::Allow
-                        | DisruptiveAction::AllowPhase
-                        | DisruptiveAction::AllowRequest,
-                    ) => {
-                        self.allowed = true;
+                    _ if self.engine_mode() != RuleEngineMode::On => {}
+                    Some(DisruptiveAction::AllowPhase) => return Ok(()),
+                    Some(DisruptiveAction::AllowRequest) => {
+                        if phase.is_request_phase() {
+                            self.allow_through = Some(Phase::RequestBody);
+                            return Ok(());
+                        }
+                    }
+                    Some(DisruptiveAction::Allow) => {
+                        self.allow_through = Some(Phase::Logging);
                         return Ok(());
                     }
-                    Some(action) if self.engine_mode() == RuleEngineMode::On => {
+                    Some(action) => {
                         let metadata = rule_metadata(&starter.actions);
                         let id = rule.id.clone();
                         let mut intervention = match action {
@@ -1138,7 +1144,6 @@ impl Transaction {
                             return Ok(());
                         }
                     }
-                    _ => {}
                 }
             } else {
                 // Rule didn't match. If it belongs to a chain, the chain as a

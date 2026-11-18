@@ -334,9 +334,15 @@ The byte APIs preserve binary input, captures and macro expansions; string APIs
 provide display values. Header lookup ignores ASCII case while match metadata
 preserves each original header name.
 
+With `SecRuleEngine On`, `allow:phase` ends the current phase and
+`allow:request` skips the remaining request rules. Response and logging
+rules still run after `allow:request`. Global `allow` skips all remaining
+rules, including logging rules, matching Coraza 3.8.1. In `DetectionOnly`,
+all three actions record the match and rule evaluation continues.
+
 Accepted action limitations are also reported with rule IDs:
 persistent-collection actions, script execution, response modification,
-`proxy`, `pause`, `xmlns`, scoped `allow`, and logging/sanitization policy.
+`proxy`, `pause`, `xmlns`, and logging/sanitization policy.
 The engine has no log sink; embedding applications must implement logging
 policy. Known unsupported controls warn at load without repeating the warning
 on each request.
