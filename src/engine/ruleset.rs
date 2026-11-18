@@ -53,7 +53,7 @@ impl std::fmt::Debug for CompiledRule {
 /// Rules grouped by phase for efficient processing.
 pub struct Rules {
     /// Rules organized by phase.
-    by_phase: HashMap<Phase, Vec<CompiledRule>>,
+    by_phase: [Vec<CompiledRule>; 5],
     /// Markers for skipAfter, as the index the marker occupies in *each*
     /// phase's rule list. A marker separates rules in every phase, not only in
     /// the phase of the rules written around it, so a phase-2 `skipAfter` must
@@ -65,31 +65,28 @@ impl Rules {
     /// Create empty rules.
     pub fn new() -> Self {
         Self {
-            by_phase: HashMap::new(),
+            by_phase: Default::default(),
             markers: HashMap::new(),
         }
     }
 
     /// Add a rule to a specific phase.
     pub fn add(&mut self, phase: Phase, rule: CompiledRule) {
-        self.by_phase.entry(phase).or_default().push(rule);
+        self.by_phase[phase.index()].push(rule);
     }
 
     /// Record a marker at the current end of every phase's rule list.
     pub fn add_marker(&mut self, name: String) {
         let positions = Phase::ALL
             .iter()
-            .map(|&phase| (phase, self.by_phase.get(&phase).map_or(0, |v| v.len())))
+            .map(|&phase| (phase, self.for_phase(phase).len()))
             .collect();
         self.markers.insert(name, positions);
     }
 
     /// Get rules for a phase.
     pub fn for_phase(&self, phase: Phase) -> &[CompiledRule] {
-        self.by_phase
-            .get(&phase)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        &self.by_phase[phase.index()]
     }
 
     /// Get a marker's position within one phase.
@@ -99,7 +96,7 @@ impl Rules {
 
     /// Get total rule count.
     pub fn count(&self) -> usize {
-        self.by_phase.values().map(|v| v.len()).sum()
+        self.by_phase.iter().map(|v| v.len()).sum()
     }
 }
 
@@ -328,18 +325,15 @@ impl CompiledRuleset {
                         chain_next: None,
                     };
 
-                    let rules_for_phase = ruleset.rules.by_phase.entry(phase).or_default();
+                    let rules_for_phase = &mut ruleset.rules.by_phase[phase.index()];
                     let idx = rules_for_phase.len();
                     rules_for_phase.push(compiled);
 
                     // Handle chaining
                     if let Some((chain_phase, chain_idx)) = pending_chain.take() {
                         if chain_phase == phase {
-                            if let Some(prev_rule) = ruleset
-                                .rules
-                                .by_phase
-                                .get_mut(&chain_phase)
-                                .and_then(|r| r.get_mut(chain_idx))
+                            if let Some(prev_rule) =
+                                ruleset.rules.by_phase[chain_phase.index()].get_mut(chain_idx)
                             {
                                 prev_rule.chain_next = Some(idx);
                             }
@@ -423,7 +417,7 @@ impl CompiledRuleset {
         }
 
         apply_target_updates(&mut ruleset, &target_updates);
-        for rule in ruleset.rules.by_phase.values().flatten() {
+        for rule in ruleset.rules.by_phase.iter().flatten() {
             for action in &rule.actions {
                 if let Action::Control(ctl) = action {
                     ruleset.controls.entry(ctl.clone()).or_insert_with(|| {
@@ -495,7 +489,7 @@ impl CompiledRuleset {
     }
 
     pub(super) fn dispatch_for_phase(&self, phase: Phase) -> &[RuleDispatch] {
-        &self.dispatch[usize::from(phase.number() - 1)]
+        &self.dispatch[phase.index()]
     }
 
     /// Get total rule count.
@@ -670,7 +664,7 @@ fn apply_target_updates(
     if updates.is_empty() {
         return;
     }
-    for rules in ruleset.rules.by_phase.values_mut() {
+    for rules in &mut ruleset.rules.by_phase {
         for rule in rules.iter_mut() {
             for (tag, update) in updates {
                 let selected = match tag {

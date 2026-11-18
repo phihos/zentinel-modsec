@@ -73,3 +73,38 @@ fn a_three_link_chain_failing_on_the_last_link_leaves_nothing() {
     assert!(tx.matched_rules().is_empty());
     assert!(tx.matched_data().is_empty(), "{:?}", tx.matched_data());
 }
+
+#[test]
+fn concurrent_phase_reads_preserve_starter_link_and_anonymous_ids() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule REQUEST_METHOD "@streq GET" "id:0007,phase:1,pass,chain"
+SecRule REQUEST_URI "@streq /" "t:none"
+SecRule REQUEST_METHOD "@streq GET" "phase:1,pass"
+SecRule REQUEST_METHOD "@streq GET" "id:099,phase:2,pass"
+"#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    std::thread::scope(|scope| {
+        for _ in 0..2 {
+            scope.spawn(|| {
+                assert_eq!(tx.matched_rules(), ["7"]);
+                let ids: Vec<_> = tx
+                    .matched_data()
+                    .iter()
+                    .map(|d| d.rule_id.as_deref())
+                    .collect();
+                assert_eq!(ids, [Some("7"), Some("7"), None]);
+            });
+        }
+    });
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["7", "99"]);
+    assert_eq!(
+        tx.matched_data().last().unwrap().rule_id.as_deref(),
+        Some("99")
+    );
+}
