@@ -3,7 +3,7 @@
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 /// A request value, collection key, capture, or expanded macro.
 ///
@@ -70,13 +70,49 @@ struct BinaryValue {
     display: OnceLock<String>,
 }
 
+/// A byte's standard ASCII escape takes at most four bytes (for example, `\xff`).
+struct AsciiEscape {
+    bytes: [u8; 4],
+    len: u8,
+}
+
+static ASCII_ESCAPES: LazyLock<[AsciiEscape; 256]> = LazyLock::new(|| {
+    std::array::from_fn(|i| {
+        let escape = std::ascii::escape_default(i as u8);
+        let len = escape.len() as u8;
+        let mut bytes = [0; 4];
+        for (dst, byte) in bytes.iter_mut().zip(escape) {
+            *dst = byte;
+        }
+        AsciiEscape { bytes, len }
+    })
+});
+
 impl BinaryValue {
     fn escaped(bytes: &[u8]) -> String {
-        bytes
-            .iter()
-            .flat_map(|&b| std::ascii::escape_default(b))
-            .map(char::from)
-            .collect()
+        const BLOCK: usize = 256;
+        let escapes = &*ASCII_ESCAPES;
+        let mut output = Vec::with_capacity(bytes.len());
+        let mut buffer = [0; BLOCK * 4];
+        for block in bytes.chunks(BLOCK) {
+            if block
+                .iter()
+                .all(|byte| matches!(byte, b' '..=b'~') && !matches!(byte, b'\'' | b'"' | b'\\'))
+            {
+                output.extend_from_slice(block);
+                continue;
+            }
+            let mut written = 0;
+            for &byte in block {
+                let escape = &escapes[usize::from(byte)];
+                // Write the padded entry. The next write starts at the end of
+                // the actual escape, and each input byte has four bytes of room.
+                buffer[written..written + 4].copy_from_slice(&escape.bytes);
+                written += usize::from(escape.len);
+            }
+            output.extend_from_slice(&buffer[..written]);
+        }
+        String::from_utf8(output).expect("ASCII escape table contains only ASCII")
     }
 
     fn display_text(&self) -> &str {
@@ -302,6 +338,21 @@ mod tests {
             ByteValue::from(bytes.to_vec()).into_display_and_bytes(),
             (expected.into(), bytes.to_vec())
         );
+    }
+
+    #[test]
+    fn binary_display_matches_standard_escaping_across_blocks() {
+        let mut bytes: Vec<u8> = (0..=255).collect();
+        bytes.extend([b'a'; 512]);
+        bytes.extend([b'\\', b'"', b'\'', b'\t', b'\r', b'\n', 0x7f, 0xff]);
+        bytes.extend([0xff; 257]);
+        for len in [0, 1, 255, 256, 257, 511, 512, 769, bytes.len()] {
+            let input = &bytes[..len];
+            assert_eq!(
+                BinaryValue::escaped(input),
+                input.escape_ascii().to_string()
+            );
+        }
     }
 
     #[test]
