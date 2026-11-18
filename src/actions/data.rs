@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_macro_expansion() {
-        let mut tx = HashMapCollection::new();
+        let mut tx = crate::variables::TxCollection::new();
         tx.set("anomaly_score".to_string(), "25".to_string());
 
         tx.set("empty".to_owned(), String::new());
