@@ -2,6 +2,21 @@
 
 ## Current local checkpoint
 
+Engine commit `8692a953e2bc51c672391bd720be95bef4c661fb` on
+`spike/crs-parity` implements single-ID `deny`, `pass` and `status` rule
+updates, checks byte-range declarations, and fixes response-length and
+directory-basename resolution. Macro expansion borrows first collection
+values. Boolean libinjection calls avoid constructing owned fingerprints.
+
+The default Rust and optional C builds matched Coraza 3.8.1 on every CRS
+4.25.0 case outcome and all 22 blocking traces. Warmed full-CRS allocations
+fell from 1,426 to 1,299 per GET and from 2,037 to 1,878 per form POST.
+The [local qualification report](../zentinel-eval/results/range-5a6021b/RESULTS.md)
+records the accepted rule-update subset, known corpus failures, timing
+distributions and the source-bound receipts.
+
+## Rule semantics and capture checkpoint at `e532df5`
+
 Engine commit `e532df5c83c67ee4996d2b698444fc1621e4d596` on `spike/crs-parity`
 adds scoped allow actions, file-backed operator aliases, ordered phrase
 captures, ModSecurity word matching and IPv4-mapped network handling. Capture
