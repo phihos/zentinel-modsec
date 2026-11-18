@@ -7,7 +7,7 @@ use super::body::{BodyState, BodyWriteResult};
 use super::chain::ChainState;
 use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
-use super::match_log::{MatchLog, RawMatch, RuleLocation};
+use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
 use super::target_indices::RequestCollections;
@@ -59,7 +59,7 @@ pub struct Transaction {
     /// Default block status.
     default_status: u16,
     /// Matched rules.
-    matched_rules: MatchLog<RuleLocation>,
+    matched_rules: MatchedRules,
     /// Last phase skipped by a request-wide or transaction-wide allow.
     allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
@@ -239,7 +239,7 @@ impl Transaction {
             phase: Phase::RequestHeaders,
             intervention: None,
             default_status,
-            matched_rules: MatchLog::default(),
+            matched_rules: MatchedRules::default(),
             allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
@@ -1091,12 +1091,12 @@ impl Transaction {
                         .extend(&ruleset, pending_chain_data.drain(..));
                 }
                 if starter.id.is_some() {
-                    self.matched_rules.extend(
+                    self.matched_rules.push(
                         &ruleset,
-                        std::iter::once(RuleLocation {
+                        RuleLocation {
                             phase,
                             index: starter_index,
-                        }),
+                        },
                     );
                 }
 
