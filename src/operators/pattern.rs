@@ -165,6 +165,43 @@ impl RxOperator {
             compiled,
         })
     }
+
+    // A negated regex can only fire on an underlying miss, which has no
+    // matched portion or subgroups. One existence search is sufficient.
+    #[inline]
+    pub(crate) fn rule_match(
+        &self,
+        value: &[u8],
+        capture: bool,
+        negated: bool,
+    ) -> Option<ByteOperatorResult> {
+        if negated {
+            (!self.compiled.is_match(value)).then(ByteOperatorResult::no_match)
+        } else {
+            self.positive_match(value, capture)
+        }
+    }
+
+    #[inline]
+    fn positive_match(&self, value: &[u8], capture: bool) -> Option<ByteOperatorResult> {
+        if !capture || !self.has_subgroups {
+            return self
+                .compiled
+                .find(value)
+                .map(|m| ByteOperatorResult::matched(m.as_bytes()));
+        }
+        self.compiled
+            .captures(value)
+            .map(|captures| ByteOperatorResult {
+                matched: true,
+                captures: captures
+                    .iter()
+                    .skip(1)
+                    .map(|capture| capture.map(|m| m.as_bytes().to_vec()).unwrap_or_default())
+                    .collect(),
+                matched_value: captures.get(0).map(|m| m.as_bytes().to_vec()),
+            })
+    }
 }
 
 impl Operator for RxOperator {
@@ -181,27 +218,11 @@ impl Operator for RxOperator {
     }
 
     fn execute_rule_bytes(&self, value: &[u8], capture: bool) -> Result<ByteOperatorResult> {
-        if !capture || !self.has_subgroups {
-            return Ok(self
-                .compiled
-                .find(value)
-                .map_or_else(ByteOperatorResult::no_match, |m| {
-                    ByteOperatorResult::matched(m.as_bytes())
-                }));
-        }
-        Ok(if let Some(captures) = self.compiled.captures(value) {
-            ByteOperatorResult {
-                matched: true,
-                captures: captures
-                    .iter()
-                    .skip(1)
-                    .map(|capture| capture.map(|m| m.as_bytes().to_vec()).unwrap_or_default())
-                    .collect(),
-                matched_value: captures.get(0).map(|m| m.as_bytes().to_vec()),
-            }
-        } else {
-            ByteOperatorResult::no_match()
-        })
+        Ok(self.positive_match(value, capture).unwrap_or_default())
+    }
+
+    fn compiled_regex(&self) -> Option<&Self> {
+        Some(self)
     }
 
     fn name(&self) -> &'static str {
