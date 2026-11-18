@@ -1,0 +1,28 @@
+{
+  "baseline": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+  "candidate": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+  "phases": 5,
+  "cases": 8,
+  "diagnostic_modes": [
+    false,
+    true
+  ],
+  "sides": {
+    "controls-default-before": {
+      "output_sha256": "f459c8dcf0075389f4aa760accdabef4353f04d3716fd0365f49e977c0113c40",
+      "bytes": 29176
+    },
+    "controls-default-after": {
+      "output_sha256": "f459c8dcf0075389f4aa760accdabef4353f04d3716fd0365f49e977c0113c40",
+      "bytes": 29176
+    },
+    "controls-ffi-before": {
+      "output_sha256": "f459c8dcf0075389f4aa760accdabef4353f04d3716fd0365f49e977c0113c40",
+      "bytes": 29176
+    },
+    "controls-ffi-after": {
+      "output_sha256": "f459c8dcf0075389f4aa760accdabef4353f04d3716fd0365f49e977c0113c40",
+      "bytes": 29176
+    }
+  }
+}

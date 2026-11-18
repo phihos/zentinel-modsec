@@ -1,0 +1,17 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling zentinel-modsec v0.6.0 (/tmp/zentinel-phrase-oracle-b2f41fe91335)
+    Finished `release` profile [optimized] target(s) in 10.57s
+     Running unittests src/lib.rs (/tmp/zentinel-next-regex-target/release/deps/zentinel_modsec-4b42985b4d595045)
+
+running 1 test
+phase search CRS actual target pruning [arguments,filename,headers] [132368, 41867, 30012]
+phase search CRS: stages 332060, pruned word targets 138639, pruned non-word path targets 65608, positive stages 12866, positive changed stages 1797 (words 1, paths 1796), mismatches 0
+phase search controls actual target pruning [arguments,filename,headers] [25676, 0, 0]
+phase search controls: stages 59710, pruned word targets 17246, pruned non-word path targets 8430, positive stages 6782, positive changed stages 15 (words 7, paths 8), mismatches 0
+CRS rules 698, inline phrase rules 12, file-backed phrase rules 21, distinct live programs plus two controls 27, phrases 5899, capture-mode comparisons 3932762, early rejections 1548505, matched portions 32028, ordered captures 36798, mismatches 0
+test operators::pattern::crs_phrase_differential ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 208 filtered out; finished in 0.99s
+

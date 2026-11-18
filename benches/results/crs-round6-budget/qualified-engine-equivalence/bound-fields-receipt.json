@@ -1,0 +1,33 @@
+{
+  "baseline": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+  "candidate": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+  "phases": 5,
+  "cases": 12,
+  "members": [
+    31,
+    32,
+    33,
+    127,
+    128,
+    129
+  ],
+  "total_rules": 699,
+  "sides": {
+    "bound-fields-default-before": {
+      "output_sha256": "fc3c14053895e4512928a255b06160143c4a81f3420f35bdac77476bc10cbfcc",
+      "bytes": 622104
+    },
+    "bound-fields-default-after": {
+      "output_sha256": "fc3c14053895e4512928a255b06160143c4a81f3420f35bdac77476bc10cbfcc",
+      "bytes": 622104
+    },
+    "bound-fields-ffi-before": {
+      "output_sha256": "fc3c14053895e4512928a255b06160143c4a81f3420f35bdac77476bc10cbfcc",
+      "bytes": 622104
+    },
+    "bound-fields-ffi-after": {
+      "output_sha256": "fc3c14053895e4512928a255b06160143c4a81f3420f35bdac77476bc10cbfcc",
+      "bytes": 622104
+    }
+  }
+}

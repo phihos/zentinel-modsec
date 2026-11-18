@@ -1,0 +1,101 @@
+{
+  "method": "Rust system-allocator requested live bytes above an empty process after compiling and before inspecting any request; difference after dropping the engine counts bytes released; fresh process per run.",
+  "fixture": "096ea52ee12b1a225b29d79628e381fa9f586a59dabef0b7c9cd93a76d8f08ef",
+  "rules": 698,
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "runs": {
+    "baseline": {
+      "commit": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+      "tree": "05e148970987c1b8d002bba3ab82681915dfe526",
+      "engine_rlib": "01f3f6f623c548108e3409e1d5db3d494196f02c53a2017fa0d6a987c8595f3d",
+      "worker": "7f0f192f957e80fde47778cc65a0915acfe3954d8f5879009593bca2fefec354",
+      "loaded_bytes": 31516957,
+      "released_bytes": 30956376,
+      "remaining_bytes": 560581,
+      "samples": [
+        [
+          31516957,
+          30956376,
+          560581
+        ],
+        [
+          31516957,
+          30956376,
+          560581
+        ],
+        [
+          31516957,
+          30956376,
+          560581
+        ],
+        [
+          31516957,
+          30956376,
+          560581
+        ],
+        [
+          31516957,
+          30956376,
+          560581
+        ],
+        [
+          31516957,
+          30956376,
+          560581
+        ],
+        [
+          31516957,
+          30956376,
+          560581
+        ]
+      ]
+    },
+    "candidate": {
+      "commit": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+      "tree": "bb97f0396e8a12374a5fe67341826906ddc577b9",
+      "engine_rlib": "6d462ce37895ebaa862d21d3ace49c3c3f4af6ceb4b0a9efda4c312eebf78432",
+      "worker": "7c572a2a4338fa955cfe6a95e5c962cb8e8840db0c8ad1a4e7ffd448697adbbd",
+      "loaded_bytes": 31539765,
+      "released_bytes": 30979184,
+      "remaining_bytes": 560581,
+      "samples": [
+        [
+          31539765,
+          30979184,
+          560581
+        ],
+        [
+          31539765,
+          30979184,
+          560581
+        ],
+        [
+          31539765,
+          30979184,
+          560581
+        ],
+        [
+          31539765,
+          30979184,
+          560581
+        ],
+        [
+          31539765,
+          30979184,
+          560581
+        ],
+        [
+          31539765,
+          30979184,
+          560581
+        ],
+        [
+          31539765,
+          30979184,
+          560581
+        ]
+      ]
+    }
+  },
+  "added_live_bytes": 22808
+}

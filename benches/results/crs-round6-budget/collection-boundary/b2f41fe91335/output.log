@@ -1,0 +1,12 @@
+   Compiling zentinel-modsec v0.6.0 (/tmp/zentinel-full-collection-oracle-b2f41fe91335)
+    Finished `release` profile [optimized] target(s) in 11.64s
+     Running unittests src/lib.rs (/tmp/zentinel-next-regex-target/release/deps/zentinel_modsec-4b42985b4d595045)
+
+running 1 test
+boundary sweep CRS: fixtures 96, rules 698, removed targets 9816, source members checked 735162, unfiltered transformed-stage decisions 809652, over-budget rule masks restored 16752, differences 0
+boundary sweep controls: fixtures 96, rules 5, removed targets 108, source members checked 8064, unfiltered transformed-stage decisions 10752, over-budget rule masks restored 120, differences 0
+late matches fixtures 96, over-budget fixtures 24, last-field positives 96, over-budget last-field positives 24, matched rule and audit differences 0
+test operators::pattern::full_collections_at_arg_limits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 208 filtered out; finished in 0.73s
+

@@ -1,0 +1,52 @@
+{
+  "commit": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+  "tree": "bb97f0396e8a12374a5fe67341826906ddc577b9",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/operators/pattern.rs": {
+      "production_sha256": "841bd501ec6d15f0bb508dccf0fe8816eb422e256b5cdeda8e22b4071ecec32f",
+      "oracle": "differential.rs",
+      "oracle_sha256": "016aad587b66590863b7d0a5f7bb07e5c52e058e4260f923f0112175535d5531",
+      "combined_sha256": "f913bc1cc216d48d38b8d1f54a8c18c6b1a5b6e59fac858396a1f9d3b3ac396e"
+    },
+    "src/operators/traits.rs": {
+      "combined_sha256": "2a8c09be87ac3a83b176cc529e076f0c365cedb615751b463da19fdd0f13eacf"
+    },
+    "src/engine/ruleset.rs": {
+      "production_sha256": "88ad2287f84a6c8567530e04e0610a19b250f88c6d4cc7deec97aa7512cfd060",
+      "oracle": "access.ruleset.rs",
+      "oracle_sha256": "09333867180cbb4c58ba6093494aa8ae935b032436705f87e89d51cd90b07b07",
+      "combined_sha256": "a22996c661ed2f18280e13a3c15e734f768a5427d3e475cff4e1f2a54f26853f"
+    },
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "7f2cb7e2f40f8dcc05f47a19f95d5d96f4928cd29757fd0de655859039a82337",
+      "oracle": "access.pipeline.rs",
+      "oracle_sha256": "22936020507f9a6bec9c4d0a55b815ec35ca5466e994154532e3962a87c53620",
+      "combined_sha256": "3c048e2023cbe7114f3dc9722ad45302a79f22e7d9b9670fd7680b5748f199f1"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "full_collections_at_arg_limits",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "fb862c2166aa3a465156472afb6a05e05703495e7f6f9352ce83590114626790",
+  "results": [
+    "boundary sweep CRS: fixtures 96, rules 698, removed targets 9816, source members checked 735162, unfiltered transformed-stage decisions 809652, over-budget rule masks restored 16752, differences 0",
+    "boundary sweep controls: fixtures 96, rules 5, removed targets 108, source members checked 8064, unfiltered transformed-stage decisions 10752, over-budget rule masks restored 120, differences 0",
+    "late matches fixtures 96, over-budget fixtures 24, last-field positives 96, over-budget last-field positives 24, matched rule and audit differences 0",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 208 filtered out; finished in 0.73s"
+  ]
+}
