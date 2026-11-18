@@ -65,7 +65,7 @@ use zentinel_modsec::ModSecurity;
 /// 30cb436, the commit CI fetches). The corpus upstream keeps moving, so a
 /// change after bumping that commit is worth reading as new tests before
 /// reading it as a regression.
-const MIN_PASSING: u32 = 5042;
+const MIN_PASSING: u32 = 5046;
 
 /// Corpus stages that cannot be driven from here: an `encoded_request` payload,
 /// or an expectation that is not about rule IDs (`status`, `match_regex`).
@@ -155,6 +155,14 @@ fn crs_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
+// Recommended phase-1 selectors, installed before CRS reads REQBODY_PROCESSOR.
+const REQUEST_PROCESSORS: &str = r#"SecRule REQUEST_HEADERS:Content-Type "^(?:application(?:/soap\+|/)|text/)xml" \
+     "id:'200000',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=XML"
+SecRule REQUEST_HEADERS:Content-Type "^application/json" \
+     "id:'200001',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=JSON"
+SecRule REQUEST_HEADERS:Content-Type "^application/[a-z0-9.-]+[+]json" \
+     "id:'200006',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=JSON""#;
+
 /// The configuration the corpus documents for itself: detection-only, paranoia
 /// 4, and the size limits its tests assume. Detection-only matters beyond
 /// blocking — in blocking mode the first disruptive rule ends the phase, so
@@ -177,7 +185,7 @@ fn load(dir: &Path, extra: &str) -> ModSecurity {
     // Include directives rather than spliced file contents: CRS `.data` paths
     // are relative to the rule file naming them.
     let cfg = format!(
-        "SecRuleEngine On\nSecRequestBodyAccess On\n\
+        "{REQUEST_PROCESSORS}\nSecRuleEngine On\nSecRequestBodyAccess On\n\
          Include \"{d}/crs-setup.conf\"\n{extra}\nInclude \"{d}/rules/*.conf\"\n"
     );
     ModSecurity::from_string(&cfg).expect("CRS should load")

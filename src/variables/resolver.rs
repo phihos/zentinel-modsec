@@ -223,16 +223,10 @@ impl<'a> VariableResolver<'a> {
             VariableName::FilesNames => {
                 self.resolve_collection_names(&[&self.request.files], "FILES_NAMES", selection)
             }
-            VariableName::ReqBodyProcessor => {
-                if self.request.body_processor.is_empty() {
-                    vec![]
-                } else {
-                    vec![(
-                        "REQBODY_PROCESSOR".to_string(),
-                        self.request.body_processor.clone(),
-                    )]
-                }
-            }
+            VariableName::ReqBodyProcessor => vec![(
+                "REQBODY_PROCESSOR".to_string(),
+                self.request.body_processor.clone(),
+            )],
 
             // A body the processor could not handle. These resolved to nothing
             // before, so CRS rule 200002 (`SecRule REQBODY_ERROR "!@eq 0"`)
@@ -259,6 +253,12 @@ impl<'a> VariableResolver<'a> {
             }
 
             // Response variables
+            VariableName::ResponseProtocol => {
+                vec![(
+                    "RESPONSE_PROTOCOL".to_string(),
+                    self.response.protocol.clone(),
+                )]
+            }
             VariableName::ResponseStatus => {
                 vec![(
                     "RESPONSE_STATUS".to_string(),
