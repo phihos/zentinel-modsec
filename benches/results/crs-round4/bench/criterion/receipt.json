@@ -1,0 +1,188 @@
+{
+  "sources": [
+    {
+      "commit": "87771dce375e9016a6a5bd1e745176c50e2c4c84",
+      "tree": "a4e8194b4425b300b467f97b5a43048627ed26e5",
+      "binary": "38ef21354a34af43972d0188e8023782f14aafa0a0f8223b214e6cf5797bae74",
+      "lock": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+      "benchmark": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+      "compiler": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2\n"
+    },
+    {
+      "commit": "25f1d65f38b505c1b22b7874c8ef723e4c038f98",
+      "tree": "c838de511a86dc2b5a6b1b87ea667af02d66bed9",
+      "binary": "8427edc92a5ddc41864ef1be3128c508978b7958c9652f0816fa0741f9ad560e",
+      "lock": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+      "benchmark": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+      "compiler": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2\n"
+    }
+  ],
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "cpu": 14,
+  "runs": [
+    {
+      "commit": "87771dce",
+      "pair": 0,
+      "us": {
+        "get": 65.21626784617469,
+        "form": 73.43925406047981,
+        "json": 93.51776082856594
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 0,
+      "us": {
+        "get": 52.179722682382135,
+        "form": 64.32183344140005,
+        "json": 74.83304455337114
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 1,
+      "us": {
+        "get": 56.5288469671813,
+        "form": 67.1390510929849,
+        "json": 82.52119525146568
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 1,
+      "us": {
+        "get": 66.3208312366251,
+        "form": 84.82713502683801,
+        "json": 108.11303575822717
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 2,
+      "us": {
+        "get": 75.55902113569576,
+        "form": 84.25755116941994,
+        "json": 97.05002755152616
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 2,
+      "us": {
+        "get": 57.31869087649343,
+        "form": 66.04014637869766,
+        "json": 86.72333001695603
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 3,
+      "us": {
+        "get": 52.1505763057334,
+        "form": 65.1615162593504,
+        "json": 78.53541666387362
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 3,
+      "us": {
+        "get": 62.815189127261846,
+        "form": 78.71241826395351,
+        "json": 95.72561354759803
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 4,
+      "us": {
+        "get": 64.04653693820192,
+        "form": 75.26568248260757,
+        "json": 87.73820510176749
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 4,
+      "us": {
+        "get": 48.685937585606744,
+        "form": 61.461615110269,
+        "json": 75.95306411198258
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 5,
+      "us": {
+        "get": 54.4518394697605,
+        "form": 64.54722062755799,
+        "json": 70.81592936049269
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 5,
+      "us": {
+        "get": 55.962001938539025,
+        "form": 71.52084995345665,
+        "json": 84.04789200136143
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 6,
+      "us": {
+        "get": 57.61882162905126,
+        "form": 70.44018911856281,
+        "json": 83.05990923549466
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 6,
+      "us": {
+        "get": 46.12157885790407,
+        "form": 58.27145553813267,
+        "json": 69.50370070194225
+      }
+    },
+    {
+      "commit": "25f1d65f",
+      "pair": 7,
+      "us": {
+        "get": 45.50866799545427,
+        "form": 55.74070372050972,
+        "json": 69.89055885171105
+      }
+    },
+    {
+      "commit": "87771dce",
+      "pair": 7,
+      "us": {
+        "get": 54.517053628478955,
+        "form": 67.21689517038762,
+        "json": 80.47824163345092
+      }
+    }
+  ],
+  "summary": {
+    "get": {
+      "before_us": 63.430863032731885,
+      "after_us": 52.16514949405777,
+      "paired_percent": -18.46586594878694,
+      "wins": 8
+    },
+    "form": {
+      "before_us": 74.3524682715437,
+      "after_us": 64.43452703447902,
+      "paired_percent": -17.245490729703093,
+      "wins": 8
+    },
+    "json": {
+      "before_us": 90.62798296516672,
+      "after_us": 75.39305433267685,
+      "paired_percent": -16.032180706025244,
+      "wins": 8
+    }
+  }
+}

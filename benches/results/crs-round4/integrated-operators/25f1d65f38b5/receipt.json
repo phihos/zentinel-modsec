@@ -1,0 +1,42 @@
+{
+  "commit": "25f1d65f38b505c1b22b7874c8ef723e4c038f98",
+  "tree": "c838de511a86dc2b5a6b1b87ea667af02d66bed9",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "deea7db679a62dab41edfa615692bcee07610d430d95eb6b211ec86a7a6c27fb",
+      "oracle": "sweep.rs",
+      "oracle_sha256": "09fdc7403b5bf07217bb9044b020279a0e5691e8346e32160454e76ccc1c24ba",
+      "combined_sha256": "95386413488bc18175b35cd14121d92e1b8b04f9d5be7934482249105afe23f2"
+    },
+    "src/operators/pattern.rs": {
+      "production_sha256": "64d3b11936585856035410f0a31850f348fce2dbbb922dbc98a3c6e35679e7e0",
+      "oracle": "differential.rs",
+      "oracle_sha256": "107e08ed958eaf41dfe9266f2edc77e529c538daff571f5473917ac778d39434",
+      "combined_sha256": "d090f9b35315d87209d95d00f940ce1588a0f5034b46227d871ef3e7a52da6ca"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "ebc0b3ce7aa407d509fe99f146baf57ccfd5c9844224f44832e119b243111923",
+  "results": [
+    "early rejection eligible rules 291, early rejections crosschecked 1270158, summarized width rejections 1290049, final bytes changed 114823",
+    "live shapes 35, including individual stages 46, inputs 67858, checked final values and ownership 3121468, checked multiMatch stage visits 3461022, mismatches 0",
+    "CRS rules 698, distinct static RX 291, inputs 68880, comparisons 20044080, prefilter rejections 17102704, matching portions 201818, subgroups 5793, mismatches 0",
+    "test result: ok. 206 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.13s"
+  ]
+}

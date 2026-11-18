@@ -1,0 +1,12 @@
+   Compiling zentinel-modsec v0.6.0 (/tmp/zentinel-phrase-oracle-25f1d65f38b5)
+    Finished `release` profile [optimized] target(s) in 13.30s
+     Running unittests src/lib.rs (/tmp/zentinel-next-regex-target/release/deps/zentinel_modsec-4b42985b4d595045)
+
+running 1 test
+phase search CRS: stages 191359, pruned word targets 85752, pruned non-word path targets 7958, positive stages 12866, positive changed stages 1797 (words 1, paths 1796), mismatches 0
+phase search controls: stages 32733, pruned word targets 16940, pruned non-word path targets 1320, positive stages 605, positive changed stages 10 (words 7, paths 3), mismatches 0
+CRS rules 698, inline phrase rules 12, file-backed phrase rules 21, distinct live programs plus two controls 27, phrases 5899, capture-mode comparisons 3710930, early rejections 1532362, matched portions 28238, ordered captures 15145, mismatches 0
+test operators::pattern::crs_phrase_differential ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 204 filtered out; finished in 0.58s
+
