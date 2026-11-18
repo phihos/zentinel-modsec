@@ -73,6 +73,7 @@ pub(crate) enum MemberSelector {
     All,
     Key(Box<[u8]>),
     Regex(Option<Arc<Regex>>),
+    TxAsciiPrefix(Arc<Regex>),
 }
 
 impl MemberSelector {
@@ -80,6 +81,7 @@ impl MemberSelector {
         match self {
             Self::All => true,
             Self::Key(wanted) => key == Some(wanted.as_ref()),
+            Self::TxAsciiPrefix(regex) => key.is_some_and(|key| regex.is_match(key)),
             Self::Regex(regex) => {
                 key.is_some_and(|key| regex.as_ref().is_some_and(|re| re.is_match(key)))
             }
@@ -102,8 +104,22 @@ impl TargetSelection {
     }
 
     pub fn for_lookup(spec: &VariableSpec, programs: &SelectorPrograms) -> Self {
-        let regex =
-            |pattern: &str| MemberSelector::Regex(programs.get(pattern, spec.name).cloned());
+        let regex = |pattern: &str| {
+            let program = programs.get(pattern, spec.name);
+            if spec.name == VariableName::Tx
+                && pattern.strip_prefix('^').is_some_and(|prefix| {
+                    !prefix.is_empty()
+                        && prefix
+                            .bytes()
+                            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                })
+            {
+                if let Some(program) = program {
+                    return MemberSelector::TxAsciiPrefix(program.clone());
+                }
+            }
+            MemberSelector::Regex(program.cloned())
+        };
         let member = match &spec.selection {
             Some(Selection::Key(key)) if !key.is_empty() => {
                 // The three argument-name collections index the canonical bucket

@@ -1,8 +1,9 @@
 //! Collection trait and implementations.
 
-use super::ByteValue;
+use super::{ByteValue, Widths};
 use indexmap::{map::Entry, IndexMap};
 use regex::Regex;
+use std::sync::OnceLock;
 
 /// A collection of key-value pairs.
 pub trait Collection: Send + Sync {
@@ -74,6 +75,7 @@ pub trait MutableCollection: Collection {
 pub struct HashMapCollection {
     data: IndexMap<ByteValue, CollectionValues>,
     fold_keys: bool,
+    argument_widths: OnceLock<[Widths; 2]>,
 }
 
 #[derive(Debug, Clone)]
@@ -178,32 +180,38 @@ impl HashMapCollection {
         self.data.get(key).map(|members| &**members)
     }
 
-    /// Bound both the bytes inspected and the number of tiny or empty fields.
-    pub(crate) fn visit_bounded(
-        &self,
-        budget: &mut usize,
-        mut visit: impl FnMut(&[u8], &[u8]),
-    ) -> bool {
-        const MIN_COST: usize = 32;
-        if self.data.len() > *budget / MIN_COST {
-            return false;
+    /// Only argument collections used by width-aware rules build this summary.
+    pub(crate) fn argument_widths(&self) -> [Widths; 2] {
+        if self.data.is_empty() {
+            return [Widths::default(); 2];
         }
-        for (key, members) in &self.data {
-            if members.len() > *budget / MIN_COST {
-                return false;
+        *self.argument_widths.get_or_init(|| {
+            let mut names = Widths::default();
+            let mut values = Widths::default();
+            for (key, members) in &self.data {
+                if let Some(observed) = &members.original_names {
+                    for name in observed {
+                        names.include(name.as_bytes());
+                    }
+                } else {
+                    names.include(key.as_bytes());
+                }
+                for value in members.iter() {
+                    values.include(value.as_bytes());
+                }
+                if names == Widths::UNKNOWN && values == Widths::UNKNOWN {
+                    break;
+                }
             }
-            for (index, value) in members.iter().enumerate() {
-                let name = members.name(key, index).as_bytes();
-                let value = value.as_bytes();
-                let cost = (name.len() + value.len()).max(MIN_COST);
-                let Some(left) = budget.checked_sub(cost) else {
-                    return false;
-                };
-                *budget = left;
-                visit(name, value);
-            }
+            [values, names]
+        })
+    }
+
+    fn observe_argument(&mut self, name: &ByteValue, value: &ByteValue) {
+        if let Some([values, names]) = self.argument_widths.get_mut() {
+            names.include(name.as_bytes());
+            values.include(value.as_bytes());
         }
-        true
     }
 
     /// Visit one indexed bucket or all buckets. The callback sees the lookup
@@ -270,6 +278,7 @@ impl HashMapCollection {
             return self.add_named_bytes(folded, key, value);
         }
         let value = value.into();
+        self.observe_argument(&key, &value);
         match self.data.entry(key) {
             Entry::Vacant(entry) => {
                 entry.insert(CollectionValues {
@@ -298,6 +307,7 @@ impl HashMapCollection {
         let key = key.into();
         let original_name = original_name.into();
         let value = value.into();
+        self.observe_argument(&original_name, &value);
         let differs = key != original_name;
         match self.data.entry(key) {
             Entry::Vacant(entry) => {
@@ -322,6 +332,7 @@ impl HashMapCollection {
 
     /// Replace values under an original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
+        self.argument_widths.take();
         let original = key.into();
         let (key, original_names) = match self.lookup_key(original.as_bytes()) {
             std::borrow::Cow::Borrowed(_) => (original, None),
@@ -338,11 +349,13 @@ impl HashMapCollection {
 
     /// Delete an original byte key without rendering or decoding it.
     pub fn delete_bytes(&mut self, key: &[u8]) {
+        self.argument_widths.take();
         self.data.shift_remove(self.lookup_key(key).as_ref());
     }
 
     /// Clear all data.
     pub fn clear(&mut self) {
+        self.argument_widths.take();
         self.data.clear();
     }
 }

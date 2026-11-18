@@ -1837,6 +1837,30 @@ mod tests {
     }
 
     #[test]
+    fn literal_argument_lookups_do_not_request_a_collection_scan() {
+        let rules = make_ruleset(
+            r#"SecRuleEngine DetectionOnly
+SecRequestBodyAccess On
+SecRule ARGS:chosen "@rx ^book$" "id:901,phase:1,pass"
+SecRule ARGS_GET_NAMES:chosen "@pm chosen" "id:902,phase:1,pass"
+SecRule ARGS_POST:chosen "@rx ^book$" "id:903,phase:1,pass"
+SecRule ARGS:/^cho/ "@rx ^book$" "id:904,phase:2,pass""#,
+        );
+        assert!(!rules.width_sources[Phase::RequestHeaders.index()].arguments);
+        assert!(rules.width_sources[Phase::RequestBody.index()].arguments);
+        let mut tx = Transaction::new(rules, 403);
+        let mut uri = String::from("/?");
+        for i in 0..512 {
+            uri.push_str(&format!("field{i}=a&"));
+        }
+        uri.push_str("chosen=book");
+        tx.process_uri(&uri, "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.matched_rules(), ["901", "902", "904"]);
+    }
+
+    #[test]
     fn argument_width_pruning_matches_unpruned_evaluation() {
         let config = r#"SecRuleEngine On
 SecRequestBodyAccess On

@@ -1,6 +1,6 @@
 //! Compile short rule target lists for each combination of phase-stable collections.
 use crate::parser::{VariableName, VariableSpec};
-use crate::variables::RequestData;
+use crate::variables::{RequestData, Widths};
 
 const GET: u8 = 1;
 const POST: u8 = 2;
@@ -19,54 +19,6 @@ fn header_bit(key: &[u8]) -> u64 {
     let first = usize::from(key.first().copied().unwrap_or(0));
     let last = usize::from(key.last().copied().unwrap_or(0));
     1 << ((first * 17 + last + key.len()) % 61)
-}
-
-// For a bounded group, remember its longest field and narrowest shared alphabet.
-#[derive(Clone, Copy, Default)]
-struct Widths {
-    longest: u8,
-    alphabet: Alphabet,
-}
-
-#[derive(Clone, Copy, Default, PartialEq)]
-enum Alphabet {
-    #[default]
-    Word,
-    Dotted,
-    Path,
-}
-
-impl Widths {
-    const UNKNOWN: Self = Self {
-        longest: u8::MAX,
-        alphabet: Alphabet::Word,
-    };
-
-    fn include(&mut self, input: &[u8]) {
-        if input.len() > 64 {
-            *self = Self::UNKNOWN;
-        } else if self.longest != u8::MAX {
-            if self.alphabet != Alphabet::Word || !input.iter().all(u8::is_ascii_alphanumeric) {
-                if self.alphabet != Alphabet::Path
-                    && input
-                        .iter()
-                        .all(|b| b.is_ascii_alphanumeric() || *b == b'.')
-                {
-                    self.alphabet = Alphabet::Dotted;
-                } else if input.iter().copied().all(crate::operators::token_byte) {
-                    self.alphabet = Alphabet::Path;
-                } else {
-                    *self = Self::UNKNOWN;
-                    return;
-                }
-            }
-            self.longest = self.longest.max(input.len() as u8);
-        }
-    }
-
-    fn below(self, minimum: [u8; 3]) -> bool {
-        self.longest < minimum[self.alphabet as usize]
-    }
 }
 
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
@@ -96,17 +48,10 @@ impl RequestCollections {
             widths[2].include(request.path_bytes());
         }
         if sources.arguments && present & (GET | POST) != 0 {
-            widths[..2].fill(Widths::default());
-            let mut remaining = 4096;
-            let mut visit = |name: &[u8], value: &[u8]| {
-                widths[0].include(value);
-                widths[1].include(name);
-            };
-            if !request.args_get.visit_bounded(&mut remaining, &mut visit)
-                || !request.args_post.visit_bounded(&mut remaining, visit)
-            {
-                widths[..2].fill(Widths::UNKNOWN);
-            }
+            let [get_values, get_names] = request.args_get.argument_widths();
+            let [post_values, post_names] = request.args_post.argument_widths();
+            widths[0] = get_values.union(post_values);
+            widths[1] = get_names.union(post_names);
         }
         let mut optional = u64::MAX;
         if sources.optional_targets {
@@ -165,6 +110,7 @@ impl RequestCollections {
 #[derive(Default, PartialEq, Eq)]
 pub(super) struct TargetIndices {
     present: [u16; 16],
+    has_fixed_prefix: bool,
     bounded_targets: [u16; 3],
     optional_targets: u16,
     optional_keys: u64,
@@ -219,8 +165,23 @@ impl TargetIndices {
         self.optional_targets |= 1 << index;
     }
 
-    pub fn add_width_sources(&self, sources: &mut WidthSources) {
-        sources.arguments |= self.bounded_targets[0] != 0 || self.bounded_targets[1] != 0;
+    /// Literal TX, scalar and count targets frequently have no phase-dependent
+    /// filters. Cache their prefix after indexed header slots have been assigned.
+    pub fn finalize(&mut self) {
+        self.has_fixed_prefix = self.present[0] == self.present[15]
+            && self.bounded_targets == [0; 3]
+            && self.header_targets == [0; HEADER_SLOTS]
+            && self.optional_targets == 0;
+    }
+
+    pub fn add_width_sources(&self, sources: &mut WidthSources, specs: &[VariableSpec]) {
+        // A literal argument uses an indexed lookup. Build the collection summary
+        // only when a width-aware target would otherwise visit the collection.
+        let arguments = self.bounded_targets[0] | self.bounded_targets[1];
+        sources.arguments |= specs.iter().take(PREFIX).enumerate().any(|(i, spec)| {
+            arguments & (1 << i) != 0
+                && !matches!(&spec.selection, Some(crate::parser::Selection::Key(key)) if !key.is_empty())
+        });
         sources.filename |= self.bounded_targets[2] != 0;
         sources.optional_targets |= self.optional_targets != 0;
     }
@@ -248,9 +209,14 @@ impl TargetIndices {
         mask
     }
 
+    #[inline]
     pub fn select(&self, available: RequestCollections) -> ActiveTargets {
         ActiveTargets {
-            bits: self.selected(available),
+            bits: if self.has_fixed_prefix {
+                self.present[0]
+            } else {
+                self.selected(available)
+            },
             collections: available.present,
         }
     }
@@ -355,32 +321,67 @@ mod tests {
     }
 
     #[test]
-    fn argument_budget_is_shared_across_duplicate_query_and_body_members() {
-        let target = crate::parser::parse_single_variable("ARGS").unwrap();
-        let plan = TargetIndices::compile(&[target], [65; 3]);
+    fn checks_late_arguments_and_refreshes_bounds_after_changes() {
+        use crate::variables::HashMapCollection;
+        let mut request = RequestData::default();
+        let targets =
+            ["ARGS", "ARGS_NAMES"].map(|v| crate::parser::parse_single_variable(v).unwrap());
+        let plan = TargetIndices::compile(&targets, [65; 3]);
         let sources = WidthSources {
             arguments: true,
             ..Default::default()
         };
-        // The small-field cap and the 4 KiB byte cap both span GET and POST,
-        // including repeated keys. Crossing either restores ordinary evaluation.
-        for (count, key, value) in [
-            (128, "same".to_owned(), "tiny".to_owned()),
-            (32, "k".repeat(64), "v".repeat(64)),
-        ] {
-            let mut request = RequestData::default();
-            for _ in 1..count {
-                request.args_get.add_bytes(key.as_str(), value.as_str());
-            }
-            request.args_post.add_bytes(key.as_str(), value.as_str());
-            assert!(!plan
-                .select(RequestCollections::new(&request, sources))
-                .may_match(1));
-            request.args_post.add_bytes("more", "last");
-            assert!(plan
-                .select(RequestCollections::new(&request, sources))
-                .may_match(1));
+        let active = |req: &RequestData| {
+            plan.select(RequestCollections::new(req, sources))
+                .indices(&targets)
+                .collect::<Vec<_>>()
+        };
+        for i in 0..256 {
+            request.args_get.add_bytes(format!("k{i}"), "tiny");
         }
+        request.args_post.add_bytes("post", "value");
+        assert!(active(&request).is_empty());
+        request
+            .args_post
+            .add_named_bytes("post", "late name", "tiny");
+        assert_eq!(active(&request), [1]);
+        request.args_get.set_bytes("k200", [0xff].as_slice());
+        assert_eq!(active(&request), [0, 1]);
+        request.args_post.clear();
+        assert_eq!(active(&request), [0]);
+        request.args_get.delete_bytes(b"k200");
+        assert!(active(&request).is_empty());
+        request.args_get = HashMapCollection::new();
+        request.args_get.add_bytes("q", "x".repeat(65));
+        assert_eq!(active(&request), [0]);
+    }
+
+    #[test]
+    fn constant_prefix_still_checks_long_list_tail_and_indexed_headers() {
+        let tx = crate::parser::parse_single_variable("TX:live").unwrap();
+        let mut specs = vec![tx; PREFIX];
+        specs.push(crate::parser::parse_single_variable("ARGS").unwrap());
+        let mut plan = TargetIndices::compile(&specs, [0; 3]);
+        plan.finalize();
+        assert!(plan.has_fixed_prefix);
+        assert_eq!(plan.present[0], u16::MAX);
+        assert_eq!(
+            plan.select(empty_snapshot(0)).indices(&specs).count(),
+            PREFIX
+        );
+        assert_eq!(
+            plan.select(empty_snapshot(GET)).indices(&specs).count(),
+            PREFIX + 1
+        );
+
+        let spec = crate::parser::parse_single_variable("REQUEST_HEADERS:X-Test").unwrap();
+        let mut header = TargetIndices::compile(&[spec], [0; 3]);
+        header.header_targets[0] = 1;
+        header.finalize();
+        let mut absent = empty_snapshot(0);
+        absent.headers[0] = None;
+        assert!(!header.has_fixed_prefix);
+        assert!(!header.select(absent).may_match(1));
     }
 
     #[test]
@@ -412,7 +413,7 @@ mod tests {
         plan.add_optional_header(0, b"alpha");
         let active = |request: &RequestData| {
             let mut sources = WidthSources::default();
-            plan.add_width_sources(&mut sources);
+            plan.add_width_sources(&mut sources, &specs);
             plan.select(RequestCollections::new(request, sources))
                 .indices(&specs)
                 .collect::<Vec<_>>()
