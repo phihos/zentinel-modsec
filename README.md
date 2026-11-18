@@ -210,26 +210,42 @@ async fn waf(
 
 **Directives:** `SecRule`, `SecAction`, `SecMarker`, `SecRuleEngine`,
 `SecDefaultAction`, `SecRuleRemoveById`, `SecRuleUpdateTargetById`,
+`SecRuleUpdateTargetByTag`, `Include`.
 `SecRuleUpdateActionById`, `SecRequestBodyAccess`, `SecResponseBodyAccess`,
-`SecRequestBodyLimit`, `SecResponseBodyLimit`, `Include`. Other directives are
-logged and skipped.
+`SecRequestBodyLimit` and `SecResponseBodyLimit` are accepted but have no effect;
+load-time warnings list affected rule IDs. Other unknown directives also warn
+at load. `SecComponentSignature` is accepted as metadata.
+
+`SecRuleUpdateTargetByTag attack-sqli "!ARGS:password"` excludes that argument
+from every rule carrying the exact, case-sensitive `attack-sqli` tag. Positive
+targets append to the rule; a third argument replaces an existing target, as
+with `SecRuleUpdateTargetById`. For a conditional transaction-local exclusion,
+use `ctl:ruleRemoveTargetByTag=attack-sqli;ARGS:password` on an earlier rule.
+Runtime exclusions also apply to children of a tagged chain starter. Both
+forms support regex collection keys such as `ARGS:/^token_/` (the runtime
+regex-key behavior follows Coraza 3.8.1). Invalid configure-time targets fail
+loading; malformed runtime controls produce load-time warnings with rule IDs.
 
 Relative includes resolve beside the declaring file. A glob with no matches is
 allowed. An unreadable match fails the load. Each configuration accepts up to
 100 include directives, counting a glob once. If a parse fails, the parser
 retains the configuration it held before the call.
 
-**Operators:** `@rx`, `@pm`, `@pmf`, `@pmFromFile`, `@contains`, `@beginsWith`,
-`@endsWith`, `@streq`, `@within`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
+**Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@beginsWith`,
+`@endsWith`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
 `@unconditionalMatch`, `@noMatch`. `@containsWord` and `@strmatch` are
-approximated by `@contains`.
+approximated by `@contains`. `@within` uses whitespace-token equality instead
+of substring containment. The `@pmf` and `@ipMatchF` aliases interpret their
+arguments as inline phrases/addresses; use `@pmFromFile` and `@ipMatchFromFile`
+for files. These approximations produce load-time warnings with rule IDs.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,
 `@gsbLookup`, `@inspectFile`, `@fuzzyHash`, `@rsub`. A rule that depends on one
-of them is inert.
+of them cannot perform the requested check; negating a placeholder can make
+it match. These operators produce load-time warnings with rule IDs.
 
 **Transformations:** `lowercase`, `uppercase`, `urlDecode`, `urlDecodeUni`,
 `urlEncode`, `base64Decode`, `base64DecodeExt`, `base64Encode`, `hexDecode`,
@@ -237,8 +253,8 @@ of them is inert.
 `escapeSeqDecode`, `utf8toUnicode`, `removeWhitespace`, `compressWhitespace`,
 `removeNulls`, `replaceNulls`, `trim`, `trimLeft`, `trimRight`,
 `normalizePath`, `normalizePathWin`, `removeComments`, `removeCommentsChar`,
-`replaceComments`, `cmdLine`, `md5`, `sha1`, `sha256`, `length`, `parityZero7bit`,
-`none`.
+`replaceComments`, `cmdLine`, `md5`, `sha1`, `sha256`, `length`, `none`.
+The three parity transformations are placeholders and warn with affected IDs.
 
 **Body processors:** URL-encoded forms, multipart (including
 `MULTIPART_PART_HEADERS`), JSON and XML. XML is read with `quick-xml`, which
@@ -246,8 +262,18 @@ does not expand entities. XPath is not supported: `XML:/*` and `XML://@*`
 (every `XML:` target in stock CRS) resolve against the flattened body, and
 richer XPath expressions are reported when the rules load.
 
-**Not implemented:** `UNIQUE_ID` and `FILES_COMBINED_SIZE`; rules that target
-only those are inert and reported at load time.
+Unsupported variables, including `UNIQUE_ID` and `FILES_COMBINED_SIZE`, are
+reported at load even when a rule also selects implemented variables. Invalid
+selector/exclusion regexes and unsupported macro sources also warn with IDs.
+Only TX writes are implemented; non-TX `setvar` collection names are ignored
+and their writes reach TX, which is reported at load.
+
+Accepted action limitations are also reported with rule IDs: `multiMatch`,
+persistent-collection actions, script execution, response modification,
+`proxy`, `pause`, `xmlns`, scoped `allow`, and logging/sanitization policy.
+The engine has no log sink; embedding applications must implement logging
+policy. Known unsupported controls warn at load without repeating the warning
+on each request.
 
 ## CRS conformance
 
@@ -260,7 +286,7 @@ naming the rule IDs that must, or must not, appear in the log for a request.
 | | |
 |---|---|
 | Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **4,970 of 5,184 runnable cases (95.9%)** (`MIN_PASSING`) |
+| Passing | **4,971 of 5,184 runnable cases (95.9%)** (`MIN_PASSING`) |
 
 ```bash
 mkdir -p test-rules

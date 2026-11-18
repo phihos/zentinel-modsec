@@ -30,6 +30,7 @@ pub use action::{
 };
 pub use directive::{
     Directive, RuleEngineMode, RuleIdSelector, SecAction, SecMarker, SecRule, UpdateTargetById,
+    UpdateTargetByTag,
 };
 pub use lexer::{Lexer, Token, TokenKind};
 pub use operator::{OperatorName, OperatorSpec};
@@ -188,12 +189,33 @@ impl Parser {
             "secdefaultaction" => self.parse_secdefaultaction(lexer),
             "secruleremovebyid" => self.parse_secruleremovebyid(lexer),
             "secruleupdatetargetbyid" => self.parse_secruleupdatetargetbyid(lexer),
+            "secruleupdatetargetbytag" => self.parse_secruleupdatetargetbytag(lexer),
+            "secruleupdateactionbyid" => {
+                // Preserve the target ID for the load diagnostic. Applying the
+                // action update remains unsupported.
+                let id_text = self.expect_argument(lexer, "SecRuleUpdateActionById id")?;
+                let id = id_text
+                    .trim_matches(|c| c == '\'' || c == '"')
+                    .parse()
+                    .map_err(|_| {
+                        Error::parse(
+                            "SecRuleUpdateActionById requires a numeric rule ID",
+                            self.location.to_string(),
+                        )
+                    })?;
+                let actions =
+                    self.expect_quoted_argument(lexer, "SecRuleUpdateActionById actions")?;
+                Ok(Directive::SecRuleUpdateActionById {
+                    id,
+                    actions: action::parse_actions(&actions)?,
+                })
+            }
             "secrequestbodyaccess" => self.parse_boolean_directive(lexer, "SecRequestBodyAccess"),
             "secresponsebodyaccess" => self.parse_boolean_directive(lexer, "SecResponseBodyAccess"),
             "include" => self.parse_include(lexer),
             // Recognized engine-config/metadata directives that have no effect on
             // rule evaluation — skip quietly rather than warning.
-            "seccomponentsignature" | "seccollectiontimeout" => {
+            "seccomponentsignature" => {
                 self.skip_to_end_of_line(lexer);
                 Ok(Directive::Unknown(name.to_string()))
             }
@@ -354,6 +376,55 @@ impl Parser {
             exclusions,
             replaced,
             location: self.location.clone(),
+        }))
+    }
+
+    /// Parse a case-sensitive tag selector and its target update.
+    fn parse_secruleupdatetargetbytag(&mut self, lexer: &mut Lexer) -> Result<Directive> {
+        let tag = self.expect_argument(lexer, "SecRuleUpdateTargetByTag tag")?;
+        if tag.is_empty() {
+            return Err(Error::parse(
+                "SecRuleUpdateTargetByTag requires a tag",
+                self.location.to_string(),
+            ));
+        }
+        let target_text = self.expect_argument(lexer, "SecRuleUpdateTargetByTag targets")?;
+        let (additions, exclusions) = variable::parse_update_targets(&target_text)?;
+        if additions.is_empty() && exclusions.is_empty() {
+            return Err(Error::parse(
+                "SecRuleUpdateTargetByTag requires at least one target",
+                self.location.to_string(),
+            ));
+        }
+        // Exclusion regexes must fail at load, not silently match nothing.
+        for exclusion in &exclusions {
+            validate_update_target(exclusion)?;
+        }
+        for addition in &additions {
+            validate_target_regex(addition)?;
+        }
+        let replaced = if self.peek_more_arguments(lexer) {
+            let target = self.expect_argument(lexer, "SecRuleUpdateTargetByTag replaced target")?;
+            validate_update_target(&target)?;
+            Some(target)
+        } else {
+            None
+        };
+        if self.peek_more_arguments(lexer) {
+            return Err(Error::parse(
+                "unexpected SecRuleUpdateTargetByTag argument",
+                self.location.to_string(),
+            ));
+        }
+        Ok(Directive::SecRuleUpdateTargetByTag(UpdateTargetByTag {
+            tag,
+            targets: UpdateTargetById {
+                ids: Vec::new(),
+                additions,
+                exclusions,
+                replaced,
+                location: self.location.clone(),
+            },
         }))
     }
 
@@ -626,6 +697,28 @@ fn action_supersedes(new: &Action, old: &Action) -> bool {
         (Action::Data(DataAction::Capture), Action::Data(DataAction::Capture)) => true,
         _ => false,
     }
+}
+
+/// Validate a target and its optional regex before accepting an exclusion.
+fn validate_update_target(target: &str) -> Result<()> {
+    let spec = parse_single_variable(target)?;
+    if spec.count_mode {
+        return Err(Error::parse(
+            "target exclusions and replacements cannot use count mode",
+            target,
+        ));
+    }
+    validate_target_regex(&spec)
+}
+
+fn validate_target_regex(target: &VariableSpec) -> Result<()> {
+    if let Some(Selection::Regex(pattern)) = &target.selection {
+        regex::Regex::new(pattern).map_err(|source| Error::RegexCompile {
+            pattern: pattern.clone(),
+            source,
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use crate::operators::{compile_operator, Operator};
 use crate::parser::{
     Action, Directive, FlowAction, MetadataAction, OperatorName, OperatorSpec, Parser,
     RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection, UpdateTargetById,
-    VariableName, VariableSpec, XmlTarget,
+    VariableSpec,
 };
 use crate::transformations::TransformationPipeline;
 
@@ -165,6 +165,7 @@ impl CompiledRuleset {
         // startup, because the alternative -- finding out from a rule that
         // never fired -- is the failure this reporting exists to prevent.
         report_unsupported_controls(&directives);
+        super::diagnostics::report(&directives);
 
         // SecRuleRemoveById and SecRuleUpdateTargetById are applied against
         // the whole ruleset once loading completes (like ModSecurity, where
@@ -179,7 +180,7 @@ impl CompiledRuleset {
             })
             .flatten()
             .collect();
-        let mut target_updates: Vec<UpdateTargetById> = Vec::new();
+        let mut target_updates: Vec<(Option<String>, UpdateTargetById)> = Vec::new();
         // When a removed rule is a chain head, its continuation rules (which
         // usually carry no id of their own) must be dropped with it.
         let mut skipping_removed_chain = false;
@@ -217,8 +218,6 @@ impl CompiledRuleset {
                     }
 
                     let transformations = extract_transformations(&rule.actions)?;
-
-                    report_unimplemented_variables(&rule.variables, &id);
 
                     let operator_spec = rule.operator.clone();
                     let (operator, operator_negated) =
@@ -292,7 +291,10 @@ impl CompiledRuleset {
                     // Applied after every rule is compiled: the directive may
                     // appear before or after the rule it targets, and CRS
                     // exclusion files are conventionally included last.
-                    target_updates.push(update.clone());
+                    target_updates.push((None, update));
+                }
+                Directive::SecRuleUpdateTargetByTag(update) => {
+                    target_updates.push((Some(update.tag), update.targets));
                 }
                 Directive::SecMarker(marker) => {
                     ruleset.rules.add_marker(marker.name);
@@ -371,17 +373,25 @@ fn id_is_removed(id: &Option<String>, removals: &[RuleIdSelector]) -> bool {
 /// The update applies to the rule carrying the ID. For a chained rule that is
 /// the chain starter, matching ModSecurity, which identifies a chain by the
 /// starter's ID.
-fn apply_target_updates(ruleset: &mut CompiledRuleset, updates: &[UpdateTargetById]) {
+fn apply_target_updates(
+    ruleset: &mut CompiledRuleset,
+    updates: &[(Option<String>, UpdateTargetById)],
+) {
     if updates.is_empty() {
         return;
     }
     for rules in ruleset.rules.by_phase.values_mut() {
         for rule in rules.iter_mut() {
-            let Some(numeric) = rule.id.as_ref().and_then(|s| s.parse::<u64>().ok()) else {
-                continue;
-            };
-            for update in updates {
-                if !update.ids.iter().any(|selector| selector.matches(numeric)) {
+            for (tag, update) in updates {
+                let selected = match tag {
+                    Some(tag) => has_tag(&rule.actions, tag),
+                    None => rule
+                        .id
+                        .as_ref()
+                        .and_then(|id| id.parse::<u64>().ok())
+                        .is_some_and(|id| update.ids.iter().any(|selector| selector.matches(id))),
+                };
+                if !selected {
                     continue;
                 }
                 if let Some(replaced) = &update.replaced {
@@ -395,10 +405,19 @@ fn apply_target_updates(ruleset: &mut CompiledRuleset, updates: &[UpdateTargetBy
                         }
                     }
                 }
+                super::diagnostics::report_added_targets(&update.additions, rule.id.as_deref());
                 rule.variables.extend(update.additions.iter().cloned());
             }
         }
     }
+}
+
+/// Tags are exact and case-sensitive, as in Coraza's tag exclusions.
+pub(crate) fn has_tag(actions: &[Action], tag: &str) -> bool {
+    actions.iter().any(|action| {
+        matches!(action,
+        Action::Metadata(MetadataAction::Tag(value)) if value == tag)
+    })
 }
 
 /// Whether a rule variable refers to the target named by a directive argument
@@ -417,6 +436,7 @@ fn variable_matches_target(var: &VariableSpec, target: &str) -> bool {
     }
     match (&var.selection, &parsed.selection) {
         (None, None) => true,
+        (Some(Selection::Regex(existing)), Some(Selection::Regex(wanted))) => existing == wanted,
         (Some(Selection::Key(existing)), Some(Selection::Key(wanted))) => {
             existing.eq_ignore_ascii_case(wanted.as_str())
         }
@@ -439,63 +459,6 @@ fn variable_matches_target(var: &VariableSpec, target: &str) -> bool {
 /// operator keeps failing the load, as it did before: those arguments come
 /// from the same config the operator is editing, not from a third-party
 /// ruleset.
-/// Warn about rule targets this engine parses but cannot resolve.
-///
-/// Such a variable always resolves to nothing, so the rule is dead. Under a
-/// negated operator it used to be worse than dead: an empty result was reported
-/// as a match, so `SecRule REQUEST_LINE "!@rx ..."` -- CRS 920100 -- denied
-/// every request. The evaluator no longer inverts absence into a match, but a
-/// rule that can never fire is still worth saying out loud at load time rather
-/// than leaving it to be inferred from traffic that was never inspected.
-///
-/// Only rules whose targets are *all* unresolvable are reported. CRS routinely
-/// writes `ARGS|ARGS_NAMES|XML:/*`, where the unsupported target costs nothing
-/// because the rule still inspects the others.
-fn report_unimplemented_variables(variables: &[VariableSpec], rule_id: &Option<String>) {
-    report_unsupported_xml_selectors(variables, rule_id);
-
-    if variables.is_empty() || variables.iter().any(|v| v.name.is_implemented()) {
-        return;
-    }
-    let targets: Vec<String> = variables.iter().map(|v| format!("{:?}", v.name)).collect();
-    tracing::warn!(
-        rule_id = %rule_id.as_deref().unwrap_or("(no id)"),
-        targets = %targets.join("|"),
-        "rule targets only variables this engine does not implement and can \
-         never match; the rest of the ruleset was loaded"
-    );
-}
-
-/// Warn about `XML:` targets that name an XPath expression this engine cannot
-/// express.
-///
-/// `XML:/*` and `XML://@*` are answered from the flattened body and cover every
-/// `XML:` target in the stock OWASP CRS. Anything richer needs a real XPath
-/// evaluator, and a rule asking for one inspects nothing through that target --
-/// worth saying at load time rather than leaving to be inferred from traffic.
-fn report_unsupported_xml_selectors(variables: &[VariableSpec], rule_id: &Option<String>) {
-    for var in variables {
-        if var.name != VariableName::Xml {
-            continue;
-        }
-        if XmlTarget::from_selection(var.selection.as_ref()).is_some() {
-            continue;
-        }
-        let selector = match &var.selection {
-            Some(Selection::Key(k)) => k.clone(),
-            Some(Selection::Regex(r)) => format!("/{r}/"),
-            None => String::new(),
-        };
-        tracing::warn!(
-            rule_id = %rule_id.as_deref().unwrap_or("(no id)"),
-            selector = %selector,
-            "rule selects XML with an XPath expression this engine cannot \
-             evaluate; only XML:/* and XML://@* are supported, and this target \
-             will match nothing"
-        );
-    }
-}
-
 fn compile_operator_reporting(
     spec: &OperatorSpec,
     rule_id: &Option<String>,
@@ -531,14 +494,21 @@ fn compile_operator_reporting(
 /// of rules, and one line per rule would bury the message it is trying to
 /// deliver.
 fn report_unsupported_controls(directives: &[Directive]) {
-    let mut seen: std::collections::BTreeMap<String, (&'static str, usize)> =
+    let mut seen: std::collections::BTreeMap<String, (&'static str, Vec<String>)> =
         std::collections::BTreeMap::new();
 
+    let mut chain_id: Option<String> = None;
     for directive in directives {
         let actions = match directive {
             Directive::SecRule(rule) => &rule.actions,
             Directive::SecAction(action) => &action.actions,
             _ => continue,
+        };
+        let rule_id = extract_id(actions).or_else(|| chain_id.clone());
+        chain_id = if has_chain(actions) {
+            rule_id.clone()
+        } else {
+            None
         };
         for (name, value, reason) in super::control::unsupported_controls(actions) {
             let key = if value.is_empty() {
@@ -546,15 +516,18 @@ fn report_unsupported_controls(directives: &[Directive]) {
             } else {
                 format!("{name}={value}")
             };
-            let entry = seen.entry(key).or_insert((reason, 0));
-            entry.1 += 1;
+            let entry = seen.entry(key).or_insert_with(|| (reason, Vec::new()));
+            entry
+                .1
+                .push(rule_id.clone().unwrap_or_else(|| "(no id)".into()));
         }
     }
 
-    for (spec, (reason, count)) in seen {
+    for (spec, (reason, ids)) in seen {
         tracing::warn!(
             directive = %spec,
-            rules_affected = count,
+            rules_affected = ids.len(),
+            rule_ids = %ids.join(","),
             reason = %reason,
             "ctl: directive is not implemented and will have no effect"
         );
