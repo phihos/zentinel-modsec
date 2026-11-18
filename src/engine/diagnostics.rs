@@ -8,6 +8,7 @@ use crate::parser::{
     Action, DataAction, Directive, DisruptiveAction, FlowAction, LoggingAction, MetadataAction,
     OperatorName, Selection, SetVarValue, VariableName, VariableSpec, XmlTarget,
 };
+use crate::variables::SelectorPrograms;
 
 type Diagnostics = BTreeMap<(String, String, &'static str), BTreeSet<String>>;
 
@@ -19,7 +20,7 @@ fn record(found: &mut Diagnostics, kind: &str, name: &str, reason: &'static str,
 }
 
 /// Report recognized no-ops and approximations, grouped by capability and IDs.
-pub(super) fn report(directives: &[Directive]) {
+pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) {
     let all_ids: BTreeSet<String> = directives
         .iter()
         .filter_map(|directive| {
@@ -79,7 +80,7 @@ pub(super) fn report(directives: &[Directive]) {
         } else {
             None
         };
-        report_variables(&mut found, variables, &effective_id);
+        report_variables(&mut found, variables, &effective_id, programs);
         if let Some(operator) = operator {
             let reason = match operator.name {
                 OperatorName::VerifyCc | OperatorName::VerifySsn | OperatorName::VerifyCpf |
@@ -111,9 +112,18 @@ pub(super) fn report(directives: &[Directive]) {
     emit(found);
 }
 
-pub(super) fn report_added_targets(variables: &[VariableSpec], rule_id: Option<&str>) {
+pub(super) fn report_added_targets(
+    variables: &[VariableSpec],
+    rule_id: Option<&str>,
+    programs: &mut SelectorPrograms,
+) {
     let mut found = Diagnostics::new();
-    report_variables(&mut found, variables, rule_id.unwrap_or("(no id)"));
+    report_variables(
+        &mut found,
+        variables,
+        rule_id.unwrap_or("(no id)"),
+        programs,
+    );
     emit(found);
 }
 
@@ -131,7 +141,12 @@ fn id(actions: &[Action]) -> Option<String> {
     })
 }
 
-fn report_variables(found: &mut Diagnostics, variables: &[VariableSpec], id: &str) {
+fn report_variables(
+    found: &mut Diagnostics,
+    variables: &[VariableSpec],
+    id: &str,
+    programs: &mut SelectorPrograms,
+) {
     for variable in variables {
         if !variable.name.is_implemented() {
             record(
@@ -155,32 +170,28 @@ fn report_variables(found: &mut Diagnostics, variables: &[VariableSpec], id: &st
         }
         if variable.name != VariableName::Xml {
             if let Some(Selection::Regex(pattern)) = &variable.selection {
-                report_regex(found, pattern, variable.name, id);
+                report_regex(found, pattern, variable.name, id, programs);
             }
         }
         for exclusion in &variable.exclusions {
-            if let Some((collection, selection)) = exclusion.split_once(':') {
-                if let Some(pattern) = selection
-                    .strip_prefix('/')
-                    .and_then(|s| s.strip_suffix('/'))
-                {
-                    report_regex(
-                        found,
-                        pattern,
-                        VariableName::from_str(collection).unwrap_or(variable.name),
-                        id,
-                    );
-                }
+            if let Some((name, pattern)) = crate::variables::regex_exclusion(exclusion) {
+                report_regex(found, pattern, name, id, programs);
             }
         }
     }
 }
 
-fn report_regex(found: &mut Diagnostics, pattern: &str, collection: VariableName, id: &str) {
+fn report_regex(
+    found: &mut Diagnostics,
+    pattern: &str,
+    collection: VariableName,
+    id: &str,
+    programs: &mut SelectorPrograms,
+) {
     // Syntax alone is insufficient: valid regexes may exceed the compiled
     // program limit. Reuse the resolver cache so this also warms successful
     // selectors once, and failed compilations remain cached for evaluation.
-    if crate::variables::cached_collection_regex(pattern, collection).is_none() {
+    if programs.add(pattern, collection).is_none() {
         record(
             found,
             "variable-regex",

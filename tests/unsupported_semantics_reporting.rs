@@ -334,3 +334,14 @@ SecRule ARGS_POST:x "@contains attack" "id:201,phase:2,pass""#,
     tx.process_request_body().unwrap();
     assert!(tx.matched_rules().is_empty());
 }
+
+#[test]
+fn byte_only_selector_is_validated_in_the_runtime_dialect() {
+    let (engine, log) =
+        load_logs(r#"SecRule ARGS:/(?-u:^\xFF$)/ "@streq sample" "id:121,phase:1,pass""#);
+    assert!(!log.contains("variable-regex"), "{log}");
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/?%FF=sample", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["121"]);
+}
