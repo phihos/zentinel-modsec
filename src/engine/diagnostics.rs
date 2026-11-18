@@ -88,7 +88,6 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
                 OperatorName::Rbl | OperatorName::GeoLookup | OperatorName::GsbLookup |
                 OperatorName::InspectFile | OperatorName::FuzzyHash | OperatorName::Rsub =>
                     Some("operator is a placeholder and always returns no match (negation may invert that result)"),
-                OperatorName::ContainsWord => Some("word boundaries are not implemented; this operator uses substring matching"),
                 OperatorName::StrMatch => Some("operator is approximated by substring matching"),
                 _ => None,
             };

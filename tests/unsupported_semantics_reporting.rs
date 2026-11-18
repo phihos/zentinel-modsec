@@ -57,17 +57,12 @@ fn placeholder_operators_report_the_affected_rule_at_load() {
 }
 
 #[test]
-fn approximated_operators_report_the_affected_rule_at_load() {
-    for operator in ["containsWord", "strmatch"] {
-        let argument = "example";
-        let (_, log) = load_logs(&format!(
-            r#"SecRule ARGS "@{operator} {argument}" "id:102,phase:2,pass""#
-        ));
-        assert!(
-            log.contains("operator") && log.contains("rule_ids=102"),
-            "{operator}: {log}"
-        );
-    }
+fn approximated_operator_reports_the_affected_rule_at_load() {
+    let (_, log) = load_logs(r#"SecRule ARGS "@strmatch example" "id:102,phase:2,pass""#);
+    assert!(
+        log.contains("operator") && log.contains("rule_ids=102"),
+        "{log}"
+    );
 }
 
 #[test]

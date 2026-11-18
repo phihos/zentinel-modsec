@@ -9,6 +9,9 @@ pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Ar
         OperatorName::Ge => return Ok(Arc::new(GeOperator::from_expanded(argument))),
         OperatorName::Lt => return Ok(Arc::new(LtOperator::from_expanded(argument))),
         OperatorName::Le => return Ok(Arc::new(LeOperator::from_expanded(argument))),
+        OperatorName::ContainsWord => {
+            return Ok(Arc::new(comparison::ContainsWordOperator::new(argument)))
+        }
         OperatorName::Within => {
             return Ok(Arc::new(WithinOperator {
                 haystack: argument.to_vec(),
@@ -42,7 +45,6 @@ pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Ar
                 .filter(|s| !s.is_empty()),
         )?)),
         OperatorName::Contains
-        | OperatorName::ContainsWord
         | OperatorName::StrMatch
         | OperatorName::BeginsWith
         | OperatorName::EndsWith
@@ -69,7 +71,7 @@ impl Operator for ByteArgument {
     }
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         let matched = match self.kind {
-            OperatorName::Contains | OperatorName::ContainsWord | OperatorName::StrMatch => {
+            OperatorName::Contains | OperatorName::StrMatch => {
                 self.argument.is_empty()
                     || value
                         .windows(self.argument.len())
@@ -84,7 +86,6 @@ impl Operator for ByteArgument {
         Ok(if matched {
             let portion = match self.kind {
                 OperatorName::Contains
-                | OperatorName::ContainsWord
                 | OperatorName::StrMatch
                 | OperatorName::BeginsWith
                 | OperatorName::EndsWith => self.argument.clone(),
