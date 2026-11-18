@@ -1,0 +1,7 @@
+application/json  {"title":"Book","Title":"Other","ok":true}  [11 12 13 15 16]
+application/json  {"ok":false}  [11 14 15 16]
+application/json  {"title":"Book","bad":  [11 12 14 15 16]
+text/plain  {"ok":true}  [11 14 15 16]
+160 nested arrays / {"k":"a\"b","n":45}: violation false
+160 nested arrays / 2e400: violation true
+160 nested arrays / malformed: violation true

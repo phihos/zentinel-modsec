@@ -1,0 +1,51 @@
+{
+  "engine": "19cc49939494341eba3bcace2b92699f5b079706",
+  "coraza": "3.8.1",
+  "crs": "4.25.0",
+  "all_target_tests": {
+    "rust": {
+      "passed": 723,
+      "failed": 0,
+      "ignored": 0
+    },
+    "libinjection-ffi": {
+      "passed": 725,
+      "failed": 0,
+      "ignored": 1
+    }
+  },
+  "libinjection_corpus_enabled": {
+    "passed": 8,
+    "failed": 0,
+    "ignored": 0
+  },
+  "fmt_exit": 0,
+  "clippy_exit": {
+    "rust": 0,
+    "libinjection-ffi": 0
+  },
+  "sampling": {
+    "rules": [
+      901400,
+      901410,
+      901450
+    ],
+    "sampling_percentage": 50,
+    "source": "rules/REQUEST-901-INITIALIZATION.conf",
+    "inspected_by_both": {
+      "request-a": true,
+      "request-b": false
+    }
+  },
+  "audit_probe": {
+    "config": "SecRuleEngine On\nSecRule REQUEST_METHOD \"@streq GET\" \"id:81001,phase:1,deny,status:409,log,auditlog,msg:'read %{unique_id}',logdata:'method=%{matched_var}'\"",
+    "coraza_writer": "JSON",
+    "shared_fields": {
+      "transaction_id": "audit-17",
+      "rule_id": 81001,
+      "message": "read audit-17",
+      "logdata": "method=GET"
+    },
+    "intervention_status": 409
+  }
+}
