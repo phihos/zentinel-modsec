@@ -20,7 +20,7 @@ SecResponseBodyAccess On
 SecResponseBodyMimeType application/json
 SecAction "id:10,phase:3,pass,ctl:responseBodyProcessor=json"
 SecRule RES_BODY_PROCESSOR "@streq JSON" "id:11,phase:3,pass"
-SecRule RESPONSE_ARGS:json.title "@streq Book" "id:12,phase:4,pass"
+SecRule RESPONSE_ARGS:json.title "@streq Book" "id:12,phase:4,pass,setvar:'tx.title=%{RESPONSE_ARGS.json.title}'"
 SecRule &RESPONSE_ARGS:json.title "@eq 2" "id:13,phase:4,pass"
 SecRule RESPONSE_BODY "@validateSchema reply.json" "id:14,phase:4,pass"
 SecRule RESPONSE_CONTENT_LENGTH "@rx ^$" "id:15,phase:4,pass"
@@ -75,6 +75,13 @@ SecRule RES_BODY_ERROR "@streq 1" "id:17,phase:4,pass""#,
         tx.process_response_body().unwrap();
         tx.process_response_body().unwrap();
         assert_eq!(tx.matched_rules(), expected, "{media} {body}");
+        if expected.contains(&"12") {
+            assert_eq!(tx.tx().get("title"), Some(vec!["Book"]));
+        }
+        assert_eq!(
+            tx.response_json().unwrap().error.is_some(),
+            expected.contains(&"17")
+        );
         assert_eq!(
             tx.tx().get("json_response_body"),
             stored.then(|| vec![body])

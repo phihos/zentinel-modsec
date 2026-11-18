@@ -261,11 +261,16 @@ fn report_macros(found: &mut Diagnostics, value: &str, id: &str) {
         let supported = match lower.split_once('.') {
             Some((collection, _)) => matches!(
                 collection,
-                "tx" | "request_headers" | "args" | "args_get" | "args_post"
+                "tx" | "request_headers" | "args" | "args_get" | "args_post" | "response_args"
             ),
             None => {
-                matches!(lower.as_str(), "matched_var" | "matched_var_name")
-                    || VariableName::from_str(name).is_none()
+                matches!(
+                    lower.as_str(),
+                    "matched_var"
+                        | "matched_var_name"
+                        | "res_body_processor"
+                        | "arguments_limit_reached"
+                ) || VariableName::from_str(name).is_none()
             }
         };
         if !supported {
