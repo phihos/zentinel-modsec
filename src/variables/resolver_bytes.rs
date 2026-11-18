@@ -73,19 +73,9 @@ impl<'a> VariableResolver<'a> {
             };
 
         use VariableName::*;
-        if let Some(maps) = self.collection_maps(name) {
-            let names = matches!(
-                name,
-                ArgsNames
-                    | ArgsGetNames
-                    | ArgsPostNames
-                    | RequestHeadersNames
-                    | ResponseHeadersNames
-                    | RequestCookiesNames
-            );
-            for map in maps {
-                collection(map, name.seclang_name(), names, None);
-            }
+        if self.visit_collection_maps(name, |map, prefix, names| {
+            collection(map, prefix, names, None);
+        }) {
             return;
         }
 
@@ -140,45 +130,73 @@ impl<'a> VariableResolver<'a> {
         }
     }
 
-    /// The backing collections in SecLang lookup order. A recognized collection
-    /// can have no backing map until its body processor has run.
-    fn collection_maps(
+    /// Visit the backing maps in lookup order. A recognized collection may be
+    /// empty until its body processor has run.
+    fn visit_collection_maps(
         &self,
         name: VariableName,
-    ) -> Option<impl Iterator<Item = &'a HashMapCollection>> {
+        mut visit: impl FnMut(&'a HashMapCollection, &'static str, bool),
+    ) -> bool {
         use VariableName::*;
         let request = self.request;
-        let first = match name {
+        match name {
             Args | ArgsNames => {
-                return Some(
-                    [
-                        Some(&request.args_get),
-                        Some(&request.args_post),
-                        request.path_arguments(),
-                    ]
-                    .into_iter()
-                    .flatten(),
-                )
+                let names = name == ArgsNames;
+                let prefix = if names { "ARGS_NAMES" } else { "ARGS" };
+                visit(&request.args_get, prefix, names);
+                visit(&request.args_post, prefix, names);
+                if let Some(path) = request.path_arguments() {
+                    visit(path, prefix, names);
+                }
             }
-            ArgsPath => request.path_arguments(),
-            ArgsGet | ArgsGetNames => Some(&request.args_get),
-            ArgsPost | ArgsPostNames => Some(&request.args_post),
-            RequestHeaders | RequestHeadersNames => Some(&request.headers),
-            RequestCookies | RequestCookiesNames => Some(&request.cookies),
-            ResponseHeaders | ResponseHeadersNames => Some(&self.response.headers),
-            ResponseArgs => self.response.json.as_ref().map(|json| &json.args),
-            Files => Some(&request.files),
-            FilesNames => Some(&request.files_names),
-            FilesSizes => Some(&request.files_sizes),
-            FilesTmpnames => request.uploads.as_ref().map(|files| &files.names),
-            MultipartName => Some(&request.multipart_names),
-            MultipartFilename => Some(&request.multipart_filenames),
-            MultipartFilenameCharset => Some(&request.multipart_filename_charsets),
-            MultipartFilenameLanguage => Some(&request.multipart_filename_languages),
-            MultipartPartHeaders => Some(&request.multipart_part_headers),
-            _ => return None,
-        };
-        Some([first, None, None].into_iter().flatten())
+            ArgsPath => {
+                if let Some(path) = request.path_arguments() {
+                    visit(path, "ARGS_PATH", false);
+                }
+            }
+            ArgsGet => visit(&request.args_get, "ARGS_GET", false),
+            ArgsPost => visit(&request.args_post, "ARGS_POST", false),
+            ArgsGetNames => visit(&request.args_get, "ARGS_GET_NAMES", true),
+            ArgsPostNames => visit(&request.args_post, "ARGS_POST_NAMES", true),
+            RequestHeaders => visit(&request.headers, "REQUEST_HEADERS", false),
+            RequestHeadersNames => visit(&request.headers, "REQUEST_HEADERS_NAMES", true),
+            ResponseHeaders => visit(&self.response.headers, "RESPONSE_HEADERS", false),
+            ResponseArgs => {
+                if let Some(json) = &self.response.json {
+                    visit(&json.args, "RESPONSE_ARGS", false);
+                }
+            }
+            ResponseHeadersNames => visit(&self.response.headers, "RESPONSE_HEADERS_NAMES", true),
+            RequestCookies => visit(&request.cookies, "REQUEST_COOKIES", false),
+            RequestCookiesNames => visit(&request.cookies, "REQUEST_COOKIES_NAMES", true),
+            MultipartPartHeaders => visit(
+                &request.multipart_part_headers,
+                "MULTIPART_PART_HEADERS",
+                false,
+            ),
+            Files => visit(&request.files, "FILES", false),
+            FilesNames => visit(&request.files_names, "FILES_NAMES", false),
+            FilesTmpnames => {
+                if let Some(files) = &request.uploads {
+                    visit(&files.names, "FILES_TMPNAMES", false);
+                }
+            }
+            FilesSizes => visit(&request.files_sizes, "FILES_SIZES", false),
+            MultipartName => visit(&request.multipart_names, "MULTIPART_NAME", false),
+            MultipartFilename => visit(&request.multipart_filenames, "MULTIPART_FILENAME", false),
+            MultipartFilenameCharset => visit(
+                &request.multipart_filename_charsets,
+                "MULTIPART_FILENAME_CHARSET",
+                false,
+            ),
+            MultipartFilenameLanguage => visit(
+                &request.multipart_filename_languages,
+                "MULTIPART_FILENAME_LANGUAGE",
+                false,
+            ),
+            _ => return false,
+        }
+        true
     }
 
     /// Keyed macros read values, including for collections whose rule targets
@@ -190,27 +208,30 @@ impl<'a> VariableResolver<'a> {
         token: &'a [u8],
     ) -> Cow<'a, [u8]> {
         use VariableName::*;
-        let value = if let Some(mut maps) = self.collection_maps(name) {
-            let key = if matches!(name, ResponseHeaders | ResponseHeadersNames) {
-                folded_key(key)
-            } else {
-                Cow::Borrowed(key)
-            };
-            maps.find_map(|map| map.first_value_bytes(&key))
+        let key = if matches!(name, ResponseHeaders | ResponseHeadersNames) {
+            folded_key(key)
         } else {
-            match name {
-                Xml => self.request.xml.first_value_bytes(key),
+            Cow::Borrowed(key)
+        };
+        let mut value = None;
+        if !self.visit_collection_maps(name, |map, _, _| {
+            if value.is_none() {
+                value = map.first_value_bytes(&key);
+            }
+        }) {
+            value = match name {
+                Xml => self.request.xml.first_value_bytes(&key),
                 MatchedVars | MatchedVarsNames => self
                     .matched_bytes
                     .and_then(|values| {
                         values
                             .iter()
-                            .find(|(k, _)| k.as_bytes().eq_ignore_ascii_case(key))
+                            .find(|(k, _)| k.as_bytes().eq_ignore_ascii_case(&key))
                     })
                     .map(|(_, v)| v.as_bytes()),
                 _ => return self.scalar_value(name).unwrap_or(Cow::Borrowed(b"")),
-            }
-        };
+            };
+        }
         Cow::Borrowed(value.unwrap_or(token))
     }
 
