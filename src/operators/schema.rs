@@ -1,38 +1,20 @@
 //! JSON Schema files are trusted configuration, loaded once with their rule.
 mod arena;
+mod documents;
 mod recursive;
 mod reference;
 
 use super::{ByteOperatorResult, Operator, OperatorResult};
 use crate::{Error, Result};
+use documents::SchemaDirectory;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 
 pub(crate) struct SchemaOperator {
     validator: jsonschema::Validator,
     inspection_depth: Option<(usize, bool)>,
     recursive: Option<recursive::Program>,
-}
-
-// Pin retrieval to the configuration directory. This overrides any network/file
-// resolver an embedding application might enable through Cargo feature unification.
-struct SchemaDirectory(PathBuf);
-impl jsonschema::Retrieve for SchemaDirectory {
-    fn retrieve(
-        &self,
-        uri: &jsonschema::Uri<String>,
-    ) -> std::result::Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        let url = url::Url::parse(uri.as_str())?;
-        let path = url
-            .to_file_path()
-            .map_err(|_| "only local JSON Schema references are supported")?;
-        let path = path.canonicalize()?;
-        if !path.starts_with(&self.0) {
-            return Err("schema reference resolves outside the rule directory".into());
-        }
-        Ok(serde_json::from_slice(&std::fs::read(path)?)?)
-    }
 }
 
 impl SchemaOperator {
@@ -67,19 +49,23 @@ impl SchemaOperator {
         let bytes = std::fs::read(file).map_err(|e| error(e.to_string()))?;
         let schema: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|e| error(e.to_string()))?;
+        let directory = SchemaDirectory::new(root);
         jsonschema::options()
             .with_keyword("uniqueItems", |_, enabled, _| {
                 Ok(Box::new(UniqueItems(enabled.as_bool() == Some(true))))
             })
             .with_base_uri(base.as_str())
-            .with_retriever(SchemaDirectory(root))
+            .with_retriever(directory.clone())
             .should_validate_formats(false)
             .build(&schema)
             .map(|validator| {
+                let documents = directory.finish();
                 let inspection_depth = inspection_depth(&schema);
                 let recursive = inspection_depth
                     .is_none()
-                    .then(|| recursive::Program::compile(&schema, &base, validator.draft()))
+                    .then(|| {
+                        recursive::Program::compile(&schema, &base, &documents, validator.draft())
+                    })
                     .flatten();
                 Self {
                     validator,

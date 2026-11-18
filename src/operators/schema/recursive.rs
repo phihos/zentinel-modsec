@@ -2,6 +2,7 @@
 //! same instance runs after its dependencies. One that selects a child reads
 //! the already completed row for that child. Neither traversal grows the stack.
 use super::arena::{child, Arena};
+use super::documents::SchemaDocuments;
 use super::reference::LocalRefs;
 use super::{inspection_depth, UniqueItems};
 use jsonschema::{Draft, Validator};
@@ -230,12 +231,21 @@ impl<'a> Compiler<'a> {
 }
 
 impl Program {
-    pub(super) fn compile(root: &Value, base: &url::Url, draft: Draft) -> Option<Self> {
+    pub(super) fn compile(
+        root: &Value,
+        base: &url::Url,
+        documents: &SchemaDocuments,
+        draft: Draft,
+    ) -> Option<Self> {
         if draft == Draft::Unknown {
             return None;
         }
+        let mut refs = LocalRefs::new(root, base)?;
+        for (retrieval, document) in documents {
+            refs.add_document(document, retrieval)?;
+        }
         let mut compiler = Compiler {
-            refs: LocalRefs::new(root, base)?,
+            refs,
             draft,
             queued: vec![],
             indices: HashMap::new(),
