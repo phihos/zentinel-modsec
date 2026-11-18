@@ -129,6 +129,7 @@ pub(super) struct RuleDispatch {
     pub single_tx_numeric: bool,
     pub numeric_tx_slot: Option<u8>,
     pub dynamic: bool,
+    pub within_tx_key: Option<Box<[u8]>>,
     pub capture: bool,
     pub multi_match: bool,
     /// Start of the suffix containing every control, or the action count.
@@ -191,6 +192,19 @@ impl RuleDispatch {
             controls_from: rule.actions.len(),
             disruptive: rule.actions.len(),
             dynamic,
+            within_tx_key: if dynamic && rule.operator_spec.name == OperatorName::Within {
+                super::split_operator_macro(&rule.operator_spec.argument).and_then(
+                    |(prefix, name, suffix)| {
+                        let (collection, key) = name.split_once('.')?;
+                        (prefix.is_empty()
+                            && suffix.is_empty()
+                            && collection.eq_ignore_ascii_case("tx"))
+                        .then(|| folded_key(key.as_bytes()).into_owned().into_boxed_slice())
+                    },
+                )
+            } else {
+                None
+            },
             ..Self::default()
         };
         dispatch.single_tx_numeric = dispatch.numeric.is_some()
