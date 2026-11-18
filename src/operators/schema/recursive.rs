@@ -131,6 +131,9 @@ impl<'a> Compiler<'a> {
                             .resolve_dynamic_in(schema, value.as_str()?, &self.scope)?;
                     state.same.push(Op::All(vec![self.id(target)]));
                 }
+                // A declaration documents a meta-schema's vocabularies. The
+                // active validation dialect comes from the schema's $schema.
+                "$vocabulary" if !modern || standard_vocabularies(value, self.draft) => {}
                 "$vocabulary" => return None,
                 "allOf" => state.same.push(Op::All(self.list(value)?)),
                 "anyOf" => state.same.push(Op::Any(self.list(value)?)),
@@ -243,6 +246,27 @@ impl<'a> Compiler<'a> {
         }
         Some(state)
     }
+}
+
+fn standard_vocabularies(declaration: &Value, draft: Draft) -> bool {
+    let prefix = match draft {
+        Draft::Draft201909 => "https://json-schema.org/draft/2019-09/vocab/",
+        Draft::Draft202012 => "https://json-schema.org/draft/2020-12/vocab/",
+        _ => return false,
+    };
+    declaration.as_object().is_some_and(|vocabularies| {
+        vocabularies.iter().all(|(uri, required)| {
+            required.is_boolean()
+                && match uri.strip_prefix(prefix) {
+                    Some("core" | "applicator" | "validation" | "meta-data" | "content") => true,
+                    Some("format") => draft == Draft::Draft201909,
+                    Some("unevaluated" | "format-assertion" | "format-annotation") => {
+                        draft == Draft::Draft202012
+                    }
+                    _ => false,
+                }
+        })
+    })
 }
 
 impl Program {

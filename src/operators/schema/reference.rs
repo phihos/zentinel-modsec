@@ -64,9 +64,10 @@ impl<'a> LocalRefs<'a> {
                         Some(id) => uri::resolve_against(&base.borrow(), id).ok()?,
                         None => base.clone(),
                     };
-                    // Older drafts can attach a fragment to an absolute resource ID.
-                    // Leave this uncommon case to the compiled validator.
-                    if canonical.has_fragment() {
+                    // Drafts 4–7 allow a full identifier with a fragment. Preserve
+                    // it as the base for children without aliasing its fragment as
+                    // a plain-name anchor in the containing resource.
+                    if canonical.has_fragment() && draft >= Draft::Draft201909 {
                         return None;
                     }
                     let scope = self.resources.len();
