@@ -88,14 +88,7 @@ impl<'a> Compiler<'a> {
     fn state(&mut self, schema: &'a Value) -> Option<State> {
         let mut state = State::default();
         let Some(map) = schema.as_object() else {
-            state.leaf = Some((
-                jsonschema::options()
-                    .with_draft(self.draft)
-                    .build(schema)
-                    .ok()?,
-                0,
-                false,
-            ));
+            state.leaf = Some((jsonschema::validator_for(schema).ok()?, 0, false));
             return Some(state);
         };
         if map
@@ -119,8 +112,14 @@ impl<'a> Compiler<'a> {
             match key.as_str() {
                 "$ref" | "$schema" | "$id" | "id" | "$anchor" | "$dynamicAnchor"
                 | "$recursiveAnchor" | "$defs" | "definitions" | "$comment" => {}
-                "$recursiveRef" if self.draft == Draft::Draft201909 => return None,
-                "$dynamicRef" if prefix => return None,
+                "$recursiveRef" if self.draft == Draft::Draft201909 => {
+                    let target = self.refs.resolve_recursive(schema, value.as_str()?)?;
+                    state.same.push(Op::All(vec![self.id(target)]));
+                }
+                "$dynamicRef" if prefix => {
+                    let target = self.refs.resolve_dynamic(schema, value.as_str()?)?;
+                    state.same.push(Op::All(vec![self.id(target)]));
+                }
                 "$vocabulary" => return None,
                 "allOf" => state.same.push(Op::All(self.list(value)?)),
                 "anyOf" => state.same.push(Op::Any(self.list(value)?)),
