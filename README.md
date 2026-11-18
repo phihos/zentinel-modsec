@@ -331,6 +331,14 @@ inspection; other transfer encodings stay raw, as in Coraza's NextPart API. `FIL
 excluding MIME framing, matching Coraza. Intentional `ProcessPartial` prefixes
 suppress only the EOF strict error, while other malformed states remain visible.
 
+Selecting `ctl:responseBodyProcessor=JSON` by phase 3 parses the inspected response
+in phase 4. Enable response body access and allow the response MIME type.
+`RESPONSE_ARGS` contains the flattened fields, including repeated names.
+The JSON processor writes the successful raw input to `TX:json_response_body`
+and leaves `RESPONSE_BODY` and `RESPONSE_CONTENT_LENGTH` empty.
+An error preserves fields already parsed and sets `RES_BODY_ERROR` and
+`RES_BODY_PROCESSOR_ERROR`; their `_MSG` counterparts expose the reason.
+
 **Body processors:** URL-encoded forms, multipart (including
 `MULTIPART_PART_HEADERS`), JSON, XML and explicit RAW. Missing or unknown body
 types remain unprocessed unless `ctl:forceRequestBodyVariable=On` selects the

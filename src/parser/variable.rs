@@ -89,6 +89,18 @@ pub enum VariableName {
     ResponseHeaders,
     /// `RESPONSE_HEADERS_NAMES`
     ResponseHeadersNames,
+    /// `RESPONSE_ARGS`
+    ResponseArgs,
+    /// `RES_BODY_PROCESSOR`
+    ResBodyProcessor,
+    /// `RES_BODY_ERROR`
+    ResBodyError,
+    /// `RES_BODY_ERROR_MSG`
+    ResBodyErrorMsg,
+    /// `RES_BODY_PROCESSOR_ERROR`
+    ResBodyProcessorError,
+    /// `RES_BODY_PROCESSOR_ERROR_MSG`
+    ResBodyProcessorErrorMsg,
     /// `RESPONSE_BODY`
     ResponseBody,
     /// `RESPONSE_CONTENT_TYPE`
@@ -330,6 +342,12 @@ impl VariableName {
             | VariableName::ResponseProtocol
             | VariableName::ResponseHeaders
             | VariableName::ResponseHeadersNames
+            | VariableName::ResponseArgs
+            | VariableName::ResBodyProcessor
+            | VariableName::ResBodyError
+            | VariableName::ResBodyErrorMsg
+            | VariableName::ResBodyProcessorError
+            | VariableName::ResBodyProcessorErrorMsg
             | VariableName::ResponseBody
             | VariableName::ResponseContentType
             | VariableName::ResponseContentLength
@@ -466,6 +484,12 @@ variable_names! {
     "RESPONSE_PROTOCOL" => VariableName::ResponseProtocol,
     "RESPONSE_HEADERS" => VariableName::ResponseHeaders,
     "RESPONSE_HEADERS_NAMES" => VariableName::ResponseHeadersNames,
+    "RESPONSE_ARGS" => VariableName::ResponseArgs,
+    "RES_BODY_PROCESSOR" => VariableName::ResBodyProcessor,
+    "RES_BODY_ERROR" => VariableName::ResBodyError,
+    "RES_BODY_ERROR_MSG" => VariableName::ResBodyErrorMsg,
+    "RES_BODY_PROCESSOR_ERROR" => VariableName::ResBodyProcessorError,
+    "RES_BODY_PROCESSOR_ERROR_MSG" => VariableName::ResBodyProcessorErrorMsg,
     "RESPONSE_BODY" => VariableName::ResponseBody,
     "RESPONSE_CONTENT_TYPE" => VariableName::ResponseContentType,
     "RESPONSE_CONTENT_LENGTH" => VariableName::ResponseContentLength,
@@ -560,6 +584,7 @@ impl VariableName {
                 | Self::RequestHeadersNames
                 | Self::RequestCookies
                 | Self::RequestCookiesNames
+                | Self::ResponseArgs
                 | Self::ResponseHeaders
                 | Self::ResponseHeadersNames
                 | Self::Tx

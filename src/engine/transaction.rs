@@ -659,6 +659,27 @@ impl Transaction {
         self.phase = Phase::ResponseBody;
         self.response.body_inspected =
             self.response_body_accessible() && self.response_body_processable();
+        if self.response.body_inspected && self.engine_mode() != RuleEngineMode::Off {
+            if let Some(json) = &mut self.response.json {
+                let config = self.ruleset.body_config();
+                let body = self.response.body.as_slice();
+                let result = if body.is_empty() {
+                    Err("invalid JSON".to_owned())
+                } else {
+                    crate::variables::json::parse(
+                        body,
+                        &mut json.args,
+                        config.argument_limit,
+                        config.response_json_depth_limit,
+                        &mut self.request.arguments_limit_reached,
+                    )
+                };
+                match result {
+                    Ok(()) => self.tx.set_bytes("json_response_body", body),
+                    Err(error) => json.error = Some(error),
+                }
+            }
+        }
         self.run_body_callback(Phase::ResponseBody)?;
         Ok(())
     }
@@ -1497,6 +1518,12 @@ impl Transaction {
                     .expect("compiled control action")
                     .clone();
                 if !matches!(directive, CtlDirective::Unsupported { .. }) {
+                    if directive == CtlDirective::ResponseBodyProcessorJson {
+                        if tx.phase > Phase::ResponseHeaders {
+                            continue;
+                        }
+                        tx.response.json.get_or_insert_with(Default::default);
+                    }
                     if let CtlDirective::RequestBodyProcessor(ref processor) = directive {
                         tx.request.body_processor = processor.clone();
                     }

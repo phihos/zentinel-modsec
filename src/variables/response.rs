@@ -2,6 +2,24 @@
 
 use super::collection::HashMapCollection;
 
+/// Fields produced by the JSON response body processor.
+#[derive(Debug, Clone)]
+pub struct ResponseJson {
+    /// Flattened response fields, with repeated values preserved.
+    pub args: HashMapCollection,
+    /// The processor error, if any. Successfully parsed fields remain available.
+    pub error: Option<String>,
+}
+
+impl Default for ResponseJson {
+    fn default() -> Self {
+        Self {
+            args: HashMapCollection::named(),
+            error: None,
+        }
+    }
+}
+
 /// Response data container.
 #[derive(Debug, Clone, Default)]
 pub struct ResponseData {
@@ -17,6 +35,8 @@ pub struct ResponseData {
     pub outbound_data_error: bool,
     /// Body bytes were made available to phase 4 under the MIME/access policy.
     pub body_inspected: bool,
+    /// Present once a rule selects the JSON processor.
+    pub json: Option<Box<ResponseJson>>,
     /// Content type.
     pub content_type: String,
 }
@@ -76,7 +96,7 @@ impl ResponseData {
 
     /// Bytes visible through RESPONSE_BODY after its phase's access checks.
     pub fn body_variable_bytes(&self) -> &[u8] {
-        if self.body_inspected {
+        if self.body_inspected && self.json.is_none() {
             &self.body
         } else {
             b""
