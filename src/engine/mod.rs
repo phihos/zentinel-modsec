@@ -9,6 +9,7 @@ mod match_log;
 pub mod phase;
 pub mod ruleset;
 pub mod scoring;
+mod target_indices;
 pub mod transaction;
 
 pub use body::{BodyConfig, BodyLimitAction, BodyWriteResult};
