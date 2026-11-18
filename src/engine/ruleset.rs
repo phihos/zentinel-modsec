@@ -292,12 +292,12 @@ impl RuleDispatch {
             Self::header_members(rule, &plan.selections).map(|(_, key)| key)
         });
         let keys = Self::frequent_keys(members, 4, super::target_indices::HEADER_SLOTS);
-        if !keys.is_empty() {
-            for (rule, plan) in rules.iter().zip(dispatch) {
-                for (index, key) in Self::header_members(rule, &plan.selections) {
-                    if let Some(slot) = keys.iter().position(|k| k.as_ref() == key) {
-                        plan.targets.header_targets[slot] |= 1 << index;
-                    }
+        for (rule, plan) in rules.iter().zip(dispatch) {
+            for (index, key) in Self::header_members(rule, &plan.selections) {
+                if let Some(slot) = keys.iter().position(|k| k.as_ref() == key) {
+                    plan.targets.header_targets[slot] |= 1 << index;
+                } else {
+                    plan.targets.add_optional_header(index, key);
                 }
             }
         }
