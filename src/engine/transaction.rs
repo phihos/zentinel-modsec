@@ -14,7 +14,7 @@ use crate::actions::{
 };
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, Operator};
-use crate::parser::{Action, BodyLimitAction, DataAction, FlowAction};
+use crate::parser::{Action, BodyLimitAction, DataAction, FlowAction, VariableSpec};
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
 };
@@ -81,34 +81,11 @@ pub struct Transaction {
     response_body_state: BodyState,
 }
 
-/// The variable a rule matched on.
-#[derive(Debug, Clone)]
-struct MatchedVariable {
-    name: ByteValue,
-    value: ByteValue,
-    portion: Option<Vec<u8>>,
-}
-
-/// One variable value a rule's operator matched.
-struct RuleMatch {
-    captures: Vec<Vec<u8>>,
-    matched_variable: Option<MatchedVariable>,
-}
-
-/// Result of evaluating one rule: every match, in the order the variables were
-/// resolved. libmodsecurity runs the operator against every value and handles
-/// each match on its own (`capture`, `setvar`), so a rule over `REQUEST_HEADERS`
-/// acts once per matching header.
+/// Deferred actions and audit snapshots from a matched link.
 struct RuleOutcome {
-    matches: Vec<RuleMatch>,
-}
-
-impl RuleOutcome {
-    fn no_match() -> Self {
-        Self {
-            matches: Vec::new(),
-        }
-    }
+    actions: ActionResult,
+    first_data: Option<MatchedData>,
+    first_message: Option<RuleMessage>,
 }
 
 /// What a rule matched on.
@@ -1009,82 +986,20 @@ impl Transaction {
                     rules[start].actions.as_slice()
                 });
             let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
-            let outcome = self.evaluate_rule(rule, link_rule_id, tag_actions)?;
-            let matched = !outcome.matches.is_empty();
-
-            if matched {
-                // MATCHED_VARS is scoped to the current rule in ModSecurity,
-                // so this replaces rather than appends -- otherwise a later
-                // rule would read the previous rule's matches.
-                self.matched_vars.clear();
-
-                // Execute actions
-                let mut action_result = execute_actions(&rule.actions, None, &[]);
-                let setvar_ops = std::mem::take(&mut action_result.setvar_ops);
-                let capture = rule
-                    .actions
-                    .iter()
-                    .any(|a| matches!(a, Action::Data(DataAction::Capture)));
-                let mut first_message = None;
-
-                // `capture` and `setvar` run once for each variable the
-                // operator matched, in order, as libmodsecurity does
-                // (`rule_with_operator.cc:255-317`; the TX:N stores are in
-                // `operators/rx.cc:104-113`): CRS 920450 sets
-                // `tx.header_name_920450_<name>` for every request header so
-                // that its chained `@within` can look the restricted ones up.
-                // `setvar` runs as soon as its own link matches, whether or
-                // not the rest of the chain does (`executeActionsIndependent
-                // OfChainedRuleResult`), and CRS relies on it (a starter's
-                // `setvar:tx.x=%{MATCHED_VAR}` is read by the links after it).
-                // Every other action waits for the whole chain. A continuation
-                // link has no id; its effects belong to the chain's starter.
-                for (n, m) in outcome.matches.iter().enumerate() {
-                    if let Some(var) = &m.matched_variable {
-                        self.matched_vars
-                            .push((var.name.clone(), var.value.clone()));
-                        // The audit record keeps the first match only: one
-                        // entry per rule, however many values it hit.
-                        // A chain link's entry waits for the chain to complete.
-                        if n == 0 {
-                            let entry = MatchedData {
-                                rule_id: link_rule_id.map(str::to_string),
-                                variable: var.name.to_string(),
-                                value: var.value.to_string(),
-                                matched_portion: var
-                                    .portion
-                                    .clone()
-                                    .map(|v| ByteValue::from(v).to_string()),
-                                variable_bytes: var.name.as_bytes().to_vec(),
-                                value_bytes: var.value.as_bytes().to_vec(),
-                                matched_portion_bytes: var.portion.clone(),
-                            };
-                            if rule.is_chain || chain_state.in_chain {
-                                pending_chain_data.push(entry);
-                            } else {
-                                self.matched_data.push(entry);
-                            }
-                        }
-                    }
-                    // TX:0 (the whole match) and TX:1..TX:9, before any setvar
-                    // reads `%{tx.N}`.
-                    if capture {
-                        let whole = m.matched_variable.as_ref().and_then(|v| v.portion.clone());
-                        self.store_captures(whole, &m.captures);
-                    }
-                    for op in &setvar_ops {
-                        self.apply_setvar(op, link_rule_id);
-                    }
-                    // A standalone rule's primary log record describes its
-                    // first match, with captures and setvar effects from that
-                    // match. Later values can overwrite both. Chain starters
-                    // instead expand after the final link has completed.
-                    if n == 0
-                        && self.record_rule_messages
-                        && !rule.is_chain
-                        && !chain_state.in_chain
-                    {
-                        first_message = self.expand_rule_message(&action_result);
+            let standalone = !rule.is_chain && !chain_state.in_chain;
+            if let Some(outcome) =
+                self.evaluate_rule(rule, link_rule_id, tag_actions, standalone)?
+            {
+                let RuleOutcome {
+                    actions: action_result,
+                    first_data,
+                    first_message,
+                } = outcome;
+                if let Some(data) = first_data {
+                    if standalone {
+                        self.matched_data.push(data);
+                    } else {
+                        pending_chain_data.push(data);
                     }
                 }
 
@@ -1098,9 +1013,6 @@ impl Transaction {
                         chain_state.start_chain(idx);
                         pending_chain_id = rule.id.clone();
                         pending_chain_actions = Some(action_result);
-                    } else if let Some(held) = pending_chain_actions.as_mut() {
-                        // A middle link: its ctl runs with the chain.
-                        held.control_ops.extend(action_result.control_ops);
                     }
                     chain_state.continue_chain(true, &[]);
                     idx += 1;
@@ -1109,21 +1021,14 @@ impl Transaction {
 
                 // Either a standalone rule, or the final link of a chain that
                 // has now matched in full. A completed chain keeps the
-                // starter's disruptive action, flow and metadata, and runs the
-                // ctl of every link.
+                // starter's disruptive action, flow and metadata.
                 let action_result = if chain_state.in_chain {
                     chain_state.reset();
                     if let Some(id) = pending_chain_id.take() {
                         self.matched_rules.push(id);
                     }
                     self.matched_data.append(&mut pending_chain_data);
-                    match pending_chain_actions.take() {
-                        Some(mut held) => {
-                            held.control_ops.extend(action_result.control_ops);
-                            held
-                        }
-                        None => action_result,
-                    }
+                    pending_chain_actions.take().unwrap_or(action_result)
                 } else {
                     // Track matched rule
                     if let Some(ref id) = rule.id {
@@ -1131,24 +1036,6 @@ impl Transaction {
                     }
                     action_result
                 };
-
-                // Apply ctl: overrides before the disruptive action below, so
-                // that ctl:ruleEngine=DetectionOnly on the same rule governs
-                // whether that rule blocks.
-                for ctl in &action_result.control_ops {
-                    let directive = CtlDirective::parse(ctl);
-                    // Known limitations were reported with rule IDs at load;
-                    // repeating those warnings for every request adds no evidence.
-                    if !matches!(directive, CtlDirective::Unsupported { .. }) {
-                        // The selected processor is observable immediately,
-                        // including phase-1 rules and explicitly typed empty
-                        // bodies. Fallback selection still waits for body data.
-                        if let CtlDirective::RequestBodyProcessor(ref processor) = directive {
-                            self.request.body_processor = processor.clone();
-                        }
-                        self.controls.apply(directive);
-                    }
-                }
 
                 if self.record_rule_messages {
                     if let Some(message) =
@@ -1282,181 +1169,149 @@ impl Transaction {
         Ok(())
     }
 
-    /// Evaluate a single rule.
-    fn evaluate_rule(
+    /// A target's values are snapshotted together. The next target is
+    /// resolved after this target's actions, so it sees updated TX state.
+    fn resolve_rule_target(
         &self,
-        rule: &CompiledRule,
-        link_rule_id: Option<&str>,
+        spec: &VariableSpec,
+        logical_id: Option<&str>,
         tag_actions: &[Action],
-    ) -> Result<RuleOutcome> {
+    ) -> Vec<(ByteValue, ByteValue)> {
         let resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
             &self.tx,
             &self.matched_vars,
         );
-
-        // Resolve variables from all specs.
-        //
-        // A spec in count mode (`&VAR`) contributes the *number* of matching
-        // values as a single value — 0 when the variable is absent — rather than
-        // the values themselves. This matches ModSecurity's `&VARIABLE` semantics
-        // and is what CRS's `SecRule &TX:x "@eq 0"` initialization relies on.
-        // Emitting a value even for an absent count also keeps the spec out of
-        // the "resolved to nothing" early-return below, so `&x "@eq 0"` matches.
-        // ctl:ruleRemoveTargetById drops individual targets from this rule for
-        // this transaction. The check is hoisted so rules with no exclusion --
-        // effectively all of them -- pay one comparison rather than a scan per
-        // variable.
-        let filter_targets = self.controls.has_target_removals(link_rule_id);
-        let filter_tag_targets = self.controls.has_tag_target_removals(tag_actions);
-
-        let mut all_values = Vec::new();
-        let mut any_excluded = false;
-        for spec in &rule.variables {
-            let mut resolved = resolver.resolve_bytes(spec);
-            if filter_targets || filter_tag_targets {
-                let before = resolved.len();
-                resolved.retain(|(name, _)| {
-                    !(filter_targets
-                        && self.controls.is_target_removed_bytes(
-                            link_rule_id,
+        let mut values = resolver.resolve_bytes(spec);
+        let by_id = self.controls.has_target_removals(logical_id);
+        let by_tag = self.controls.has_tag_target_removals(tag_actions);
+        if by_id || by_tag {
+            values.retain(|(name, _)| {
+                !(by_id
+                    && self
+                        .controls
+                        .is_target_removed_bytes(logical_id, spec, name.as_bytes())
+                    || by_tag
+                        && self.controls.is_tag_target_removed_bytes(
+                            tag_actions,
                             spec,
                             name.as_bytes(),
-                        )
-                        || filter_tag_targets
-                            && self.controls.is_tag_target_removed_bytes(
-                                tag_actions,
-                                spec,
-                                name.as_bytes(),
-                            ))
-                });
-                any_excluded |= resolved.len() != before;
-            }
-            if spec.count_mode {
-                // An exclusion reduces the count, which is what a rule like
-                // `SecRule &ARGS:x "@eq 0"` is asking about.
-                all_values.push((
-                    ByteValue::from(format!("&{:?}", spec.name)),
-                    ByteValue::from(resolved.len().to_string()),
-                ));
-            } else {
-                all_values.extend(resolved);
-            }
+                        ))
+            });
         }
-
-        // Exclusions removed everything this rule had to test. Return before
-        // the branch below: a rule stripped down to nothing is not the same as
-        // a SecAction with no targets, and running the operator unconditionally
-        // could match.
-        if any_excluded && all_values.is_empty() {
-            return Ok(RuleOutcome::no_match());
+        if spec.count_mode {
+            return vec![(
+                ByteValue::from(format!("&{:?}", spec.name)),
+                ByteValue::from(values.len().to_string()),
+            )];
         }
+        values
+    }
 
-        if all_values.is_empty() {
-            // A rule with no variable specs at all (i.e. SecAction) runs its
-            // operator unconditionally — this is how CRS sets up TX thresholds.
-            if rule.variables.is_empty() {
-                let result = rule.operator.execute_bytes(b"")?;
-                let matched = if rule.operator_negated {
-                    !result.matched
-                } else {
-                    result.matched
-                };
-                // A SecAction has no variable, so there is nothing to report
-                // as the match target.
-                if !matched {
-                    return Ok(RuleOutcome::no_match());
-                }
-                return Ok(RuleOutcome {
-                    matches: vec![RuleMatch {
-                        captures: result.captures,
-                        matched_variable: None,
-                    }],
-                });
-            }
-            // Variables were specified but resolved to nothing (e.g. absent
-            // header). ModSecurity does not run the operator when there is no
-            // value to run it against, so the rule does not match -- including
-            // when the operator is negated. Reporting a negated operator as a
-            // match here inverts "this variable is absent" into "every request
-            // matches", which is how an unimplemented variable turned CRS
-            // 920100 (`REQUEST_LINE "!@rx ..."`) into a rule that denied all
-            // traffic. Absence is tested with `&VAR "@eq 0"`, which resolves to
-            // a count and so never reaches this branch.
-            return Ok(RuleOutcome::no_match());
-        }
-
-        // If the operator argument references runtime macros (e.g.
-        // `@ge %{tx.inbound_anomaly_score_threshold}`), expand them against the
-        // current TX state and recompile the operator so the comparison runs
-        // against the resolved value. Otherwise use the precompiled operator.
-        let dynamic_operator;
-        let operator: &dyn Operator = if rule.operator_spec.argument.contains("%{") {
-            let expanded = self.expand_operator_macros_bytes(&rule.operator_spec.argument);
-            dynamic_operator = compile_operator_bytes(&rule.operator_spec, &expanded)?;
-            dynamic_operator.as_ref()
-        } else {
-            rule.operator.as_ref()
-        };
-
-        // Apply transformations and match every value
-        let mut matches = Vec::new();
+    fn evaluate_rule(
+        &mut self,
+        rule: &CompiledRule,
+        logical_id: Option<&str>,
+        tag_actions: &[Action],
+        standalone: bool,
+    ) -> Result<Option<RuleOutcome>> {
+        let mut outcome: Option<RuleOutcome> = None;
+        let mut bound_operator = None;
+        let dynamic = rule.operator_spec.argument.contains("%{");
+        let capture = rule
+            .actions
+            .iter()
+            .any(|a| matches!(a, Action::Data(DataAction::Capture)));
         let multi_match = rule
             .actions
             .iter()
-            .any(|action| matches!(action, Action::Flow(FlowAction::MultiMatch)));
-        for (name, value) in all_values {
-            if multi_match {
-                rule.transformations
-                    .for_each_byte_stage(value.as_bytes(), |transformed| {
-                        let result = operator.execute_bytes(transformed)?;
-                        let matched = if rule.operator_negated {
-                            !result.matched
-                        } else {
-                            result.matched
-                        };
-                        if matched {
-                            matches.push(RuleMatch {
-                                captures: result.captures,
-                                matched_variable: Some(MatchedVariable {
-                                    name: name.clone(),
-                                    value: ByteValue::from(transformed),
-                                    portion: result.matched_value,
-                                }),
-                            });
-                        }
-                        Ok(())
-                    })?;
-                continue;
-            }
-            let transformed = rule.transformations.apply_bytes(value.as_bytes())?;
-            let result = operator.execute_bytes(&transformed)?;
+            .any(|a| matches!(a, Action::Flow(FlowAction::MultiMatch)));
 
-            let final_match = if rule.operator_negated {
-                !result.matched
+        let mut evaluate = |tx: &mut Self, name: Option<&ByteValue>, value: &[u8]| -> Result<()> {
+            let operator: &dyn Operator = if dynamic {
+                if bound_operator.is_none() {
+                    let expanded = tx.expand_operator_macros_bytes(&rule.operator_spec.argument);
+                    bound_operator = Some(compile_operator_bytes(&rule.operator_spec, &expanded)?);
+                }
+                bound_operator.as_deref().expect("bound just above")
             } else {
-                result.matched
+                rule.operator.as_ref()
             };
+            let result = operator.execute_bytes(value)?;
+            if result.matched == rule.operator_negated {
+                return Ok(());
+            }
 
-            if final_match {
-                let matched = MatchedVariable {
-                    name,
-                    // ModSecurity's MATCHED_VAR is the *variable's* value, not
-                    // the portion the operator hit. The portion is reported
-                    // separately, since an audit log wants both: the value to
-                    // judge the match, the portion to see what triggered it.
-                    value: ByteValue::from(transformed.into_owned()),
-                    portion: result.matched_value,
-                };
-                matches.push(RuleMatch {
-                    captures: result.captures,
-                    matched_variable: Some(matched),
-                });
+            let first = outcome.is_none();
+            let outcome = outcome.get_or_insert_with(|| {
+                tx.matched_vars.clear();
+                RuleOutcome {
+                    actions: execute_actions(&rule.actions, None, &[]),
+                    first_data: None,
+                    first_message: None,
+                }
+            });
+            if let Some(name) = name {
+                let value = ByteValue::from(value);
+                if first {
+                    outcome.first_data = Some(MatchedData {
+                        rule_id: logical_id.map(str::to_owned),
+                        variable: name.to_string(),
+                        value: value.to_string(),
+                        matched_portion: result
+                            .matched_value
+                            .as_deref()
+                            .map(|p| ByteValue::from(p).to_string()),
+                        variable_bytes: name.as_bytes().to_vec(),
+                        value_bytes: value.as_bytes().to_vec(),
+                        matched_portion_bytes: result.matched_value.clone(),
+                    });
+                }
+                tx.matched_vars.push((name.clone(), value));
+            }
+            if capture {
+                tx.store_captures(result.matched_value, &result.captures);
+            }
+            for op in &outcome.actions.setvar_ops {
+                tx.apply_setvar(op, logical_id);
+            }
+            for ctl in &outcome.actions.control_ops {
+                let directive = CtlDirective::parse(ctl);
+                if !matches!(directive, CtlDirective::Unsupported { .. }) {
+                    if let CtlDirective::RequestBodyProcessor(ref processor) = directive {
+                        tx.request.body_processor = processor.clone();
+                    }
+                    tx.controls.apply(directive);
+                }
+            }
+            if first && standalone && tx.record_rule_messages {
+                outcome.first_message = tx.expand_rule_message(&outcome.actions);
+            }
+            // Captures, MATCHED_VAR and setvar may all change a macro even
+            // between two transformation stages of the same target value.
+            bound_operator = None;
+            Ok(())
+        };
+
+        if rule.variables.is_empty() {
+            // SecAction has no target and matches exactly once.
+            evaluate(self, None, b"")?;
+        }
+        for spec in &rule.variables {
+            for (name, value) in self.resolve_rule_target(spec, logical_id, tag_actions) {
+                if multi_match {
+                    rule.transformations
+                        .for_each_byte_stage(value.as_bytes(), |stage| {
+                            evaluate(self, Some(&name), stage)
+                        })?;
+                } else {
+                    let transformed = rule.transformations.apply_bytes(value.as_bytes())?;
+                    evaluate(self, Some(&name), &transformed)?;
+                }
             }
         }
-
-        Ok(RuleOutcome { matches })
+        Ok(outcome)
     }
 
     /// Expand `%{...}` macros in an operator argument against current TX state.
