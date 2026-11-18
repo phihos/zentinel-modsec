@@ -55,7 +55,7 @@ pub trait ParserHost: Send + Sync {
     fn includes(&self, declaring_file: Option<&Path>, operand: &Path) -> Result<Vec<PathBuf>>;
 
     /// Resolve a phrase or IP list relative to its declaring rule.
-    fn data_file(&self, declaring_file: Option<&Path>, operand: &Path) -> PathBuf;
+    fn data_file(&self, declaring_file: Option<&Path>, operand: &Path) -> Result<PathBuf>;
 
     /// Accept a connector directive or report a configuration error at its source.
     fn unknown_directive(
@@ -336,7 +336,7 @@ impl Parser {
         // Parse operator
         let operator_str = self.expect_quoted_argument(lexer, "SecRule operator")?;
         let mut operator = operator::parse_operator(&operator_str)?;
-        self.resolve_operator_file_path(&mut operator);
+        self.resolve_operator_file_path(&mut operator)?;
 
         // Parse actions (optional)
         let actions = if self.peek_quoted(lexer) {
@@ -362,19 +362,19 @@ impl Parser {
     /// Resolve a relative data-file argument (`@pmFromFile`/`@ipMatchFromFile`)
     /// against the directory of the file currently being parsed, matching how
     /// ModSecurity/CRS reference their `.data` files.
-    fn resolve_operator_file_path(&self, operator: &mut OperatorSpec) {
+    fn resolve_operator_file_path(&self, operator: &mut OperatorSpec) -> Result<()> {
         if !operator.name.uses_data_file() || operator.name == OperatorName::ValidateSchema {
-            return;
+            return Ok(());
         }
         if let Some(host) = &self.host {
             operator.argument = host
-                .data_file(self.location.file.as_deref(), Path::new(&operator.argument))
+                .data_file(self.location.file.as_deref(), Path::new(&operator.argument))?
                 .to_string_lossy()
                 .into_owned();
-            return;
+            return Ok(());
         }
         if std::path::Path::new(&operator.argument).is_absolute() {
-            return;
+            return Ok(());
         }
         if let Some(parent) = self.location.file.as_ref().and_then(|f| f.parent()) {
             operator.argument = parent
@@ -382,6 +382,7 @@ impl Parser {
                 .to_string_lossy()
                 .into_owned();
         }
+        Ok(())
     }
 
     /// Parse a SecAction directive.

@@ -14,8 +14,8 @@ impl ParserHost for Files {
             .join(operand)])
     }
 
-    fn data_file(&self, _: Option<&Path>, operand: &Path) -> PathBuf {
-        self.0.join("data").join(operand)
+    fn data_file(&self, _: Option<&Path>, operand: &Path) -> Result<PathBuf> {
+        Ok(self.0.join("data").join(operand))
     }
 
     fn unknown_directive(&self, name: &str, _: &str, location: &SourceLocation) -> Result<()> {
