@@ -143,8 +143,62 @@ SecRule ARGS:b|ARGS:c|ARGS:d "@streq green" "t:none"
 }
 
 #[test]
+fn tagged_markers_update_the_scalar_only_when_executed() {
+    assert_header_denials(&[
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass,skipAfter:SAME"
+SecMarker SAME
+SecRule REQUEST_METHOD "@streq GET" "id:2,phase:1,deny"
+SecMarker SAME"#,
+            "2",
+        ),
+        (
+            r#"SecAction "id:1,phase:1,pass,setvar:tx.a=1,setvar:tx.b=1,setvar:tx.c=1,setvar:tx.d=1,setvar:tx.e=1,setvar:tx.f=1,setvar:tx.g=1,setvar:tx.h=1"
+SecMarker MIDDLE
+SecRule &TX:a "@eq 1" "id:2,phase:1,pass,setvar:tx.z=1"
+SecRule MATCHED_VAR_NAME "@streq TX:a" "id:3,phase:1,deny""#,
+            "3",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass"
+SecRule REQUEST_HEADERS:Missing "@streq green" "id:2,phase:1,pass"
+SecMarker BETWEEN
+SecRule REQUEST_HEADERS:Missing "@streq blue" "id:3,phase:1,pass"
+SecRule MATCHED_VAR_NAME "@streq UNKNOWN" "id:4,phase:1,deny""#,
+            "4",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass"
+SecMarker MARK
+SecRule MATCHED_VAR_NAME "@streq UNKNOWN" "id:2,phase:1,deny""#,
+            "2",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass,skipAfter:MARK"
+SecMarker BEFORE
+SecMarker MARK
+SecRule MATCHED_VAR_NAME "@streq REQUEST_METHOD" "id:2,phase:1,deny""#,
+            "2",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass,skipAfter:MARK"
+SecMarker MARK
+SecMarker AFTER
+SecRule MATCHED_VAR_NAME "@streq UNKNOWN" "id:2,phase:1,deny""#,
+            "2",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:9,phase:1,deny,chain"
+SecMarker MARK
+SecRule REQUEST_URI "@streq /missing" "t:none""#,
+            "9",
+        ),
+    ]);
+}
+
+#[test]
 fn multiphase_matches_coraza_rule_and_chain_field_lifetimes() {
-    let cases = [
+    assert_header_denials(&[
         (
             r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass"
 SecRule &MATCHED_VARS "@eq 0" "id:2,phase:1,deny""#,
@@ -171,19 +225,42 @@ SecRule TX:name "@streq UNKNOWN" "id:5,phase:1,deny""#,
             r#"SecRule MATCHED_VAR_NAME "@rx ^$" "id:7,phase:1,deny""#,
             "7",
         ),
-    ];
-    for (rules, id) in cases {
-        let mut parser = zentinel_modsec::parser::Parser::new();
-        parser.parse(&format!("SecRuleEngine On\n{rules}")).unwrap();
-        let ruleset =
-            zentinel_modsec::CompiledRuleset::compile_multiphase(parser.into_directives()).unwrap();
-        let mut tx = zentinel_modsec::Transaction::new(ruleset.into(), 403);
-        tx.process_uri("/home", "GET", "HTTP/1.1").unwrap();
+    ]);
+}
+
+fn assert_header_denials(cases: &[(&str, &str)]) {
+    for &(rules, id) in cases {
+        let mut tx = tagged_request(rules);
         tx.process_request_headers().unwrap();
+        assert!(!tx.matched_rules().iter().any(|id| id == "0"));
         assert_eq!(
             tx.intervention().map(|i| &i.rule_ids[..]),
             Some([id.to_owned()].as_slice()),
             "{rules}"
         );
     }
+}
+
+fn tagged_request(rules: &str) -> zentinel_modsec::Transaction {
+    let mut parser = zentinel_modsec::parser::Parser::new();
+    parser.parse(&format!("SecRuleEngine On\n{rules}")).unwrap();
+    let ruleset =
+        zentinel_modsec::CompiledRuleset::compile_multiphase(parser.into_directives()).unwrap();
+    let mut tx = zentinel_modsec::Transaction::new(ruleset.into(), 403);
+    tx.process_uri("/home", "GET", "HTTP/1.1").unwrap();
+    tx
+}
+
+#[test]
+fn a_trailing_marker_updates_the_scalar_for_the_next_phase() {
+    let mut tx = tagged_request(
+        r#"SecRule MATCHED_VAR_NAME "@streq UNKNOWN" "id:2,phase:2,deny"
+SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass"
+SecMarker TRAIL"#,
+    );
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1"]);
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.intervention().unwrap().rule_ids, ["2"]);
+    assert_eq!(tx.matched_rules(), ["1", "2"]);
 }

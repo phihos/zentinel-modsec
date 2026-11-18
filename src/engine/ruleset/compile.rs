@@ -101,6 +101,9 @@ impl CompiledRuleset {
                 }
                 Directive::SecMarker(marker) => {
                     if let Some(order) = &mut order {
+                        // Coraza appends SecMarker as a top-level rule. A later
+                        // SecRule can no longer attach to the preceding chain.
+                        pending_chain = None;
                         order.marker(marker.name.clone());
                     }
                     ruleset.rules.add_marker(marker.name);

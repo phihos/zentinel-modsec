@@ -38,7 +38,6 @@ impl Phases {
 pub(super) type Schedule = [Vec<Entry>; Phase::ALL.len()];
 
 pub(super) struct Entry {
-    pub preceding_markers: u32,
     pub inactive: bool,
     pub repeated_chain: bool,
 }
@@ -77,7 +76,6 @@ impl SourceOrder {
                 .collect();
         }
         let mut metadata = Schedule::default();
-        let mut preceding_markers = [0u32; Phase::ALL.len()];
         let mut phases = Phases::default();
         let mut child = false;
         let mut chain_min = None;
@@ -91,9 +89,6 @@ impl SourceOrder {
                 } => (phase, index, inferred),
                 Event::Marker(name) => {
                     rules.add_marker(name);
-                    for count in &mut preceding_markers {
-                        *count = count.saturating_add(1);
-                    }
                     continue;
                 }
             };
@@ -119,6 +114,7 @@ impl SourceOrder {
             }
             for candidate in Phase::ALL.into_iter().filter(|p| phases.contains(*p)) {
                 let mut scheduled = rule.clone();
+                scheduled.is_chain = rule.chain_next.is_some();
                 if !child {
                     scheduled.variables.retain(|target| {
                         let min = earliest(target.name);
@@ -138,7 +134,6 @@ impl SourceOrder {
                 let output_index = rules.for_phase(candidate).len();
                 scheduled.chain_next = rule.chain_next.map(|_| output_index + 1);
                 metadata[candidate.index()].push(Entry {
-                    preceding_markers: std::mem::take(&mut preceding_markers[candidate.index()]),
                     inactive: !rule.variables.is_empty() && scheduled.variables.is_empty(),
                     repeated_chain,
                 });
@@ -287,7 +282,7 @@ mod tests {
             assert_eq!(scheduled[0].phase, Phase::RequestBody);
             let plans = rules.dispatch_for_phase(phase);
             assert_eq!(plans[0].inactive, phase == Phase::RequestBody);
-            assert_eq!(plans[2].preceding_markers, 2);
+            assert_eq!(rules.phase_markers(phase).take_through(2), 2);
             assert!(matches!(
                 plans[0].flow,
                 CompiledFlow::SkipAfter {

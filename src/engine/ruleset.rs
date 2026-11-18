@@ -67,7 +67,8 @@ pub struct Rules {
     /// phase's rule list. A marker separates rules in every phase, not only in
     /// the phase of the rules written around it, so a phase-2 `skipAfter` must
     /// be able to resume at the phase-2 position of the same marker.
-    markers: HashMap<String, [usize; Phase::ALL.len()]>,
+    markers: HashMap<String, Vec<usize>>,
+    marker_positions: [Vec<usize>; Phase::ALL.len()],
 }
 
 impl Rules {
@@ -83,8 +84,11 @@ impl Rules {
 
     /// Record a marker at the current end of every phase's rule list.
     pub fn add_marker(&mut self, name: String) {
-        let positions = Phase::ALL.map(|phase| self.for_phase(phase).len());
-        self.markers.insert(name, positions);
+        let serial = self.marker_positions[0].len();
+        self.markers.entry(name).or_default().push(serial);
+        for (positions, rules) in self.marker_positions.iter_mut().zip(&self.by_phase) {
+            positions.push(rules.len());
+        }
     }
 
     /// Get rules for a phase.
@@ -94,9 +98,8 @@ impl Rules {
 
     /// Get a marker's position within one phase.
     pub fn marker(&self, name: &str, phase: Phase) -> Option<usize> {
-        self.markers
-            .get(name)
-            .map(|positions| positions[phase.index()])
+        let serial = *self.markers.get(name)?.last()?;
+        Some(self.marker_positions[phase.index()][serial])
     }
 
     /// Get total rule count.
@@ -124,6 +127,37 @@ impl CompileOptions {
         no_regex_multiline: true,
         literal_regex_arguments: true,
     };
+}
+
+/// Markers are phase-independent instructions between rules. A cursor tracks
+/// their source order even when several markers share one rule position.
+pub(super) struct PhaseMarkers<'a> {
+    positions: &'a [usize],
+    by_name: &'a HashMap<String, Vec<usize>>,
+    cursor: usize,
+}
+
+impl PhaseMarkers<'_> {
+    pub fn next_position(&self) -> Option<usize> {
+        self.positions.get(self.cursor).copied()
+    }
+
+    pub fn take_through(&mut self, rule: usize) -> usize {
+        let remaining = &self.positions[self.cursor..];
+        if remaining.first().is_none_or(|&next| next > rule) {
+            return 0;
+        }
+        let count = remaining.partition_point(|&next| next <= rule);
+        self.cursor += count;
+        count
+    }
+
+    pub fn skip_after(&mut self, name: &str) -> Option<usize> {
+        let occurrences = self.by_name.get(name)?;
+        let serial = *occurrences.get(occurrences.partition_point(|&n| n < self.cursor))?;
+        self.cursor = serial + 1;
+        Some(self.positions[serial])
+    }
 }
 
 /// A fully compiled ruleset ready for transaction processing.
@@ -162,6 +196,18 @@ impl CompiledRuleset {
     /// Create an empty ruleset.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(super) fn phase_markers(&self, phase: Phase) -> PhaseMarkers<'_> {
+        PhaseMarkers {
+            positions: if self.multiphase {
+                &self.rules.marker_positions[phase.index()]
+            } else {
+                &[]
+            },
+            by_name: &self.rules.markers,
+            cursor: 0,
+        }
     }
 
     /// Load and compile rules from a file.

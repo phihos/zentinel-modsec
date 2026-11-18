@@ -558,15 +558,20 @@ impl Transaction {
         // Keep the immutable ruleset alive independently of mutable transaction state.
         let ruleset = Arc::clone(&self.ruleset);
         let rules = ruleset.rules_for_phase(phase);
+        let mut markers = ruleset.phase_markers(phase);
         let mut idx = 0;
         if let Some(marker) = &self.pending_marker {
-            let Some(destination) = ruleset.marker(marker, phase) else {
+            if self.controls.is_rule_removed(Some("0")) {
+                return Ok(());
+            }
+            let Some(destination) = markers.skip_after(marker) else {
                 return Ok(());
             };
             idx = destination;
             self.pending_marker = None;
         }
-        if rules.is_empty() {
+
+        if rules.is_empty() && markers.next_position().is_none() {
             return Ok(());
         }
 
@@ -595,7 +600,8 @@ impl Transaction {
                 idx = defaults.end;
             }
         }
-        let mut phase_end = rules.len();
+        // Visit the trailing marker position even in a phase without scheduled rules.
+        let mut phase_end = rules.len() + 1;
         while idx < phase_end {
             // Handle skipAfter
             if let Some(next) = skip_after.take() {
@@ -606,8 +612,21 @@ impl Transaction {
                 continue;
             }
 
+            let marker_count = markers.take_through(idx);
+            if marker_count != 0 && !self.controls.is_rule_removed(Some("0")) {
+                if marker_count > skip_count as usize {
+                    self.matched_vars.clear();
+                    self.matched_vars
+                        .push((ByteValue::from("UNKNOWN"), ByteValue::default()));
+                    self.matched_collection_start = 0;
+                }
+                skip_count =
+                    skip_count.saturating_sub(u32::try_from(marker_count).unwrap_or(u32::MAX));
+            }
+            if idx == rules.len() {
+                break;
+            }
             let rule = &rules[idx];
-            skip_count = skip_count.saturating_sub(dispatch[idx].preceding_markers);
 
             let targets = dispatch[idx].targets.select(available);
             if !targets.may_match(rule.variables.len()) && chain_start.is_none() && skip_count == 0
@@ -758,15 +777,21 @@ impl Transaction {
                         destination,
                         action,
                     } => {
-                        if ruleset.multiphase && destination.is_none_or(|next| next <= idx) {
-                            // Coraza keeps looking for the marker in the next phase.
+                        if ruleset.multiphase {
                             let Action::Flow(crate::parser::FlowAction::SkipAfter(marker)) =
                                 &starter.actions[action]
                             else {
                                 unreachable!("compiled skipAfter action")
                             };
-                            self.pending_marker = Some(marker.as_str().into());
-                            phase_end = 0;
+                            skip_after = if self.controls.is_rule_removed(Some("0")) {
+                                None
+                            } else {
+                                markers.skip_after(marker)
+                            };
+                            if skip_after.is_none() {
+                                self.pending_marker = Some(marker.as_str().into());
+                                phase_end = 0;
+                            }
                         } else {
                             skip_after = Some(destination.unwrap_or(rules.len()));
                         }

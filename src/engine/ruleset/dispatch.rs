@@ -26,8 +26,6 @@ pub(in crate::engine) struct CompiledSetVar {
 /// actions remain the source for captures, control arguments and audit messages.
 #[derive(Default)]
 pub(in crate::engine) struct RuleDispatch {
-    /// Markers since the last rule in this phase count toward Coraza skip:N.
-    pub preceding_markers: u32,
     /// A rule with no variables available in this phase still occupies a skip position.
     pub inactive: bool,
     /// This chain can be evaluated in multiple phases.
@@ -318,7 +316,6 @@ impl CompiledRuleset {
                     );
                     if let Some(schedule) = schedule {
                         let entry = &schedule[phase.index()][index];
-                        plan.preceding_markers = entry.preceding_markers;
                         plan.inactive = entry.inactive;
                         plan.multiphase_chain = entry.repeated_chain;
                     }
@@ -350,8 +347,14 @@ impl CompiledRuleset {
                 };
             }
         }
+        // Replaying past a tagged marker would reorder changes to MATCHED_VAR.
+        let header_rules = self.rules_for_phase(Phase::RequestHeaders);
+        let prefix = self
+            .phase_markers(Phase::RequestHeaders)
+            .next_position()
+            .unwrap_or(header_rules.len());
         self.tx_defaults = TxDefaults::compile(
-            self.rules_for_phase(Phase::RequestHeaders),
+            &header_rules[..prefix],
             self.dispatch_for_phase(Phase::RequestHeaders),
         );
     }
