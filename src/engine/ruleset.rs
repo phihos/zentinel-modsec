@@ -651,8 +651,9 @@ impl CompiledRuleset {
                 .rules
                 .for_phase(phase)
                 .iter()
-                .zip(ruleset.dispatch_for_phase(phase))
+                .zip(&mut ruleset.dispatch[phase.index()])
             {
+                plan.targets.finalize();
                 plan.targets
                     .add_width_sources(&mut sources, &rule.variables);
             }
