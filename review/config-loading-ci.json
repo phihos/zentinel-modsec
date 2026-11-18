@@ -1,0 +1,47 @@
+{
+  "commit": "95c9dd70624d1959d186568fee9941317d4062be",
+  "tree": "cbbf3e691d3a8e461029d496aa5757c7e25d9ae0",
+  "base": "f85a24022ca85eec0e1e502623f963e91eca07bc",
+  "source_patches": [
+    118,
+    119
+  ],
+  "benchmark": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+  "candidate_with_benchmark": "2ba2ed3ce1d59f47f44206af533dd6ca7155102c",
+  "crs_gate": "30cb436b261a9f5ec32a5a0677e17f3cfa1a8739",
+  "crs_bench": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "checks": {
+    "validation": {
+      "command": "cargo test --release --locked --offline --test config_loading --test crs_conformance -- --nocapture",
+      "exit": 0,
+      "sha256": "5b03ecaa0018884aad8941988383da53abfe88843e7a0931b5f851b75071d2e4",
+      "passed_tests": 8
+    },
+    "preflight": {
+      "command": "cargo bench --locked --offline --bench modsec_bench -- full_crs --test",
+      "exit": 0,
+      "sha256": "a9427ccd6d70c4f0dcdeadf5daaed7dc29844ca5754e87ae01549f6836c2d963",
+      "passed_tests": 0
+    },
+    "clippy": {
+      "command": "cargo clippy --release --locked --offline --all-targets -- -D warnings",
+      "exit": 0,
+      "sha256": "94291d5064a84be8443470a2a2f93940bb95de04add8887d410d400f421b725a",
+      "passed_tests": 0
+    },
+    "all-targets": {
+      "command": "SKIP_CRS_CONFORMANCE=1 cargo test --release --locked --offline --all-targets",
+      "exit": 0,
+      "sha256": "a109afe3b4e973c2905bda3aafc68d04123ab6508ee55287e93b5edaf737ab0c",
+      "passed_tests": 370
+    },
+    "doc": {
+      "command": "cargo test --release --locked --offline --doc",
+      "exit": 0,
+      "sha256": "ecc8ee8a188c6bb7a533dff5bd865bd21ee255ab39182b765c747f2f50bc0601",
+      "passed_tests": 0
+    }
+  },
+  "format": 0,
+  "diff_check": 0
+}

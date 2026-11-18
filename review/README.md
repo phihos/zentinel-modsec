@@ -1,6 +1,6 @@
 # OWASP CRS fixes for zentinel-modsec 0.6.0
 
-[Upstream issue #68](https://github.com/zentinelproxy/zentinel-modsec/issues/68) · [Complete review queue](series.md) · [Original snapshot](https://github.com/phihos/zentinel-modsec/tree/9fa45f6061ff305568a63b61714beb70bfef4c8b)
+[Upstream issue #68](https://github.com/zentinelproxy/zentinel-modsec/issues/68) · [Grouped pull requests](series.md) · [Original snapshot](https://github.com/phihos/zentinel-modsec/tree/9fa45f6061ff305568a63b61714beb70bfef4c8b)
 
 | Upstream PR | Scope |
 |---|---|
@@ -11,8 +11,9 @@
 | [#73](https://github.com/zentinelproxy/zentinel-modsec/pull/73) | Accept quoted numeric rule IDs. |
 | [#74](https://github.com/zentinelproxy/zentinel-modsec/pull/74) | Match IPv4-mapped addresses against masked networks. |
 | [#75](https://github.com/zentinelproxy/zentinel-modsec/pull/75) | Borrow compiled phase rules during request evaluation. |
+| [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes in the declaring file and roll back the whole append on error. |
 
-PRs #70–75 depend on #69 for measurement. Each has a one-change diff against upstream main. The full queue includes the corresponding source patches and marks overlaps with #65 and #67. Take the observed corpus count after each merge. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
+The fix PRs depend on #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 
 ## Request timing
 
@@ -28,4 +29,4 @@ The first row measures the phase-rule borrowing patch. The second row includes e
 - Phase-rule borrowing. [Run summary](measurements/phase-borrow.json) · [Raw samples](measurements/phase-borrow-samples.tar.gz) · [Benchmarked source](https://github.com/phihos/zentinel-modsec/tree/measure/borrow-phase-rules)
 - Whole snapshot. [Run summary](measurements/snapshot.json) · [Raw samples](measurements/snapshot-samples.tar.gz) · [Benchmarked source](https://github.com/phihos/zentinel-modsec/tree/measure/full-crs-snapshot)
 
-All seven upstream PR heads passed formatting, strict Clippy, all-target tests, doctests and the separate release-mode conformance test on the CI-pinned CRS checkout. [Local CI results by PR and commit](local-ci.json)
+PRs #69–76 passed formatting, strict Clippy, all-target tests, doctests and release-mode conformance on the CI-pinned CRS checkout. [Results for #69–75](local-ci.json) · [Results for #76](config-loading-ci.json)
