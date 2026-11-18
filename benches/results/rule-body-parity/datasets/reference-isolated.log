@@ -1,0 +1,16 @@
+phrases: BLUE+SKY/1/"BLUE SKY" word+%23keep/1/"word #keep"
+duplicate: BLUE+SKY/1/"BLUE" BLUE+SKY/2/"BLUE"
+wrongcase: ERROR invalid WAF config from string: failed to compile the directive "secrule": dataset "words" not found
+forward: ERROR invalid WAF config from string: failed to compile the directive "secrule": dataset "Words" not found
+empty-phrase:
+empty-ip: ERROR invalid WAF config from string: failed to compile the directive "secrule": dataset "empty" not found
+ips: BLUE+SKY/20/"" green/20/"" 192.0.2.1/20/"" 192.0.2.1/1/"old" 2001:db8::8/20/"" 2001:db8::8/1/"old" word+%23keep/20/"" none/20/""
+bad-ip: 192.0.2.1/1/""
+comma: 192.0.2.1/1/""
+space:
+inline: BLUE+SKY/1/"BLUE SKY"
+missing-body: ERROR invalid WAF config from string: failed to compile the directive "secdataset": syntax error: SecDataset name `
+...
+`
+unclosed: ERROR invalid WAF config from string: backticks left open
+backtick-one-line: ERROR invalid WAF config from string: backticks left open

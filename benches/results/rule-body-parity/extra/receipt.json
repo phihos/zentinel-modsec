@@ -1,0 +1,32 @@
+{
+  "rust_commit": "0680bac6ff96eaec2276e0c2b3bbb3525071f6c7",
+  "rust_tree": "f36e155fa615a8e8ac9537e9ab0aa4548f58ce26",
+  "tracked_rust_source_clean": true,
+  "coraza": "github.com/corazawaf/coraza/v3 v3.8.1",
+  "cases": 17,
+  "same_load_rule_ids_messages_and_cleanup": 17,
+  "all_fields_equal": 16,
+  "differences": [
+    {
+      "case": "upload-metadata",
+      "field": "Files",
+      "go": [
+        "410042",
+        "43"
+      ],
+      "rust": []
+    }
+  ],
+  "rust_binary_sha256": "4c9ca1696ad763c74f6f2ad32cf9a249536fd8c11641eacaaab29033154dab5c",
+  "sha256": {
+    "reference.go": "7509945cff67f8b634c38439f87e78ee6c044a8b2372a172ba6e6989fe8e4e3f",
+    "go-worker": "d42ced788d69be8eb935d6368dcee6f548810b194486a37cd19f6f341cb1ada6",
+    "fixtures.json": "5efec10077f95954cf75b29d5f2c9ed427cc63f8fe3b76f052b62da40e353b8f",
+    "go-outcomes.json": "c65d9baf555b1f739675e9d02e3f3990e6554318fa7f52a7c9bf34b05772a627",
+    "rust/Cargo.toml": "2778265485d7ef5805d4c6571f2f39c2bb6db432f519b918d17795140e5631e9",
+    "rust/Cargo.lock": "1d4ee55285717cab2af0f2a99a0cdaa73ba2453b7f57230aa9258ec9559d301b",
+    "rust/src/main.rs": "fd8567f59e2f0a8c004e6ec463d252bfafa486f886825436586e1c01ef057b72",
+    "rust-outcomes.json": "cf873401bb571053605bc9f2ebe76bf84042d072414bc2d1ca56b449efdd569e",
+    "compare.py": "4c7c37050db80c441bc8ec7b5d05553c1e29b725061f1cd6c98e0565e91822e5"
+  }
+}

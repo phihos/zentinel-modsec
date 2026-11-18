@@ -1,0 +1,20 @@
+{
+  "engine": "45a88f412ea7d4092594ebe052d19010a86efbe9",
+  "reference": "Coraza v3.8.1, kaptinlin/jsonschema v0.4.6",
+  "coraza_native_identical_decisions": 21,
+  "cases": 22,
+  "differences": [
+    "160-level valid recursive-list instance above unbounded parser limit"
+  ],
+  "sha256": {
+    "native.rs": "3f3e0ddcf5e49e02e9a68eec41bb18f95e830114f0ed1e2058cf1b51545a0186",
+    "reference.go": "c541f145c37c2f0ba262caa73bd2dde3cbb88be449fcda202858c99d892dc1f7",
+    "cases.jsonl": "0cb706cf1e8557862e73c9153559d373342d65babf595ed7dd3066d40fded777",
+    "native.log": "42d84194827f668f1bea5e0454e766bc17b129de8240e57099bef3667efc2db0",
+    "reference.log": "fe22e7572884e88dade487cd3565ede54d1e46b6291e3920bc74f30a2a05ff00",
+    "verify.py": "1c4a0d5b238a8b8de4ca16955ba199e59f97f7be2daddcc57c7ffb90161a515f",
+    "comparison.log": "3c54c1e37bbf59995bcdbd3d838ca7357a67805eceb80e35f78913a599f8d4ff",
+    "integration.log": "ff4ed238303e36df9535c3902fc822e36708f3401b6f93fe8b3f0b9c30c2e40d",
+    "clippy.log": "8050a9c8ca085c11a3dab453609865d019e672dd748dc56edcb4da42871698e4"
+  }
+}

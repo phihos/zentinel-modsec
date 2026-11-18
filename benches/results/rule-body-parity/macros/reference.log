@@ -1,0 +1,11 @@
+github.com/corazawaf/coraza/v3 v3.8.1
+false/101 "POST/POST/index/////0" "zero/zero/ARGS_POST/tX/request_headers/first/alpha/value"
+false/102 "POST /docs/index?=zero&Name=first HTTP/1.1" "=zero&Name=first"
+false/201 "7/19/URLENCODED" "lang=en"
+false/301 "203 HTTP/2 text/plain" "beta/beta/"
+false/401 "2" "\xffk"
+true/101 "POST/POST/index///0/8443/0" "zero/zero/ARGS_POST/tX/request_headers/first/alpha/value"
+true/102 "POST /docs/index?=zero&Name=first HTTP/1.1" "=zero&Name=first"
+true/201 "7/19/URLENCODED" "lang=en"
+true/301 "203 HTTP/2 text/plain" "beta/beta/"
+true/401 "2" "\xffk"

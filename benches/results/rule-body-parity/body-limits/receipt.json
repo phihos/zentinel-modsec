@@ -1,0 +1,13 @@
+{
+  "engine": "88748fecb6c4c1f22c806eace23c03cd9ada9d71",
+  "reference": "v3.8.1",
+  "cases": 48,
+  "cases_equal": 48,
+  "sha256": {
+    "libzentinel_modsec-907600a4f808b985.rlib": "c6abed5202f0b591af549d5e492ef3923d30bd4af73fe0c768e3df5cdde7cc92",
+    "compare.rs": "1e3256119d26272645d5dd570ea1865ab867770ea967234bc6eff713cc55564f",
+    "zentinel-body-ctl-reference.go": "b06d4cdf24d2e8a8c8ef74351f966e0666bf0426a8566a92c4434a7ceaaac3cb",
+    "zentinel-body-ctl-reference.log": "627da1abf1b37b1cdb19a3d5330bafa691d1eec2e594ab875b7c11bdb5508361",
+    "rust.log": "627da1abf1b37b1cdb19a3d5330bafa691d1eec2e594ab875b7c11bdb5508361"
+  }
+}

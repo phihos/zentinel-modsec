@@ -1,0 +1,161 @@
+[
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "1=",
+      "2=",
+      "4=",
+      "5=old|16100407-3|10727393-K"
+    ],
+    "name": "national-captures"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": false,
+    "matches": [],
+    "name": "national-load-0"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": false,
+    "matches": [],
+    "name": "national-load-1"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": false,
+    "matches": [],
+    "name": "national-load-2"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": false,
+    "matches": [],
+    "name": "national-load-3"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "1=",
+      "2=",
+      "4=",
+      "6=prior"
+    ],
+    "name": "geo-strmatch"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [],
+    "name": "body-json-media"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "1=",
+      "3="
+    ],
+    "name": "body-json-ctl"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [],
+    "name": "body-xml-media"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "2=",
+      "4="
+    ],
+    "name": "body-xml-ctl"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "5="
+    ],
+    "name": "body-form-media"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "5="
+    ],
+    "name": "body-form-ctl"
+  },
+  {
+    "Files": [
+      "410042",
+      "43"
+    ],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "1=",
+      "2=410042"
+    ],
+    "name": "upload-paths"
+  },
+  {
+    "Files": [
+      "410042",
+      "43"
+    ],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "2=410042"
+    ],
+    "name": "upload-macro"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "1="
+    ],
+    "name": "upload-metadata"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": false,
+    "matches": [],
+    "name": "upload-missing-dir"
+  },
+  {
+    "Files": [],
+    "Remaining": [],
+    "loaded": true,
+    "matches": [
+      "1=",
+      "2=",
+      "3=ARGS_PATH:Item",
+      "4=ARGS_PATH:iTem",
+      "5=",
+      "6="
+    ],
+    "name": "connector-path-limit"
+  }
+]

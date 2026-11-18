@@ -1,0 +1,23 @@
+{
+  "baseline": "ce01e55",
+  "candidate": "a509d4b21c61351358a106d819b95eee296a12fb",
+  "fixture": "tests/schema_external_refs.rs::companion_documents_inherit_the_configured_draft_for_legacy_ids",
+  "baseline_log": "draft-baseline.log",
+  "baseline_exit": 101,
+  "baseline_first_difference": {
+    "depth": 192,
+    "valid_payload": true,
+    "validator_decision": "invalid"
+  },
+  "candidate_command": "cargo test --offline --lib --test schema_external_refs --test json_schema",
+  "candidate_log": "draft-final.log",
+  "candidate_exit": 0,
+  "test_counts": {
+    "lib": 223,
+    "json_schema": 6,
+    "schema_external_refs": 3
+  },
+  "clippy_command": "cargo clippy --offline --lib --test schema_external_refs -- -D warnings",
+  "clippy_exit": 0,
+  "clippy_log": "draft-clippy.log"
+}

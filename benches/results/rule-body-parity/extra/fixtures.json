@@ -1,0 +1,177 @@
+[
+  {
+    "name": "national-captures",
+    "rules": "SecAction \"id:1,phase:1,pass,setvar:tx.0=old\"\nSecRule REQUEST_HEADERS:Example \"@validateNid cl [0-9Kk.-]+\" \"id:2,phase:1,pass,capture\"\nSecRule REQUEST_HEADERS:More \"@validateNid cl [0-9Kk.-]+\" \"id:3,phase:1,pass\"\nSecRule REQUEST_HEADERS:Other \"@validateNid us [0-9-]+\" \"id:4,phase:1,pass\"\nSecAction \"id:5,phase:1,pass,msg:'%{tx.0}|%{tx.1}|%{tx.2}'\"",
+    "headers": [
+      [
+        "Example",
+        "16100407-2 16100407-3 10727393-K"
+      ],
+      [
+        "More",
+        "1 1 1 1 1 1 1 1 1 1 10727393-K"
+      ],
+      [
+        "Other",
+        "000-12-3456 123-45-6789 200-01-0001"
+      ]
+    ]
+  },
+  {
+    "name": "national-load-0",
+    "rules": "SecRule ARGS \"@validateNid us\" \"id:1,phase:1,pass\""
+  },
+  {
+    "name": "national-load-1",
+    "rules": "SecRule ARGS \"@validateNid US [0-9]+\" \"id:1,phase:1,pass\""
+  },
+  {
+    "name": "national-load-2",
+    "rules": "SecRule ARGS \"@validateNid cl (\" \"id:1,phase:1,pass\""
+  },
+  {
+    "name": "national-load-3",
+    "rules": "SecRule ARGS \"@validateNid zz .*\" \"id:1,phase:1,pass\""
+  },
+  {
+    "name": "geo-strmatch",
+    "rules": "SecAction \"id:1,phase:1,pass,setvar:tx.0=prior,setvar:tx.needle=ET\"\nSecRule REQUEST_METHOD \"@strmatch %{tx.needle}\" \"id:2,phase:1,pass,capture\"\nSecRule REQUEST_METHOD \"@strmatch et\" \"id:3,phase:1,pass\"\nSecRule REQUEST_METHOD \"@geoLookup\" \"id:4,phase:1,pass,capture\"\nSecRule REQUEST_METHOD \"!@geoLookup\" \"id:5,phase:1,pass\"\nSecRule &GEO \"@eq 0\" \"id:6,phase:1,pass,msg:'%{tx.0}'\""
+  },
+  {
+    "name": "body-json-media",
+    "rules": "SecRequestBodyAccess On\nSecRule REQUEST_HEADERS:Mode \"@streq json\" \"id:1,phase:1,pass,ctl:requestBodyProcessor=JSON\"\nSecRule REQUEST_HEADERS:Mode \"@streq xml\" \"id:2,phase:1,pass,ctl:requestBodyProcessor=XML\"\nSecRule ARGS:json.sample \"@streq value\" \"id:3,phase:2,pass\"\nSecRule XML:/* \"@streq value\" \"id:4,phase:2,pass\"\nSecRule ARGS:sample \"@streq value\" \"id:5,phase:2,pass\"",
+    "body": "{\"sample\":\"value\"}",
+    "headers": [
+      [
+        "Content-Type",
+        "application/json"
+      ]
+    ]
+  },
+  {
+    "name": "body-json-ctl",
+    "rules": "SecRequestBodyAccess On\nSecRule REQUEST_HEADERS:Mode \"@streq json\" \"id:1,phase:1,pass,ctl:requestBodyProcessor=JSON\"\nSecRule REQUEST_HEADERS:Mode \"@streq xml\" \"id:2,phase:1,pass,ctl:requestBodyProcessor=XML\"\nSecRule ARGS:json.sample \"@streq value\" \"id:3,phase:2,pass\"\nSecRule XML:/* \"@streq value\" \"id:4,phase:2,pass\"\nSecRule ARGS:sample \"@streq value\" \"id:5,phase:2,pass\"",
+    "body": "{\"sample\":\"value\"}",
+    "headers": [
+      [
+        "Content-Type",
+        "application/json"
+      ],
+      [
+        "Mode",
+        "json"
+      ]
+    ]
+  },
+  {
+    "name": "body-xml-media",
+    "rules": "SecRequestBodyAccess On\nSecRule REQUEST_HEADERS:Mode \"@streq json\" \"id:1,phase:1,pass,ctl:requestBodyProcessor=JSON\"\nSecRule REQUEST_HEADERS:Mode \"@streq xml\" \"id:2,phase:1,pass,ctl:requestBodyProcessor=XML\"\nSecRule ARGS:json.sample \"@streq value\" \"id:3,phase:2,pass\"\nSecRule XML:/* \"@streq value\" \"id:4,phase:2,pass\"\nSecRule ARGS:sample \"@streq value\" \"id:5,phase:2,pass\"",
+    "body": "<sample>value</sample>",
+    "headers": [
+      [
+        "Content-Type",
+        "text/xml"
+      ]
+    ]
+  },
+  {
+    "name": "body-xml-ctl",
+    "rules": "SecRequestBodyAccess On\nSecRule REQUEST_HEADERS:Mode \"@streq json\" \"id:1,phase:1,pass,ctl:requestBodyProcessor=JSON\"\nSecRule REQUEST_HEADERS:Mode \"@streq xml\" \"id:2,phase:1,pass,ctl:requestBodyProcessor=XML\"\nSecRule ARGS:json.sample \"@streq value\" \"id:3,phase:2,pass\"\nSecRule XML:/* \"@streq value\" \"id:4,phase:2,pass\"\nSecRule ARGS:sample \"@streq value\" \"id:5,phase:2,pass\"",
+    "body": "<sample>value</sample>",
+    "headers": [
+      [
+        "Content-Type",
+        "text/xml"
+      ],
+      [
+        "Mode",
+        "xml"
+      ]
+    ]
+  },
+  {
+    "name": "body-form-media",
+    "rules": "SecRequestBodyAccess On\nSecRule REQUEST_HEADERS:Mode \"@streq json\" \"id:1,phase:1,pass,ctl:requestBodyProcessor=JSON\"\nSecRule REQUEST_HEADERS:Mode \"@streq xml\" \"id:2,phase:1,pass,ctl:requestBodyProcessor=XML\"\nSecRule ARGS:json.sample \"@streq value\" \"id:3,phase:2,pass\"\nSecRule XML:/* \"@streq value\" \"id:4,phase:2,pass\"\nSecRule ARGS:sample \"@streq value\" \"id:5,phase:2,pass\"",
+    "body": "sample=value",
+    "headers": [
+      [
+        "Content-Type",
+        "application/x-www-form-urlencoded"
+      ]
+    ]
+  },
+  {
+    "name": "body-form-ctl",
+    "rules": "SecRequestBodyAccess On\nSecRule REQUEST_HEADERS:Mode \"@streq json\" \"id:1,phase:1,pass,ctl:requestBodyProcessor=JSON\"\nSecRule REQUEST_HEADERS:Mode \"@streq xml\" \"id:2,phase:1,pass,ctl:requestBodyProcessor=XML\"\nSecRule ARGS:json.sample \"@streq value\" \"id:3,phase:2,pass\"\nSecRule XML:/* \"@streq value\" \"id:4,phase:2,pass\"\nSecRule ARGS:sample \"@streq value\" \"id:5,phase:2,pass\"",
+    "body": "sample=value",
+    "headers": [
+      [
+        "Content-Type",
+        "application/x-www-form-urlencoded"
+      ],
+      [
+        "Mode",
+        "form"
+      ]
+    ]
+  },
+  {
+    "name": "upload-paths",
+    "rules": "SecRequestBodyAccess On\nSecUploadDir {DIR}\nSecRule &FILES_TMPNAMES \"@eq 2\" \"id:1,phase:2,pass\"\nSecAction \"id:2,phase:5,pass,msg:'%{FILES_TMPNAMES}'\"",
+    "headers": [
+      [
+        "Content-Type",
+        "multipart/form-data; boundary=B"
+      ]
+    ],
+    "body": "--B\r\nContent-Disposition: form-data; name=\"one\"; filename=\"example.txt\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nA=00B\r\n--B\r\nContent-Disposition: form-data; name=\"two\"; filename=\"second\"\r\n\r\nC\r\n--B--\r\n",
+    "upload": true
+  },
+  {
+    "name": "upload-macro",
+    "rules": "SecRequestBodyAccess On\nSecUploadDir {DIR}\nSecAction \"id:2,phase:2,pass,msg:'%{FILES_TMPNAMES}'\"",
+    "headers": [
+      [
+        "Content-Type",
+        "multipart/form-data; boundary=B"
+      ]
+    ],
+    "body": "--B\r\nContent-Disposition: form-data; name=\"one\"; filename=\"example.txt\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nA=00B\r\n--B\r\nContent-Disposition: form-data; name=\"two\"; filename=\"second\"\r\n\r\nC\r\n--B--\r\n",
+    "upload": true
+  },
+  {
+    "name": "upload-metadata",
+    "rules": "SecRequestBodyAccess On\nSecUploadDir {DIR}\nSecRule &FILES \"@eq 2\" \"id:1,phase:2,pass\"",
+    "headers": [
+      [
+        "Content-Type",
+        "multipart/form-data; boundary=B"
+      ]
+    ],
+    "body": "--B\r\nContent-Disposition: form-data; name=\"one\"; filename=\"example.txt\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nA=00B\r\n--B\r\nContent-Disposition: form-data; name=\"two\"; filename=\"second\"\r\n\r\nC\r\n--B--\r\n",
+    "upload": true
+  },
+  {
+    "name": "upload-missing-dir",
+    "rules": "SecRequestBodyAccess On\nSecUploadDir {DIR}/missing"
+  },
+  {
+    "name": "connector-path-limit",
+    "URI": "/blue",
+    "PathArgs": [
+      [
+        "ITEM",
+        "first"
+      ],
+      [
+        "iTem",
+        "second"
+      ],
+      [
+        "extra",
+        "over"
+      ]
+    ],
+    "rules": "SecArgumentsLimit 2\nSecRule REQUEST_URI \"@restpath /{Item}\" \"id:1,phase:1,pass\"\nSecRule &ARGS_PATH:item \"@eq 2\" \"id:2,phase:1,pass\"\nSecRule ARGS_PATH:item \"@streq blue\" \"id:3,phase:1,pass,msg:'%{MATCHED_VAR_NAME}'\"\nSecRule ARGS_PATH:item \"@streq second\" \"id:4,phase:1,pass,msg:'%{MATCHED_VAR_NAME}'\"\nSecRule ARGUMENTS_LIMIT_REACHED \"@streq 1\" \"id:5,phase:1,pass\"\nSecRule &ARGS_PATH:extra \"@eq 0\" \"id:6,phase:1,pass\""
+  }
+]

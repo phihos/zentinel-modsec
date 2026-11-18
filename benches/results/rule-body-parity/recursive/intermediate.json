@@ -1,0 +1,8 @@
+{
+  "engine": "8317a580200ac73d47ca4e0a7c6e1f131f5b69c7",
+  "pinned_coraza": "3.8.1",
+  "go_cases": 48,
+  "rust_cases": 50,
+  "worker_stack_bytes": 1048576,
+  "differences": {}
+}

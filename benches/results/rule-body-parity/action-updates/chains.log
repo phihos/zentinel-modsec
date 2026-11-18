@@ -1,0 +1,6 @@
+interrupt &{11 deny 403 } matches 1
+interrupt &{11 deny 403 } matches 1
+interrupt &{11 deny 403 } matches 1
+LOAD ERROR invalid WAF config from string: failed to compile the directive "secrule": disruptive actions can only be specified in the chain starter rule (parent id: 11)
+LOAD ERROR invalid WAF config from string: failed to compile the directive "secrule": disruptive actions can only be specified in the chain starter rule (parent id: 11)
+interrupt <nil> matches 1

@@ -1,0 +1,35 @@
+11 "deny,status:409"
+11-12 "deny,status:410"
+11-12 "setvar:tx.edited=1,msg:'edited',capture,tag:new"
+99-100 deny
+99-99 deny
+11 12 "deny"
+10-11 12-13 "msg:changed"
+11 "deny, status:410"
+11 "deny:extra"
+11 "deny,"
+11 ""
+11 'deny'
+"11" "deny"
+11 "phase:2"
+11 "id:14"
+11 "id:12"
+11 "msg:'new label'"
+11 "setvar:tx.edited=1"
+11 "skip:1"
+11 "chain"
+11 "nolog"
+11 "block,status:409"
+11 "allow:phase"
+11 "drop"
+11 "t:none,t:uppercase"
+11 "pass,deny"
+11 "deny,pass"
+11 "deny" "pass"
+11-10 deny
+11 99 broken!
+11 ""
+11-12 status:-1
+11-12 bad
+11-12 msg:
+11-12 "id:23"

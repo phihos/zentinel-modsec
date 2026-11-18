@@ -1,0 +1,35 @@
+11 "deny,status:409" status 409 phase1 [11] all [11] messages [original]
+11-12 "deny,status:410" status 410 phase1 [11] all [11] messages [original]
+11-12 "setvar:tx.edited=1,msg:'edited',capture,tag:new" status 0 phase1 [11 12] all [11 12 21 22] messages [edited edited edited cap]
+99-100 deny status 0 phase1 [11 12] all [11 12] messages [original original2]
+99-99 deny LOAD ERROR
+11 12 "deny" status 403 phase1 [11] all [11] messages [original]
+10-11 12-13 "msg:changed" status 0 phase1 [11 12] all [11 12] messages [changed changed]
+11 "deny, status:410" status 0 phase1 [11 12] all [11 12] messages [original original2]
+11 "deny:extra" LOAD ERROR
+11 "deny," LOAD ERROR
+11 "" LOAD ERROR
+11 'deny' LOAD ERROR
+"11" "deny" LOAD ERROR
+11 "phase:2" status 0 phase1 [12] all [12 11] messages [original2 original]
+11 "id:14" status 0 phase1 [14 12] all [14 12] messages [original original2]
+11 "id:12" status 0 phase1 [12 12] all [12 12] messages [original original2]
+11 "msg:'new label'" LOAD ERROR
+11 "setvar:tx.edited=1" status 0 phase1 [11 12] all [11 12 21] messages [original original2 edited]
+11 "skip:1" status 0 phase1 [11] all [11] messages [original]
+11 "chain" status 0 phase1 [11 12] all [11 12] messages [original original2]
+11 "nolog" status 0 phase1 [11 12] all [11 12] messages [original original2]
+11 "block,status:409" status 0 phase1 [11 12] all [11 12] messages [original original2]
+11 "allow:phase" status 0 phase1 [11] all [11] messages [original]
+11 "drop" status 0 phase1 [11] all [11] messages [original]
+11 "t:none,t:uppercase" status 0 phase1 [12] all [12] messages [original2]
+11 "pass,deny" status 403 phase1 [11] all [11] messages [original]
+11 "deny,pass" status 0 phase1 [11 12] all [11 12] messages [original original2]
+11 "deny" "pass" status 0 phase1 [11 12] all [11 12] messages [original original2]
+11-10 deny LOAD ERROR
+11 99 broken! LOAD ERROR
+11 "" LOAD ERROR
+11-12 status:-1 status 0 phase1 [11 12] all [11 12] messages [original original2]
+11-12 bad LOAD ERROR
+11-12 msg: LOAD ERROR
+11-12 "id:23" status 0 phase1 [23 23] all [23 23] messages [original original2]

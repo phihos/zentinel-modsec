@@ -1,0 +1,45 @@
+{
+  "engine": "ce3b0fc1b3180ebd3d735395dee1ac5f2dc27fb9",
+  "pinned_coraza": "3.8.1",
+  "go_cases": 48,
+  "rust_cases": 50,
+  "worker_stack_bytes": 1048576,
+  "differences": {
+    "dynamic/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "evaluated/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "array/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "object/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "mutual/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "siblings/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "root/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "pointer/160/valid": {
+      "expected_violation": false,
+      "actual_violation": true
+    },
+    "array/boundary": {
+      "expected_violation": false,
+      "actual_violation": true
+    }
+  }
+}

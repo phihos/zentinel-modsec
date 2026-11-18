@@ -1,0 +1,17 @@
+{
+  "commit": "684562d8e58822952676f5322a37a2ad580b605c",
+  "base": "be29b477da7180c1e6199c0805048002c026f199",
+  "lib_tests": 221,
+  "schema_integration_tests": 8,
+  "fmt_exit": 0,
+  "diff_check_exit": 0,
+  "strict_clippy": "inherited unnecessary_fold in recursive.rs:355, notified implementation owner",
+  "go": "Coraza v3.8.1 accepted both external-ref instances; direct embedded constraint control distinguished valid and invalid. Native shallow Rust is the external oracle.",
+  "sha256": {
+    "reference.go": "cda2101c645953fba15484758e49534db95dded35988c87400c4be53b7950ed4",
+    "coraza.log": "aad56065b8dbcb43607793b96c75a0e3bf2beafb2ff7c310361719e11f066121",
+    "rust-tests.log": "2d3a8b1dca45b5720e5fed37043fe8925a98630053b29f9d89231c8b88995238",
+    "pre-integration.log": "4495e8937e2f523d4c1ffc4cfc006c73b71bfd0c17d43f9dc451182b07c2f628",
+    "clippy.log": "605cfad083f53530dfee33d17966affb9ce4753e19c320736b9590f0e76a01db"
+  }
+}
