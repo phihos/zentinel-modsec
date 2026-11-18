@@ -72,6 +72,23 @@ impl Parser {
         }
     }
 
+    /// Append one caller-supplied source atomically. Included files participate
+    /// in the same append, so rollback only needs a single checkpoint.
+    fn try_append(&mut self, parse: impl FnOnce(&mut Self) -> Result<()>) -> Result<()> {
+        let count = self.directives.len();
+        let includes = self.include_count;
+        let defaults = self.default_actions.clone();
+        let location = self.location.clone();
+        if let Err(error) = parse(self) {
+            self.directives.truncate(count);
+            self.include_count = includes;
+            self.default_actions = defaults;
+            self.location = location;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// Parse a configuration string.
     pub fn parse(&mut self, input: &str) -> Result<()> {
         self.parse_with_location(input, None)
@@ -79,6 +96,10 @@ impl Parser {
 
     /// Parse a configuration string with file location.
     pub fn parse_with_location(&mut self, input: &str, file: Option<&Path>) -> Result<()> {
+        self.try_append(|parser| parser.parse_input(input, file))
+    }
+
+    fn parse_input(&mut self, input: &str, file: Option<&Path>) -> Result<()> {
         self.location.file = file.map(|p| p.to_path_buf());
         self.location.line = 1;
         self.location.column = 1;
@@ -114,29 +135,34 @@ impl Parser {
 
     /// Parse a configuration file.
     pub fn parse_file(&mut self, path: &Path) -> Result<()> {
+        self.try_append(|parser| parser.read_file(path))
+    }
+
+    fn read_file(&mut self, path: &Path) -> Result<()> {
         let content = std::fs::read_to_string(path).map_err(|e| Error::RuleFileLoad {
             path: path.to_path_buf(),
             source: e,
         })?;
-        self.parse_with_location(&content, Some(path))
+        self.parse_input(&content, Some(path))
     }
 
     /// Parse files matching a glob pattern.
     pub fn parse_glob(&mut self, pattern: &str) -> Result<()> {
+        self.try_append(|parser| parser.read_glob(pattern))
+    }
+
+    fn read_glob(&mut self, pattern: &str) -> Result<()> {
         let paths = glob::glob(pattern)
             .map_err(|e| Error::parse(format!("invalid glob pattern: {}", e), pattern))?;
 
         for entry in paths {
-            let path = entry.map_err(|e| Error::RuleFileLoad {
-                path: e.path().to_path_buf(),
-                source: e.into_error(),
-            })?;
+            let path = entry.map_err(|e| Error::parse(e.to_string(), pattern))?;
             let metadata = path.metadata().map_err(|source| Error::RuleFileLoad {
                 path: path.clone(),
                 source,
             })?;
             if metadata.is_file() {
-                self.parse_file(&path)?;
+                self.read_file(&path)?;
             }
         }
 
@@ -612,9 +638,9 @@ impl Parser {
                 )
             })?;
             let escaped = glob::Pattern::escape(parent);
-            self.parse_glob(&Path::new(&escaped).join(path).to_string_lossy())
+            self.read_glob(&Path::new(&escaped).join(path).to_string_lossy())
         } else {
-            self.parse_file(&resolved_path)
+            self.read_file(&resolved_path)
         };
         self.location = including_location;
         parsed?;
