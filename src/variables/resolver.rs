@@ -23,10 +23,6 @@ pub struct VariableResolver<'a> {
     tx: &'a TxCollection,
     matched_var: Option<&'a str>,
     matched_vars: &'a [(String, String)],
-    /// Carried alongside the other resolver inputs for symmetry; no variable
-    /// reads it yet (`TX:0`..`TX:9` are served from the TX collection).
-    #[allow(dead_code)]
-    captures: &'a [String],
     matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
     request_line: Option<&'a OnceLock<Box<[u8]>>>,
     connector_metadata: ConnectorMetadata,
@@ -40,7 +36,7 @@ impl<'a> VariableResolver<'a> {
         tx: &'a TxCollection,
         matched_var: Option<&'a str>,
         matched_vars: &'a [(String, String)],
-        captures: &'a [String],
+        _captures: &'a [String],
     ) -> Self {
         Self {
             request,
@@ -48,7 +44,6 @@ impl<'a> VariableResolver<'a> {
             tx,
             matched_var,
             matched_vars,
-            captures,
             matched_bytes: None,
             request_line: None,
             // Standalone resolver inputs supply their public numeric fields directly.

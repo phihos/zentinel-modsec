@@ -1783,60 +1783,8 @@ impl Transaction {
             });
         };
 
-        // Coraza's keyed name collections use the same Get(key) as their value
-        // collections; only rule targeting (FindAll/FindString) yields names.
-        use VariableName::*;
-        let request = &self.request;
-        let value = match variable {
-            Args | ArgsNames => request
-                .args_get
-                .first_value_bytes(key)
-                .or_else(|| request.args_post.first_value_bytes(key))
-                .or_else(|| request.path_arguments()?.first_value_bytes(key)),
-            ArgsPath => request
-                .path_arguments()
-                .and_then(|path| path.first_value_bytes(key)),
-            ArgsGet | ArgsGetNames => request.args_get.first_value_bytes(key),
-            ArgsPost | ArgsPostNames => request.args_post.first_value_bytes(key),
-            RequestHeaders | RequestHeadersNames => request.headers.first_value_bytes(key),
-            RequestCookies | RequestCookiesNames => request.cookies.first_value_bytes(key),
-            ResponseHeaders | ResponseHeadersNames => self
-                .response
-                .headers
-                .first_value_bytes(&crate::variables::folded_key(key)),
-            ResponseArgs => self
-                .response
-                .json
-                .as_ref()
-                .and_then(|json| json.args.first_value_bytes(key)),
-            Files => request.files.first_value_bytes(key),
-            FilesNames => request.files_names.first_value_bytes(key),
-            FilesSizes => request.files_sizes.first_value_bytes(key),
-            FilesTmpnames => request
-                .uploads
-                .as_ref()
-                .and_then(|files| files.names.first_value_bytes(key)),
-            MultipartName => request.multipart_names.first_value_bytes(key),
-            MultipartFilename => request.multipart_filenames.first_value_bytes(key),
-            MultipartFilenameCharset => request.multipart_filename_charsets.first_value_bytes(key),
-            MultipartFilenameLanguage => {
-                request.multipart_filename_languages.first_value_bytes(key)
-            }
-            MultipartPartHeaders => request.multipart_part_headers.first_value_bytes(key),
-            Xml => request.xml.first_value_bytes(key),
-            MatchedVars | MatchedVarsNames => self
-                .matched_vars
-                .iter()
-                .find(|(k, _)| k.as_bytes().eq_ignore_ascii_case(key))
-                .map(|(_, v)| v.as_bytes()),
-            _ => {
-                return self
-                    .variable_resolver()
-                    .scalar_value(variable)
-                    .unwrap_or(Cow::Borrowed(b""))
-            }
-        };
-        Cow::Borrowed(value.unwrap_or(name.as_bytes()))
+        self.variable_resolver()
+            .macro_value(variable, key, name.as_bytes())
     }
 
     /// Publish the captures of a `capture` rule as `TX:0`..`TX:9`.

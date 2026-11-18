@@ -50,7 +50,6 @@ impl<'a> VariableResolver<'a> {
         mut visit: impl FnMut(&str, Option<&[u8]>, &[u8]),
     ) {
         let name = spec.name;
-        let request = self.request;
         let mut collection =
             |map: &HashMapCollection, prefix: &str, names: bool, literal: Option<&[u8]>| {
                 if map.is_empty() {
@@ -74,86 +73,36 @@ impl<'a> VariableResolver<'a> {
             };
 
         use VariableName::*;
+        if let Some(maps) = self.collection_maps(name) {
+            let names = matches!(
+                name,
+                ArgsNames
+                    | ArgsGetNames
+                    | ArgsPostNames
+                    | RequestHeadersNames
+                    | ResponseHeadersNames
+                    | RequestCookiesNames
+            );
+            for map in maps {
+                collection(map, name.seclang_name(), names, None);
+            }
+            return;
+        }
+
         match name {
-            Args | ArgsNames => {
-                let names = name == ArgsNames;
-                let prefix = if names { "ARGS_NAMES" } else { "ARGS" };
-                collection(&request.args_get, prefix, names, None);
-                collection(&request.args_post, prefix, names, None);
-                if let Some(path) = request.path_arguments() {
-                    collection(path, prefix, names, None);
-                }
-            }
-            ArgsPath => {
-                if let Some(path) = request.path_arguments() {
-                    collection(path, "ARGS_PATH", false, None);
-                }
-            }
-            ArgsGet => collection(&request.args_get, "ARGS_GET", false, None),
-            ArgsPost => collection(&request.args_post, "ARGS_POST", false, None),
-            ArgsGetNames => collection(&request.args_get, "ARGS_GET_NAMES", true, None),
-            ArgsPostNames => collection(&request.args_post, "ARGS_POST_NAMES", true, None),
-            RequestHeaders => collection(&request.headers, "REQUEST_HEADERS", false, None),
-            RequestHeadersNames => {
-                collection(&request.headers, "REQUEST_HEADERS_NAMES", true, None)
-            }
-            ResponseHeaders => collection(&self.response.headers, "RESPONSE_HEADERS", false, None),
-            ResponseArgs => {
-                if let Some(json) = &self.response.json {
-                    collection(&json.args, "RESPONSE_ARGS", false, None);
-                }
-            }
-            ResponseHeadersNames => {
-                collection(&self.response.headers, "RESPONSE_HEADERS_NAMES", true, None)
-            }
-            RequestCookies => collection(&request.cookies, "REQUEST_COOKIES", false, None),
-            RequestCookiesNames => {
-                collection(&request.cookies, "REQUEST_COOKIES_NAMES", true, None)
-            }
-            MultipartPartHeaders => collection(
-                &request.multipart_part_headers,
-                "MULTIPART_PART_HEADERS",
-                false,
-                None,
-            ),
-            Files => collection(&request.files, "FILES", false, None),
-            FilesNames => collection(&request.files_names, "FILES_NAMES", false, None),
-            FilesTmpnames => {
-                if let Some(files) = &request.uploads {
-                    collection(&files.names, "FILES_TMPNAMES", false, None);
-                }
-            }
-            FilesSizes => collection(&request.files_sizes, "FILES_SIZES", false, None),
-            MultipartName => collection(&request.multipart_names, "MULTIPART_NAME", false, None),
-            MultipartFilename => collection(
-                &request.multipart_filenames,
-                "MULTIPART_FILENAME",
-                false,
-                None,
-            ),
-            MultipartFilenameCharset => collection(
-                &request.multipart_filename_charsets,
-                "MULTIPART_FILENAME_CHARSET",
-                false,
-                None,
-            ),
-            MultipartFilenameLanguage => collection(
-                &request.multipart_filename_languages,
-                "MULTIPART_FILENAME_LANGUAGE",
-                false,
-                None,
-            ),
             Tx => self.tx.visit(&selection.member, |key, value| {
                 if !selection.excludes(Some(key)) {
                     visit("TX", Some(key), value);
                 }
             }),
             Xml => match XmlTarget::from_selection(spec.selection.as_ref()) {
-                Some(XmlTarget::Elements) => collection(&request.xml, "XML", false, Some(b"/*")),
-                Some(XmlTarget::Attributes) => {
-                    collection(&request.xml, "XML", false, Some(b"//@*"))
+                Some(XmlTarget::Elements) => {
+                    collection(&self.request.xml, "XML", false, Some(b"/*"))
                 }
-                Some(XmlTarget::All) => collection(&request.xml, "XML", false, None),
+                Some(XmlTarget::Attributes) => {
+                    collection(&self.request.xml, "XML", false, Some(b"//@*"))
+                }
+                Some(XmlTarget::All) => collection(&self.request.xml, "XML", false, None),
                 None => (),
             },
             MatchedVars | MatchedVarsNames => {
@@ -191,7 +140,81 @@ impl<'a> VariableResolver<'a> {
         }
     }
 
-    pub(crate) fn scalar_value(&self, name: VariableName) -> Option<Cow<'a, [u8]>> {
+    /// The backing collections in SecLang lookup order. A recognized collection
+    /// can have no backing map until its body processor has run.
+    fn collection_maps(
+        &self,
+        name: VariableName,
+    ) -> Option<impl Iterator<Item = &'a HashMapCollection>> {
+        use VariableName::*;
+        let request = self.request;
+        let first = match name {
+            Args | ArgsNames => {
+                return Some(
+                    [
+                        Some(&request.args_get),
+                        Some(&request.args_post),
+                        request.path_arguments(),
+                    ]
+                    .into_iter()
+                    .flatten(),
+                )
+            }
+            ArgsPath => request.path_arguments(),
+            ArgsGet | ArgsGetNames => Some(&request.args_get),
+            ArgsPost | ArgsPostNames => Some(&request.args_post),
+            RequestHeaders | RequestHeadersNames => Some(&request.headers),
+            RequestCookies | RequestCookiesNames => Some(&request.cookies),
+            ResponseHeaders | ResponseHeadersNames => Some(&self.response.headers),
+            ResponseArgs => self.response.json.as_ref().map(|json| &json.args),
+            Files => Some(&request.files),
+            FilesNames => Some(&request.files_names),
+            FilesSizes => Some(&request.files_sizes),
+            FilesTmpnames => request.uploads.as_ref().map(|files| &files.names),
+            MultipartName => Some(&request.multipart_names),
+            MultipartFilename => Some(&request.multipart_filenames),
+            MultipartFilenameCharset => Some(&request.multipart_filename_charsets),
+            MultipartFilenameLanguage => Some(&request.multipart_filename_languages),
+            MultipartPartHeaders => Some(&request.multipart_part_headers),
+            _ => return None,
+        };
+        Some([first, None, None].into_iter().flatten())
+    }
+
+    /// Keyed macros read values, including for collections whose rule targets
+    /// enumerate names. A missing collection key expands to the original token.
+    pub(crate) fn macro_value(
+        &self,
+        name: VariableName,
+        key: &[u8],
+        token: &'a [u8],
+    ) -> Cow<'a, [u8]> {
+        use VariableName::*;
+        let value = if let Some(mut maps) = self.collection_maps(name) {
+            let key = if matches!(name, ResponseHeaders | ResponseHeadersNames) {
+                folded_key(key)
+            } else {
+                Cow::Borrowed(key)
+            };
+            maps.find_map(|map| map.first_value_bytes(&key))
+        } else {
+            match name {
+                Xml => self.request.xml.first_value_bytes(key),
+                MatchedVars | MatchedVarsNames => self
+                    .matched_bytes
+                    .and_then(|values| {
+                        values
+                            .iter()
+                            .find(|(k, _)| k.as_bytes().eq_ignore_ascii_case(key))
+                    })
+                    .map(|(_, v)| v.as_bytes()),
+                _ => return self.scalar_value(name).unwrap_or(Cow::Borrowed(b"")),
+            }
+        };
+        Cow::Borrowed(value.unwrap_or(token))
+    }
+
+    fn scalar_value(&self, name: VariableName) -> Option<Cow<'a, [u8]>> {
         let request = self.request;
         let response = self.response;
         use VariableName::*;
