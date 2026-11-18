@@ -34,10 +34,21 @@ impl TxCollection {
                     emit(key.as_bytes(), value.as_bytes());
                 }
             }
-            MemberSelector::Regex(Some(pattern)) => {
+            MemberSelector::Regex(Some(pattern)) | MemberSelector::TxAsciiPrefix(pattern) => {
+                let prefix = matches!(selector, MemberSelector::TxAsciiPrefix(_))
+                    .then(|| &pattern.as_str().as_bytes()[1..]);
                 for (key, value) in &self.data {
-                    if pattern.is_match(key.as_bytes()) {
-                        emit(key.as_bytes(), value.as_bytes());
+                    let key = key.as_bytes();
+                    // TX keys are already folded; Unicode prefixes still use
+                    // the original regex for its Unicode case-fold classes.
+                    let matched = prefix
+                        .and_then(|literal| {
+                            let head = key.get(..literal.len()).unwrap_or(key);
+                            head.is_ascii().then(|| head == literal)
+                        })
+                        .unwrap_or_else(|| pattern.is_match(key));
+                    if matched {
+                        emit(key, value.as_bytes());
                     }
                 }
             }
@@ -214,5 +225,41 @@ impl ByteCollection for TxCollection {
             .filter(|(key, _)| pattern.is_match(key.as_bytes()))
             .map(|(key, value)| (key.as_bytes(), value.as_bytes()))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_single_variable;
+    use crate::variables::{SelectorPrograms, TargetSelection};
+
+    #[test]
+    fn literal_prefix_visits_match_the_regex_for_folded_and_opaque_keys() {
+        let mut tx = TxCollection::new();
+        for key in ["s", "S_K", "ſ_key", "Key", "1", "header_name", "a."] {
+            tx.set_bytes(key, key);
+        }
+        for key in [b"s_\xff".as_slice(), b"\xffheader", b"he\xffader", b""] {
+            tx.set_bytes(key, key);
+        }
+        for pattern in [
+            "^header_", "^s_", "^s", "^k", "^1", "^", "^S", "^a[.]", "^a|s",
+        ] {
+            let spec = parse_single_variable(&format!("TX:/{pattern}/")).unwrap();
+            let mut programs = SelectorPrograms::default();
+            let re = programs.add(pattern, spec.name).unwrap().clone();
+            let selection = TargetSelection::compile(&spec, &programs);
+            let direct = tx
+                .get_regex_bytes(&re)
+                .into_iter()
+                .map(|(k, v)| (k.to_vec(), v.to_vec()))
+                .collect::<Vec<_>>();
+            let mut visited = Vec::new();
+            tx.visit(&selection.member, |k, v| {
+                visited.push((k.to_vec(), v.to_vec()));
+            });
+            assert_eq!(visited, direct, "{pattern}");
+        }
     }
 }
