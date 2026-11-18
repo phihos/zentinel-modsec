@@ -156,10 +156,6 @@ impl<'a> Parser<'a, '_> {
             // Validate the entire document, including entries beyond the limit.
             // Dropped entries neither grow the flattened path nor consume its budget.
             let collect = frame.collect && self.leaves < self.argument_limit;
-            if !collect {
-                frame.truncated = true;
-                *self.truncated = true;
-            }
             if collect {
                 self.path.push('.');
             }
@@ -179,11 +175,26 @@ impl<'a> Parser<'a, '_> {
                     return Err(syntax("expected colon"));
                 }
             }
+            let next = self.peek();
+            if next.is_none() || next == Some(close) {
+                // A trailing comma has no value to drop. Retain the length of
+                // the observed array alongside the syntax error.
+                if frame.array && frame.count != 0 && frame.collect && !frame.truncated {
+                    self.array_length(frame.count)?;
+                }
+                return Err(syntax("expected a JSON value"));
+            }
+            let container = matches!(next, Some(b'{' | b'['));
+            if !container {
+                self.scalar(collect)?;
+            }
+            if !collect {
+                frame.truncated = true;
+                *self.truncated = true;
+            }
             frame.count += 1;
-            match self.peek() {
-                Some(b'{' | b'[') => self.start_container(collect, &mut stack)?,
-                Some(_) => self.scalar(collect)?,
-                None => return Err(syntax("expected a JSON value")),
+            if container {
+                self.start_container(collect, &mut stack)?;
             }
         }
         Ok(())
