@@ -6,7 +6,8 @@ const GET: u8 = 1;
 const POST: u8 = 2;
 const COOKIES: u8 = 4;
 const XML: u8 = 8;
-const PREFIX: usize = u16::BITS as usize;
+pub(super) const HEADER_SLOTS: usize = 2;
+pub(super) const PREFIX: usize = u16::BITS as usize;
 
 // Maximum length for each alphabet. A non-member or a long input disables
 // that bound for the whole group so every original candidate remains visible.
@@ -44,18 +45,32 @@ impl Widths {
     }
 }
 
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
+pub(super) struct WidthSources {
+    pub arguments: bool,
+    pub filename: bool,
+}
+
 #[derive(Clone, Copy)]
-pub(super) struct RequestCollections(u8, [Widths; 2]);
+pub(super) struct RequestCollections {
+    present: u8,
+    widths: [Widths; 3],
+    headers: [Option<Widths>; HEADER_SLOTS],
+}
 
 impl RequestCollections {
-    pub fn new(request: &RequestData, summarize_arguments: bool) -> Self {
+    pub fn new(request: &RequestData, sources: WidthSources) -> Self {
         let present = (u8::from(!request.args_get.is_empty()) * GET)
             | (u8::from(!request.args_post.is_empty()) * POST)
             | (u8::from(!request.cookies.is_empty()) * COOKIES)
             | (u8::from(!request.xml.is_empty()) * XML);
-        let mut widths = [Widths::UNKNOWN; 2];
-        if summarize_arguments && present & (GET | POST) != 0 {
-            widths = [Widths::default(); 2];
+        let mut widths = [Widths::UNKNOWN; 3];
+        if sources.filename {
+            widths[2] = Widths::default();
+            widths[2].include(request.path_bytes());
+        }
+        if sources.arguments && present & (GET | POST) != 0 {
+            widths[..2].fill(Widths::default());
             let mut remaining = 32;
             let mut visit = |name: &[u8], value: &[u8]| {
                 widths[0].include(value);
@@ -64,13 +79,33 @@ impl RequestCollections {
             if !request.args_get.visit_bounded(&mut remaining, &mut visit)
                 || !request.args_post.visit_bounded(&mut remaining, visit)
             {
-                widths = [Widths::UNKNOWN; 2];
+                widths[..2].fill(Widths::UNKNOWN);
             }
         }
-        Self(present, widths)
+        Self {
+            present,
+            widths,
+            headers: [Some(Widths::UNKNOWN); HEADER_SLOTS],
+        }
     }
 
-    fn includes(self, spec: &VariableSpec) -> bool {
+    pub fn with_headers(mut self, request: &RequestData, keys: &[Box<[u8]>]) -> Self {
+        for (slot, key) in self.headers.iter_mut().zip(keys) {
+            *slot = request.headers.canonical_values(key).map(|values| {
+                let mut widths = Widths::default();
+                if values.len() > 32 {
+                    return Widths::UNKNOWN;
+                }
+                for value in values {
+                    widths.include(value.as_bytes());
+                }
+                widths
+            });
+        }
+        self
+    }
+
+    fn includes(present: u8, spec: &VariableSpec) -> bool {
         if spec.count_mode {
             return true;
         }
@@ -83,14 +118,15 @@ impl RequestCollections {
             Xml => XML,
             _ => return true,
         };
-        self.0 & collections != 0
+        present & collections != 0
     }
 }
 
 #[derive(Default)]
 pub(super) struct TargetIndices {
     present: [u16; 16],
-    argument_targets: [u16; 2],
+    bounded_targets: [u16; 3],
+    pub(super) header_targets: [u16; HEADER_SLOTS],
     minimum: [u8; 2],
 }
 
@@ -104,15 +140,16 @@ impl TargetIndices {
             if minimum != [0; 2] && !spec.count_mode {
                 use VariableName::*;
                 match spec.name {
-                    Args | ArgsGet | ArgsPost => masks.argument_targets[0] |= 1 << index,
+                    Args | ArgsGet | ArgsPost => masks.bounded_targets[0] |= 1 << index,
                     ArgsNames | ArgsGetNames | ArgsPostNames => {
-                        masks.argument_targets[1] |= 1 << index
+                        masks.bounded_targets[1] |= 1 << index
                     }
+                    RequestFilename => masks.bounded_targets[2] |= 1 << index,
                     _ => {}
                 }
             }
             for (available, mask) in masks.present.iter_mut().enumerate() {
-                if RequestCollections(available as u8, [Widths::UNKNOWN; 2]).includes(spec) {
+                if RequestCollections::includes(available as u8, spec) {
                     *mask |= 1 << index;
                 }
             }
@@ -120,34 +157,53 @@ impl TargetIndices {
         masks
     }
 
-    pub fn prunes_arguments(&self) -> bool {
-        self.argument_targets != [0; 2]
+    pub fn add_width_sources(&self, sources: &mut WidthSources) {
+        sources.arguments |= self.bounded_targets[0] != 0 || self.bounded_targets[1] != 0;
+        sources.filename |= self.bounded_targets[2] != 0;
     }
 
     #[inline]
     fn selected(&self, available: RequestCollections) -> u16 {
-        let mut mask = self.present[usize::from(available.0)];
-        if available.1[0].below(self.minimum) {
-            mask &= !self.argument_targets[0];
+        let mut mask = self.present[usize::from(available.present)];
+        if available.widths[0].below(self.minimum) {
+            mask &= !self.bounded_targets[0];
         }
-        if available.1[1].below(self.minimum) {
-            mask &= !self.argument_targets[1];
+        if available.widths[1].below(self.minimum) {
+            mask &= !self.bounded_targets[1];
+        }
+        if available.widths[2].below(self.minimum) {
+            mask &= !self.bounded_targets[2];
+        }
+        for (targets, widths) in self.header_targets.iter().zip(available.headers) {
+            if widths.is_none_or(|width| width.below(self.minimum)) {
+                mask &= !targets;
+            }
         }
         mask
     }
 
-    /// At least one target may resolve, or the rule has no target (SecAction).
-    /// Only the first PREFIX targets have precompiled masks.
-    pub fn may_match(&self, available: RequestCollections, count: usize) -> bool {
-        count == 0 || count > PREFIX || self.selected(available) != 0
+    pub fn select(&self, available: RequestCollections) -> ActiveTargets {
+        ActiveTargets {
+            bits: self.selected(available),
+            collections: available.present,
+        }
     }
+}
 
-    pub fn active<'a>(
-        &self,
-        available: RequestCollections,
-        targets: &'a [VariableSpec],
-    ) -> impl Iterator<Item = usize> + 'a {
-        let mut bits = self.selected(available);
+#[derive(Clone, Copy)]
+pub(super) struct ActiveTargets {
+    bits: u16,
+    collections: u8,
+}
+
+impl ActiveTargets {
+    /// A SecAction has no target. Targets beyond the precompiled prefix are
+    /// resolved individually in the same order as the original list.
+    pub fn may_match(self, count: usize) -> bool {
+        count == 0 || count > PREFIX || self.bits != 0
+    }
+    pub fn indices(self, targets: &[VariableSpec]) -> impl Iterator<Item = usize> + '_ {
+        let mut bits = self.bits;
         let prefix = std::iter::from_fn(move || {
             if bits == 0 {
                 return None;
@@ -158,7 +214,9 @@ impl TargetIndices {
         });
         // Longer user-supplied lists have the same selection and ordering.
         prefix.chain(
-            (PREFIX..targets.len()).filter(move |&index| available.includes(&targets[index])),
+            (PREFIX..targets.len()).filter(move |&index| {
+                RequestCollections::includes(self.collections, &targets[index])
+            }),
         )
     }
 }
@@ -166,6 +224,14 @@ impl TargetIndices {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn empty_snapshot(present: u8) -> RequestCollections {
+        RequestCollections {
+            present,
+            widths: [Widths::UNKNOWN; 3],
+            headers: [Some(Widths::UNKNOWN); HEADER_SLOTS],
+        }
+    }
 
     #[test]
     fn can_skip_only_when_every_target_is_known_absent() {
@@ -182,17 +248,17 @@ mod tests {
                 .map(|name| crate::parser::parse_single_variable(name).unwrap())
                 .collect();
             assert_eq!(
-                TargetIndices::compile(&targets, [0; 2]).may_match(
-                    RequestCollections(state, [Widths::UNKNOWN; 2]),
-                    targets.len()
-                ),
+                TargetIndices::compile(&targets, [0; 2])
+                    .select(empty_snapshot(state),)
+                    .may_match(targets.len()),
                 may_match
             );
         }
         let mut targets = vec![crate::parser::parse_single_variable("ARGS").unwrap(); PREFIX];
         targets.push(crate::parser::parse_single_variable("REQUEST_URI").unwrap());
         assert!(TargetIndices::compile(&targets, [0; 2])
-            .may_match(RequestCollections(0, [Widths::UNKNOWN; 2]), targets.len()));
+            .select(empty_snapshot(0),)
+            .may_match(targets.len()));
     }
 
     #[test]
@@ -205,7 +271,14 @@ mod tests {
             .into();
         let active = |minimum| {
             TargetIndices::compile(&targets, minimum)
-                .active(RequestCollections::new(&request, true), &targets)
+                .select(RequestCollections::new(
+                    &request,
+                    WidthSources {
+                        arguments: true,
+                        filename: false,
+                    },
+                ))
+                .indices(&targets)
                 .collect::<Vec<_>>()
         };
         assert_eq!(active([5, 0]), [1, 2, 3]);
@@ -222,9 +295,40 @@ mod tests {
             request.args_get.add_bytes("same", "tiny");
         }
         request.args_post.add_bytes("same", "body");
-        assert!(!plan.may_match(RequestCollections::new(&request, true), 1));
+        assert!(!plan
+            .select(RequestCollections::new(
+                &request,
+                WidthSources {
+                    arguments: true,
+                    filename: false
+                }
+            ))
+            .may_match(1));
         request.args_post.add_bytes("same", "last");
-        assert!(plan.may_match(RequestCollections::new(&request, true), 1));
+        assert!(plan
+            .select(RequestCollections::new(
+                &request,
+                WidthSources {
+                    arguments: true,
+                    filename: false
+                }
+            ))
+            .may_match(1));
+    }
+
+    #[test]
+    fn selected_prefix_and_uncompiled_tail_keep_original_order() {
+        let mut specs = vec![crate::parser::parse_single_variable("ARGS").unwrap(); PREFIX + 2];
+        specs[3] = crate::parser::parse_single_variable("TX:late").unwrap();
+        let plan = TargetIndices::compile(&specs, [65; 2]);
+        let mut snapshot = empty_snapshot(GET);
+        snapshot.widths[0] = Widths::default();
+        let active = plan.select(snapshot);
+        assert!(active.may_match(specs.len()));
+        assert_eq!(
+            active.indices(&specs).collect::<Vec<_>>(),
+            [3, PREFIX, PREFIX + 1]
+        );
     }
 
     #[test]
@@ -259,7 +363,8 @@ mod tests {
                 })
                 .collect();
             assert_eq!(
-                plan.active(RequestCollections(state, [Widths::UNKNOWN; 2]), &targets)
+                plan.select(empty_snapshot(state),)
+                    .indices(&targets)
                     .collect::<Vec<_>>(),
                 expected
             );

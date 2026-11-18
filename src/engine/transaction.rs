@@ -9,7 +9,7 @@ use super::intervention::Intervention;
 use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
-use super::target_indices::RequestCollections;
+use super::target_indices::{ActiveTargets, RequestCollections};
 use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
@@ -976,7 +976,8 @@ impl Transaction {
 
         let dispatch = ruleset.dispatch_for_phase(phase);
         let available =
-            RequestCollections::new(&self.request, ruleset.summarize_arguments[phase.index()]);
+            RequestCollections::new(&self.request, ruleset.width_sources[phase.index()])
+                .with_headers(&self.request, &ruleset.header_slots[phase.index()]);
         let mut chain_start = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
@@ -1046,17 +1047,15 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && chain_start.is_none();
-            let outcome = if dispatch[idx]
-                .targets
-                .may_match(available, rule.variables.len())
-            {
+            let targets = dispatch[idx].targets.select(available);
+            let outcome = if targets.may_match(rule.variables.len()) {
                 self.evaluate_rule(
                     rule,
                     &dispatch[idx],
                     link_rule_id,
                     tag_actions,
                     standalone,
-                    available,
+                    targets,
                 )?
             } else {
                 None
@@ -1319,7 +1318,7 @@ impl Transaction {
         logical_id: Option<&str>,
         tag_actions: &[Action],
         standalone: bool,
-        available: RequestCollections,
+        targets: ActiveTargets,
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
@@ -1493,7 +1492,7 @@ impl Transaction {
             // SecAction has no target and matches exactly once.
             evaluate(self, None, b"", None)?;
         }
-        for index in dispatch.targets.active(available, &rule.variables) {
+        for index in targets.indices(&rule.variables) {
             let spec = &rule.variables[index];
             let selection = &dispatch.selections[index];
             let mut target = ResolvedTarget::default();
@@ -1824,12 +1823,12 @@ SecRule ARGS "@rx %{tx.needle}" "id:58,phase:2,pass"
 SecRule ARGS "@pm item.ok longer" "id:60,phase:2,pass,t:none,t:lowercase,capture"
 SecRule ARGS "@rx ^.{65}$" "id:59,phase:2,deny,status:406""#;
         let fast = make_ruleset(config);
-        assert!(fast.summarize_arguments[Phase::RequestBody.index()]);
+        assert!(fast.width_sources[Phase::RequestBody.index()].arguments);
         let mut slow = CompiledRuleset::from_string(config).unwrap();
-        slow.summarize_arguments.fill(false);
+        slow.width_sources.fill(Default::default());
         let slow = Arc::new(slow);
         let unrelated = make_ruleset(r#"SecRule TX:test "@rx word" "id:1,phase:2,pass""#);
-        assert_eq!(unrelated.summarize_arguments, [false; 5]);
+        assert_eq!(unrelated.width_sources, [Default::default(); 5]);
         for (uri, content_type, body) in [
             ("/?q=abc", "text/plain", ""),
             (
@@ -1885,6 +1884,60 @@ SecRule ARGS "@rx ^.{65}$" "id:59,phase:2,deny,status:406""#;
             if body.len() > 64 {
                 assert_eq!(a.intervention().map(|i| i.status), Some(406));
             }
+        }
+    }
+
+    #[test]
+    fn header_masks_match_unpruned_evaluation_with_empty_and_duplicate_headers() {
+        let config = r#"SecRuleEngine On
+SecAction "id:60,phase:1,pass,ctl:ruleRemoveTargetById=67;REQUEST_HEADERS:X-Test"
+SecRule REQUEST_HEADERS:X-Test "@rx (item[.]ok)" "id:61,phase:1,pass,capture,t:lowercase,setvar:tx.hits=+1"
+SecRule REQUEST_HEADERS:x-test "@rx ^$" "id:62,phase:1,pass"
+SecRule REQUEST_HEADERS:X-Test "!@rx item" "id:63,phase:1,pass"
+SecRule REQUEST_HEADERS:X-Test|TX:late "@rx item" "id:64,phase:1,pass"
+SecRule REQUEST_HEADERS:X-Test "@rx ." "id:67,phase:1,pass"
+SecRule &REQUEST_HEADERS:X-Test "@eq 0" "id:65,phase:1,pass"
+SecRule REQUEST_HEADERS:x-test "@rx (?-u:\xFF)" "id:66,phase:1,deny,status:406""#;
+        let fast = make_ruleset(config);
+        let slots = &fast.header_slots[Phase::RequestHeaders.index()];
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].as_ref(), b"x-test");
+        let mut slow = CompiledRuleset::from_string(config).unwrap();
+        slow.header_slots[Phase::RequestHeaders.index()].clear();
+        let slow = Arc::new(slow);
+        for count in [0, 1, 2, 32, 33] {
+            let run = |rules| {
+                let mut tx = Transaction::new(rules, 403);
+                tx.tx_mut().set_bytes("late", "item");
+                tx.set_record_rule_messages(true);
+                tx.set_record_setvar_effects(true);
+                for i in 0..count {
+                    let value: &[u8] = match i {
+                        0 => b"",
+                        1 => b"ITEM.ok",
+                        32 => b"\xff",
+                        _ => b"short",
+                    };
+                    let key: &[u8] = if i % 2 == 0 { b"x-test" } else { b"X-TEST" };
+                    tx.add_request_header_bytes(key, value).unwrap();
+                }
+                tx.process_request_headers().unwrap();
+                tx
+            };
+            let (a, b) = (run(fast.clone()), run(slow.clone()));
+            assert_eq!(a.matched_rules(), b.matched_rules());
+            assert_eq!(a.matched_data(), b.matched_data());
+            assert_eq!(a.rule_messages(), b.rule_messages());
+            assert_eq!(a.setvar_effects(), b.setvar_effects());
+            assert_eq!(a.tx.all_bytes(), b.tx.all_bytes());
+            assert_eq!(a.matched_rules().iter().any(|id| id == "65"), count == 0);
+            assert!(!a.matched_rules().iter().any(|id| id == "67"));
+            assert_eq!(a.matched_rules().iter().any(|id| id == "62"), count > 0);
+            assert_eq!(a.matched_rules().iter().any(|id| id == "61"), count > 1);
+            assert_eq!(
+                a.intervention().map(|i| i.status),
+                (count == 33).then_some(406)
+            );
         }
     }
 
@@ -1949,7 +2002,9 @@ SecRule ARGS "@rx ^.{65}$" "id:59,phase:2,deny,status:406""#;
                     Some("77"),
                     &rule.actions,
                     true,
-                    RequestCollections::new(&tx.request, false),
+                    rules.dispatch_for_phase(Phase::RequestHeaders)[0]
+                        .targets
+                        .select(RequestCollections::new(&tx.request, Default::default())),
                 )
                 .err()
                 .unwrap();
