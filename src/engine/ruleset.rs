@@ -105,6 +105,27 @@ impl Rules {
     }
 }
 
+/// Select the Coraza behaviors required by a connector. The default preserves
+/// the standalone engine's declared phases and dynamic regex operands.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CompileOptions {
+    /// Evaluate targets when their source becomes available.
+    pub multiphase: bool,
+    /// Anchor text regexes to the entire value unless the pattern enables `m`.
+    pub no_regex_multiline: bool,
+    /// Treat macro-like text in regex operands as part of the regex.
+    pub literal_regex_arguments: bool,
+}
+
+impl CompileOptions {
+    /// The flags and regex operand semantics of the HAPTIC Go Coraza backend.
+    pub const CORAZA_SPOA: Self = Self {
+        multiphase: true,
+        no_regex_multiline: true,
+        literal_regex_arguments: true,
+    };
+}
+
 /// A fully compiled ruleset ready for transaction processing.
 #[derive(Default)]
 pub struct CompiledRuleset {
@@ -112,6 +133,7 @@ pub struct CompiledRuleset {
     rules: Rules,
     rule_count: usize,
     pub(super) multiphase: bool,
+    pub(super) no_regex_multiline: bool,
     dispatch: [Vec<RuleDispatch>; Phase::ALL.len()],
     pub(super) header_slots: [Vec<Box<[u8]>>; Phase::ALL.len()],
     pub(super) width_sources: [super::target_indices::WidthSources; Phase::ALL.len()],

@@ -72,11 +72,13 @@ impl RuleDispatch {
         rule: &CompiledRule,
         rules: &Rules,
         phase: Phase,
+        literal_regex_arguments: bool,
         programs: &crate::variables::SelectorPrograms,
         removed_tags: &HashSet<&str>,
         target_tags: &HashSet<&str>,
     ) -> Self {
-        let dynamic = rule.operator_spec.argument.contains("%{")
+        let dynamic = !(literal_regex_arguments && rule.operator_spec.name == OperatorName::Rx)
+            && rule.operator_spec.argument.contains("%{")
             && !rule.operator_spec.name.has_literal_source();
         let minimum = if !dynamic
             && !rule.operator_negated
@@ -279,7 +281,11 @@ impl RuleDispatch {
 }
 
 impl CompiledRuleset {
-    pub(super) fn compile_dispatch(&mut self, schedule: Option<&super::multiphase::Schedule>) {
+    pub(super) fn compile_dispatch(
+        &mut self,
+        schedule: Option<&super::multiphase::Schedule>,
+        literal_regex_arguments: bool,
+    ) {
         // All updates, markers and possible transaction controls are known now.
         let mut removed_tags = HashSet::new();
         let mut target_tags = HashSet::new();
@@ -305,6 +311,7 @@ impl CompiledRuleset {
                         rule,
                         &self.rules,
                         phase,
+                        literal_regex_arguments,
                         &self.selectors,
                         &removed_tags,
                         &target_tags,

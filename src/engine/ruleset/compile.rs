@@ -6,7 +6,7 @@ use super::{
     edits::{apply_rule_edits, apply_target_updates},
     has_chain,
     multiphase::SourceOrder,
-    numeric_id, CompiledRule, CompiledRuleset, RuleEngineMode, Rules,
+    numeric_id, CompileOptions, CompiledRule, CompiledRuleset, RuleEngineMode, Rules,
 };
 use crate::engine::{control::CtlDirective, diagnostics, phase::Phase, split_operator_macro};
 use crate::error::{Error, Result};
@@ -20,22 +20,31 @@ use crate::transformations::TransformationPipeline;
 impl CompiledRuleset {
     /// Compile parsed directives into a ruleset.
     pub fn compile(directives: Vec<Directive>) -> Result<Self> {
-        Self::compile_with_order(directives, None)
+        Self::compile_with_options(directives, CompileOptions::default())
     }
 
     /// Compile using Coraza's tagged multiphase evaluation. Rules can inspect
     /// variables as soon as their source becomes available.
     pub fn compile_multiphase(directives: Vec<Directive>) -> Result<Self> {
-        Self::compile_with_order(directives, Some(SourceOrder::default()))
+        Self::compile_with_options(
+            directives,
+            CompileOptions {
+                multiphase: true,
+                ..CompileOptions::default()
+            },
+        )
     }
 
-    fn compile_with_order(
+    /// Compile using explicit connector compatibility options.
+    pub fn compile_with_options(
         mut directives: Vec<Directive>,
-        mut order: Option<SourceOrder>,
+        options: CompileOptions,
     ) -> Result<Self> {
+        let mut order = options.multiphase.then(SourceOrder::default);
         apply_rule_edits(&mut directives)?;
         let mut ruleset = Self {
-            multiphase: order.is_some(),
+            multiphase: options.multiphase,
+            no_regex_multiline: options.no_regex_multiline,
             ..Self::default()
         };
         let mut pending_chain: Option<(Phase, usize)> = None;
@@ -76,7 +85,7 @@ impl CompiledRuleset {
                     let (phase, index) =
                         ruleset
                             .rules
-                            .compile_rule(rule, &mut pending_chain, &datasets)?;
+                            .compile_rule(rule, &mut pending_chain, &datasets, options)?;
                     if let Some(order) = &mut order {
                         order.rule(phase, index, &ruleset.rules.for_phase(phase)[index]);
                     }
@@ -144,7 +153,7 @@ impl CompiledRuleset {
         ruleset.compile_controls();
         ruleset.rule_count = ruleset.rules.count();
         let schedule = order.map(|order| order.build(&mut ruleset.rules));
-        ruleset.compile_dispatch(schedule.as_ref());
+        ruleset.compile_dispatch(schedule.as_ref(), options.literal_regex_arguments);
         ruleset.needs_upload_paths = ruleset
             .rules
             .by_phase
@@ -189,6 +198,7 @@ impl Rules {
         rule: SecRule,
         pending_chain: &mut Option<(Phase, usize)>,
         datasets: &HashMap<String, Vec<String>>,
+        options: CompileOptions,
     ) -> Result<(Phase, usize)> {
         // Continuations inherit their starter's phase, including when it differs
         // from the default phase of a rule without a phase action.
@@ -201,6 +211,7 @@ impl Rules {
             id.as_deref(),
             rule.location.file.as_deref(),
             datasets,
+            options,
         )?;
         let phase_rules = &mut self.by_phase[phase.index()];
         let index = phase_rules.len();
@@ -254,6 +265,7 @@ fn compile_operator_reporting(
     rule_id: Option<&str>,
     rule_file: Option<&std::path::Path>,
     datasets: &HashMap<String, Vec<String>>,
+    options: CompileOptions,
 ) -> Result<(Arc<dyn Operator>, bool)> {
     if spec.name == OperatorName::ValidateSchema {
         let root = rule_file
@@ -279,7 +291,16 @@ fn compile_operator_reporting(
     } else {
         None
     };
-    match crate::operators::compile_with_dataset(spec, dataset) {
+    let compiled = if spec.name == OperatorName::Rx && options.literal_regex_arguments {
+        crate::operators::RxOperator::from_coraza_pattern(
+            &spec.argument,
+            options.no_regex_multiline,
+        )
+        .map(|rx| Arc::new(rx) as Arc<dyn Operator>)
+    } else {
+        crate::operators::compile_with_dataset(spec, dataset, options.no_regex_multiline)
+    };
+    match compiled {
         Ok(operator) => Ok((operator, spec.negated)),
         Err(e) if spec.name == OperatorName::Rx => {
             tracing::error!(

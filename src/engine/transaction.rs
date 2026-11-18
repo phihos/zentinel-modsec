@@ -16,7 +16,7 @@ use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, 
 use super::target_indices::{ActiveTargets, RequestCollections};
 use crate::actions::rule_metadata;
 use crate::error::Result;
-use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
+use crate::operators::{compile_bound_operator, ByteOperatorResult, Operator};
 use crate::parser::{Action, DisruptiveAction, MetadataAction, VariableName, VariableSpec};
 use crate::variables::{
     ByteCollection, ByteValue, ConnectorMetadata, RequestData, ResponseData, TxCollection,
@@ -1045,8 +1045,11 @@ impl Transaction {
                 let operator: &dyn Operator = if dynamic {
                     if bound_operator.is_none() {
                         let expanded = tx.expand_macros_bytes(&rule.operator_spec.argument);
-                        bound_operator =
-                            Some(compile_operator_bytes(&rule.operator_spec, &expanded)?);
+                        bound_operator = Some(compile_bound_operator(
+                            &rule.operator_spec,
+                            &expanded,
+                            tx.ruleset.no_regex_multiline,
+                        )?);
                     }
                     bound_operator.as_deref().expect("bound just above")
                 } else {

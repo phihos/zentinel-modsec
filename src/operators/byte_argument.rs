@@ -3,6 +3,14 @@ use super::*;
 
 /// Compile a runtime argument without formatting binary macros for display.
 pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Arc<dyn Operator>> {
+    compile_bound_operator(spec, argument, false)
+}
+
+pub(crate) fn compile_bound_operator(
+    spec: &OperatorSpec,
+    argument: &[u8],
+    no_regex_multiline: bool,
+) -> Result<Arc<dyn Operator>> {
     match spec.name {
         OperatorName::Eq => return Ok(Arc::new(EqOperator::from_expanded(argument))),
         OperatorName::Gt => return Ok(Arc::new(GtOperator::from_expanded(argument))),
@@ -20,11 +28,15 @@ pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Ar
         _ => {}
     }
     if let Ok(argument) = std::str::from_utf8(argument) {
-        return compile_operator(&OperatorSpec {
-            name: spec.name,
-            negated: spec.negated,
-            argument: argument.into(),
-        });
+        return compile_with_dataset(
+            &OperatorSpec {
+                name: spec.name,
+                negated: spec.negated,
+                argument: argument.into(),
+            },
+            None,
+            no_regex_multiline,
+        );
     }
     match spec.name {
         OperatorName::Rx => {
@@ -37,7 +49,10 @@ pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Ar
                     write!(pattern, "\\x{byte:02x}").expect("String write");
                 }
             }
-            Ok(Arc::new(RxOperator::new(&pattern)?))
+            Ok(Arc::new(RxOperator::with_multiline(
+                &pattern,
+                !no_regex_multiline,
+            )?))
         }
         OperatorName::Pm => Ok(Arc::new(PmOperator::from_patterns(
             argument

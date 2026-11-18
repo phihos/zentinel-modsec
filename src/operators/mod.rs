@@ -1,6 +1,7 @@
 //! Operator implementations for ModSecurity.
 
 mod byte_argument;
+pub(crate) use byte_argument::compile_bound_operator;
 pub use byte_argument::compile_operator_bytes;
 mod comparison;
 mod detection;
@@ -45,12 +46,13 @@ pub fn create_operator(name: OperatorName, argument: &str) -> Result<Arc<dyn Ope
 
 /// Create a compiled operator from a specification.
 pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
-    compile_with_dataset(spec, None)
+    compile_with_dataset(spec, None, false)
 }
 
 pub(crate) fn compile_with_dataset(
     spec: &OperatorSpec,
     dataset: Option<&[String]>,
+    no_regex_multiline: bool,
 ) -> Result<Arc<dyn Operator>> {
     let name = &spec.name;
     let argument = &spec.argument;
@@ -68,7 +70,10 @@ pub(crate) fn compile_with_dataset(
             }
         }
         OperatorName::RestPath => Ok(Arc::new(restpath::RestPath::new(argument)?)),
-        OperatorName::Rx => Ok(Arc::new(RxOperator::new(argument)?)),
+        OperatorName::Rx => Ok(Arc::new(RxOperator::with_multiline(
+            argument,
+            !no_regex_multiline,
+        )?)),
         OperatorName::Pm => Ok(Arc::new(PmOperator::new(argument)?)),
         OperatorName::PmFromFile | OperatorName::Pmf => {
             Ok(Arc::new(PmOperator::from_file(argument)?))

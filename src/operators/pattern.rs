@@ -141,15 +141,16 @@ struct RegexProgram {
 }
 
 impl RegexCache {
-    fn get(&self, pattern: &str) -> Result<Arc<RegexProgram>> {
+    fn get(&self, pattern: &str, multiline: bool) -> Result<Arc<RegexProgram>> {
         // Compilation is serialized with insertion, preventing concurrent
         // loads of the same pattern from building duplicate automata. Matching
         // never takes this lock.
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let binary = matches_arbitrary_bytes(pattern);
+        let multiline = multiline && !binary;
         let key = format!(
             "unicode={};dotall={};multiline={};binary={}:{}",
-            !binary, !binary, !binary, binary, pattern
+            !binary, !binary, multiline, binary, pattern
         );
         if let Some(regex) = entries.get(&key).and_then(Weak::upgrade) {
             return Ok(regex);
@@ -164,7 +165,7 @@ impl RegexCache {
             .utf8(false)
             .unicode(!binary)
             .dot_matches_new_line(!binary)
-            .multi_line(!binary)
+            .multi_line(multiline)
             .build()
             .parse(&expression)
             .map_err(|err| config_error(regex::Error::Syntax(err.to_string())))?;
@@ -305,13 +306,43 @@ pub struct RxOperator {
 impl RxOperator {
     /// Compile a regex or share the compiled object of an existing live rule.
     pub fn new(pattern: &str) -> Result<Self> {
+        Self::with_multiline(pattern, true)
+    }
+
+    pub(crate) fn from_coraza_pattern(pattern: &str, no_multiline: bool) -> Result<Self> {
+        // Go RE2 accepts a non-numeric opening brace as literal text. Rust's
+        // parser requires an escape for the opening brace of a SecLang macro.
+        // Leave valid repetition counts (e.g. %{2}) and regex syntax inside
+        // macro-like text intact.
+        let mut normalized = String::new();
+        let mut start = 0;
+        for (offset, _) in pattern.match_indices("%{") {
+            if !pattern
+                .as_bytes()
+                .get(offset + 2)
+                .is_some_and(u8::is_ascii_alphabetic)
+            {
+                continue;
+            }
+            normalized.push_str(&pattern[start..offset + 1]);
+            normalized.push_str(r"\{");
+            start = offset + 2;
+        }
+        if start == 0 {
+            return Self::with_multiline(pattern, !no_multiline);
+        }
+        normalized.push_str(&pattern[start..]);
+        Self::with_multiline(&normalized, !no_multiline)
+    }
+
+    pub(crate) fn with_multiline(pattern: &str, multiline: bool) -> Result<Self> {
         if pattern.is_empty() {
             return Err(Error::RegexCompile {
                 pattern: pattern.to_string(),
                 source: regex::Error::Syntax("empty pattern".to_string()),
             });
         }
-        let compiled = REGEX_CACHE.get(pattern)?;
+        let compiled = REGEX_CACHE.get(pattern, multiline)?;
         Ok(Self {
             requirements: compiled.requirements,
             has_subgroups: compiled.regex.group_info().group_len(PatternID::ZERO) > 1,
@@ -824,11 +855,11 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
         // A local cache keeps this lifetime assertion independent of other
         // tests running against the process-wide cache concurrently.
         let cache = RegexCache::default();
-        let compiled = cache.get("^dropped-cache-pattern$").unwrap();
+        let compiled = cache.get("^dropped-cache-pattern$", true).unwrap();
         let weak = Arc::downgrade(&compiled);
         drop(compiled);
         assert!(weak.upgrade().is_none());
-        let live = cache.get("^replacement-cache-pattern$").unwrap();
+        let live = cache.get("^replacement-cache-pattern$", true).unwrap();
         let entries = cache.entries.lock().unwrap();
         assert_eq!(entries.len(), 1);
         assert!(Arc::ptr_eq(
