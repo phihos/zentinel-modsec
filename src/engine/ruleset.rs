@@ -113,6 +113,7 @@ impl Default for Rules {
 /// actions remain the source for captures, control arguments and audit messages.
 #[derive(Default)]
 pub(super) struct RuleDispatch {
+    pub selections: Box<[crate::variables::TargetSelection]>,
     pub dynamic: bool,
     pub capture: bool,
     pub multi_match: bool,
@@ -138,10 +139,16 @@ impl RuleDispatch {
     fn compile(
         rule: &CompiledRule,
         rules: &Rules,
+        programs: &crate::variables::SelectorPrograms,
         removed_tags: &HashSet<&str>,
         target_tags: &HashSet<&str>,
     ) -> Self {
         let mut dispatch = Self {
+            selections: rule
+                .variables
+                .iter()
+                .map(|spec| crate::variables::TargetSelection::compile(spec, programs))
+                .collect(),
             effects_from: rule.actions.len(),
             disruptive: rule.actions.len(),
             dynamic: rule.operator_spec.argument.contains("%{")
@@ -456,7 +463,13 @@ impl CompiledRuleset {
                 .for_phase(phase)
                 .iter()
                 .map(|rule| {
-                    RuleDispatch::compile(rule, &ruleset.rules, &removed_tags, &target_tags)
+                    RuleDispatch::compile(
+                        rule,
+                        &ruleset.rules,
+                        &ruleset.selectors,
+                        &removed_tags,
+                        &target_tags,
+                    )
                 })
                 .collect()
         });

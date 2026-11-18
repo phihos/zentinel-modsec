@@ -1,6 +1,8 @@
 //! Lossless resolution used by transaction evaluation.
 use super::*;
-use crate::variables::{folded_key, ByteValue, HashMapCollection, SelectorPrograms};
+use crate::variables::{
+    folded_key, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms, TargetSelection,
+};
 
 pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
     let Some(key) = member.filter(|k| !k.is_empty()) else {
@@ -26,38 +28,22 @@ impl<'a> VariableResolver<'a> {
         resolver
     }
 
-    pub(crate) fn with_selectors(mut self, programs: &'a SelectorPrograms) -> Self {
-        self.programs = Some(programs);
-        self
-    }
-
-    fn matches_regex(&self, pattern: &str, kind: VariableName, key: &[u8]) -> bool {
-        self.programs
-            .and_then(|p| p.get(pattern, kind))
-            .is_some_and(|re| re.is_match(key))
-    }
-
     /// Resolve original value and key bytes, applying exclusions before counts.
     pub fn resolve_bytes(&self, spec: &VariableSpec) -> Vec<(ByteValue, ByteValue)> {
         let mut out = Vec::new();
-        let mut append = |prefix: &str, key: Option<&[u8]>, value: &[u8]| {
-            out.push((qualified_name(prefix, key), value.into()));
-        };
-        if self.programs.is_some() {
-            self.visit_values(spec, append);
-        } else {
-            let mut programs = SelectorPrograms::default();
-            if let Some(Selection::Regex(pattern)) = &spec.selection {
-                programs.add(pattern, spec.name);
-            }
-            for target in &spec.exclusions {
-                if let Some((kind, pattern)) = super::super::selectors::regex_exclusion(target) {
-                    programs.add(pattern, kind);
-                }
-            }
-            self.with_selectors(&programs)
-                .visit_values(spec, &mut append);
+        let mut programs = SelectorPrograms::default();
+        if let Some(Selection::Regex(pattern)) = &spec.selection {
+            programs.add(pattern, spec.name);
         }
+        for target in &spec.exclusions {
+            if let Some((kind, pattern)) = super::super::selectors::regex_exclusion(target) {
+                programs.add(pattern, kind);
+            }
+        }
+        let selection = TargetSelection::compile(spec, &programs);
+        self.visit_values(spec, &selection, |prefix, key, value| {
+            out.push((qualified_name(prefix, key), value.into()));
+        });
         out
     }
 
@@ -66,85 +52,40 @@ impl<'a> VariableResolver<'a> {
     pub(crate) fn visit_values(
         &self,
         spec: &VariableSpec,
+        selection: &TargetSelection,
         mut visit: impl FnMut(&str, Option<&[u8]>, &[u8]),
     ) {
         let name = spec.name;
-        let selection = &spec.selection;
         let request = self.request;
         let mut emit =
             |prefix: &str, canonical: Option<&[u8]>, original: Option<&[u8]>, value: &[u8]| {
-                let excluded = spec.exclusions.iter().any(|target| {
-                    let (collection, selector) = target
-                        .split_once(':')
-                        .map_or((target.as_str(), None), |(c, s)| (c, Some(s)));
-                    if !collection.eq_ignore_ascii_case(prefix) {
-                        return false;
-                    }
-                    let Some(selector) = selector.filter(|s| !s.is_empty()) else {
-                        return true;
-                    };
-                    let Some(key) = canonical else {
-                        return false;
-                    };
-                    if let Some(pattern) =
-                        selector.strip_prefix('/').and_then(|s| s.strip_suffix('/'))
-                    {
-                        self.matches_regex(pattern, name, key)
-                    } else {
-                        folded_key(selector.as_bytes()).as_ref() == key
-                    }
-                });
-                if !excluded {
+                if !selection.excludes(prefix, canonical) {
                     visit(prefix, original, value);
                 }
             };
 
-        let mut collection = |map: &HashMapCollection,
-                              prefix: &str,
-                              names: bool,
-                              literal: Option<&[u8]>| {
-            if map.is_empty() {
-                return;
-            }
-            let selected = match selection {
-                // NamedCollectionNames::FindString indexes the existing canonical
-                // bucket directly. Rule parsing preserves the case of ARGS names selectors.
-                Some(Selection::Key(key))
-                    if matches!(
-                        name,
-                        VariableName::ArgsNames
-                            | VariableName::ArgsGetNames
-                            | VariableName::ArgsPostNames
-                    ) && !key.is_empty() =>
-                {
-                    Some(std::borrow::Cow::Borrowed(key.as_bytes()))
+        let mut collection =
+            |map: &HashMapCollection, prefix: &str, names: bool, literal: Option<&[u8]>| {
+                if map.is_empty() {
+                    return;
                 }
-                Some(Selection::Key(key)) if !key.is_empty() => Some(folded_key(key.as_bytes())),
-                _ => None,
+                let (selected, regex) = match &selection.member {
+                    MemberSelector::All => (None, None),
+                    MemberSelector::Key(key) => (Some(key.as_ref()), None),
+                    MemberSelector::Regex(Some(regex)) => (None, Some(regex)),
+                    MemberSelector::Regex(None) => return,
+                };
+                map.visit(literal.or(selected), |key, original, value| {
+                    if regex.is_none_or(|re| re.is_match(key)) {
+                        emit(
+                            prefix,
+                            Some(key),
+                            Some(original),
+                            if names { original } else { value },
+                        );
+                    }
+                });
             };
-            let regex = match selection {
-                Some(Selection::Regex(pattern)) if name != VariableName::Xml => {
-                    let Some(regex) = self
-                        .programs
-                        .and_then(|programs| programs.get(pattern, name))
-                    else {
-                        return;
-                    };
-                    Some(regex)
-                }
-                _ => None,
-            };
-            map.visit(literal.or(selected.as_deref()), |key, original, value| {
-                if regex.is_none_or(|re| re.is_match(key)) {
-                    emit(
-                        prefix,
-                        Some(key),
-                        Some(original),
-                        if names { original } else { value },
-                    );
-                }
-            });
-        };
 
         use VariableName::*;
         match name {
@@ -199,7 +140,7 @@ impl<'a> VariableResolver<'a> {
                 None,
             ),
             Tx => collection(self.tx.members(), "TX", false, None),
-            Xml => match XmlTarget::from_selection(selection.as_ref()) {
+            Xml => match XmlTarget::from_selection(spec.selection.as_ref()) {
                 Some(XmlTarget::Elements) => collection(&request.xml, "XML", false, Some(b"/*")),
                 Some(XmlTarget::Attributes) => {
                     collection(&request.xml, "XML", false, Some(b"//@*"))
@@ -216,19 +157,8 @@ impl<'a> VariableResolver<'a> {
                 };
                 let mut matched = |key: &[u8], value: &[u8]| {
                     let canonical = folded_key(key);
-                    match selection {
-                        Some(Selection::Regex(pattern))
-                            if !self.matches_regex(pattern, name, &canonical) =>
-                        {
-                            return
-                        }
-                        Some(Selection::Key(literal))
-                            if !literal.is_empty()
-                                && folded_key(literal.as_bytes()) != canonical =>
-                        {
-                            return
-                        }
-                        _ => (),
+                    if !selection.member.matches(Some(&canonical)) {
+                        return;
                     }
                     emit(
                         prefix,

@@ -1169,6 +1169,7 @@ impl Transaction {
     fn resolve_rule_target(
         &self,
         spec: &VariableSpec,
+        selection: &crate::variables::TargetSelection,
         logical_id: Option<&str>,
         tag_actions: &[Action],
         search: Option<&StaticSearch<'_>>,
@@ -1178,13 +1179,12 @@ impl Transaction {
             &self.response,
             &self.tx,
             &self.matched_vars,
-        )
-        .with_selectors(&self.ruleset.selectors);
+        );
         let by_id = self.controls.has_target_removals(logical_id);
         let by_tag = !tag_actions.is_empty() && self.controls.has_tag_target_removals(tag_actions);
         let mut resolved = Ok(ResolvedTarget::default());
         let mut count = 0usize;
-        resolver.visit_values(spec, |prefix, member, value| {
+        resolver.visit_values(spec, selection, |prefix, member, value| {
             if (by_id && self.controls.removed_member(logical_id, spec, member))
                 || (by_tag && self.controls.removed_tag_member(tag_actions, spec, member))
             {
@@ -1358,9 +1358,14 @@ impl Transaction {
             // SecAction has no target and matches exactly once.
             evaluate(self, None, b"", None)?;
         }
-        for spec in &rule.variables {
-            let target =
-                self.resolve_rule_target(spec, logical_id, tag_actions, search.as_ref())?;
+        for (spec, selection) in rule.variables.iter().zip(&dispatch.selections) {
+            let target = self.resolve_rule_target(
+                spec,
+                selection,
+                logical_id,
+                tag_actions,
+                search.as_ref(),
+            )?;
             if let Some((name, stage)) = target.first {
                 evaluate(self, Some(&name), &stage.value, Some(stage.result))?;
                 if let Some(after) = stage.resume_after {

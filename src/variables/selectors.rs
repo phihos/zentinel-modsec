@@ -51,6 +51,84 @@ pub(crate) fn compile_selector(
         .build()
 }
 
+/// Selection data shared by requests after target updates have been applied.
+pub(crate) struct TargetSelection {
+    pub member: MemberSelector,
+    exclusions: Box<[(Box<str>, MemberSelector)]>,
+}
+
+pub(crate) enum MemberSelector {
+    All,
+    Key(Box<[u8]>),
+    Regex(Option<Arc<Regex>>),
+}
+
+impl MemberSelector {
+    pub fn matches(&self, key: Option<&[u8]>) -> bool {
+        match self {
+            Self::All => true,
+            Self::Key(wanted) => key == Some(wanted.as_ref()),
+            Self::Regex(regex) => {
+                key.is_some_and(|key| regex.as_ref().is_some_and(|re| re.is_match(key)))
+            }
+        }
+    }
+}
+
+impl TargetSelection {
+    pub fn compile(spec: &VariableSpec, programs: &SelectorPrograms) -> Self {
+        let regex =
+            |pattern: &str| MemberSelector::Regex(programs.get(pattern, spec.name).cloned());
+        let member = match &spec.selection {
+            Some(Selection::Key(key)) if !key.is_empty() => {
+                // The three argument-name collections index the canonical bucket
+                // using the selector's original spelling.
+                let key = if matches!(
+                    spec.name,
+                    VariableName::ArgsNames
+                        | VariableName::ArgsGetNames
+                        | VariableName::ArgsPostNames
+                ) {
+                    key.as_bytes().into()
+                } else {
+                    folded_key(key.as_bytes()).into_owned().into_boxed_slice()
+                };
+                MemberSelector::Key(key)
+            }
+            Some(Selection::Regex(pattern)) => regex(pattern),
+            _ => MemberSelector::All,
+        };
+        let exclusions = spec
+            .exclusions
+            .iter()
+            .map(|target| {
+                let (collection, selector) = target.split_once(':').unwrap_or((target, ""));
+                let member = if selector.is_empty() {
+                    MemberSelector::All
+                } else if let Some(pattern) =
+                    selector.strip_prefix('/').and_then(|s| s.strip_suffix('/'))
+                {
+                    regex(pattern)
+                } else {
+                    MemberSelector::Key(
+                        folded_key(selector.as_bytes())
+                            .into_owned()
+                            .into_boxed_slice(),
+                    )
+                };
+                (collection.into(), member)
+            })
+            .collect();
+        Self { member, exclusions }
+    }
+
+    pub fn excludes(&self, prefix: &str, key: Option<&[u8]>) -> bool {
+        self.exclusions.iter().any(|(collection, selector)| {
+            collection.eq_ignore_ascii_case(prefix) && selector.matches(key)
+        })
+    }
+}
+
 /// Read without locking on the request path. Invalid selectors are retained
 /// as absent programs so their load warning and runtime verdict agree.
 #[derive(Default)]
