@@ -2,6 +2,31 @@
 
 ## Current local checkpoint
 
+Engine commit `a22d582f1d172bbaa9a47467c7bdb8d4e440b725` evaluates single-key static numeric
+TX comparisons directly and prepares literal `setvar` assignments at load time.
+Active rule ID removals form a sorted set of disjoint ranges within each
+transaction. The binary audit formatter can copy long printable runs after
+checking whole blocks for bytes that require escaping.
+
+Against `b8bc7e5` on the same warmed 706-rule configuration, GET p50 moved
+from 60.55 to 53.82 µs and form POST from 139.26 to 135.41 µs, each faster in all
+eight pairs. Mixed GET, form and JSON p50 moved from 208.34 to
+200.73 µs and p99 from 751.36 to 665.51 µs.
+With 64 active removal ranges, GET p50 moved from 224.67 to 70.94 µs.
+Reading a 65,530-byte header with one non-ASCII byte into the audit record
+moved from 123.25 to 92.37 µs at p50. Without the audit read, p50 rose from
+5.63 to 7.50 µs in workers alternating between audit reads and skips. In workers that
+never read audit data, the same header moved from 7.29 to 5.44 µs. On the same-sized header with
+a non-ASCII byte every ten bytes, p99 moved from 200.05 to 213.37 µs.
+
+All 13 repository checks passed. Both detector backends reproduced the
+pinned Coraza corpus outcomes, all 22 ordered blocking traces and the
+previous engine's full audit records on 24 mixed fixtures. The
+[local benchmark report](../zentinel-eval/results/latency-3466fed/RESULTS.md)
+includes raw timing receipts, resource measurements and verification.
+
+## Binary audit and collection checkpoint at `b8bc7e5`
+
 Engine commit `b8bc7e56c13d1a19e8e02818b6e4ee30272bd64f` on
 `spike/crs-parity` renders binary audit values in blocks and shares large
 text buffers across transaction snapshots. Collection exclusions run once
