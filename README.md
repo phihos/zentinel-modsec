@@ -260,19 +260,29 @@ forms support regex collection keys such as `ARGS:/^token_/` (the runtime
 regex-key behavior follows Coraza 3.8.1). Invalid configure-time targets fail
 loading; malformed runtime controls produce load-time warnings with rule IDs.
 
+`ctl:ruleRemoveByTag=TAG` suppresses subsequent rules bearing the exact,
+case-sensitive tag for this transaction, including later phases. A tagged
+chain starter selects its entire chain. Untagged rules continue to execute.
+
 Relative includes resolve beside the declaring file. A glob with no matches is
 allowed. An unreadable match fails the load. Each configuration accepts up to
 100 include directives, counting a glob once. If a parse fails, the parser
 retains the configuration it held before the call.
 
-**Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@beginsWith`,
+**Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@containsWord`, `@beginsWith`,
 `@endsWith`, `@within`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
-`@unconditionalMatch`, `@noMatch`. `@containsWord` and `@strmatch` are
-approximated by `@contains`. The `@pmf` and `@ipMatchF` aliases interpret their
-arguments as inline phrases/addresses; use `@pmFromFile` and `@ipMatchFromFile`
-for files. These approximations produce load-time warnings with rule IDs.
+`@unconditionalMatch`, `@noMatch`. The file-backed aliases `@pmf` and
+`@ipMatchF` read the same files as `@pmFromFile` and `@ipMatchFromFile`.
+With `capture`, phrase matches populate `TX:0` through `TX:9` in input order
+using the original bytes. If phrases overlap, each capture takes the longest phrase at
+the next matching start, including starts inside an earlier match.
+
+`@containsWord` follows ModSecurity v3. It matches case-sensitive bytes bounded
+by the input edges or bytes outside ASCII A–Z and a–z. An empty operand matches
+every value. Coraza 3.8.1 does not implement this operator. `@strmatch` uses
+substring matching and emits a load-time compatibility warning.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,
@@ -334,9 +344,15 @@ The byte APIs preserve binary input, captures and macro expansions; string APIs
 provide display values. Header lookup ignores ASCII case while match metadata
 preserves each original header name.
 
+With `SecRuleEngine On`, `allow:phase` ends the current phase and
+`allow:request` skips the remaining request rules. Response and logging
+rules still run after `allow:request`. Global `allow` skips all remaining
+rules, including logging rules, matching Coraza 3.8.1. In `DetectionOnly`,
+all three actions record the match and rule evaluation continues.
+
 Accepted action limitations are also reported with rule IDs:
 persistent-collection actions, script execution, response modification,
-`proxy`, `pause`, `xmlns`, scoped `allow`, and logging/sanitization policy.
+`proxy`, `pause`, `xmlns`, and logging/sanitization policy.
 The engine has no log sink; embedding applications must implement logging
 policy. Known unsupported controls warn at load without repeating the warning
 on each request.

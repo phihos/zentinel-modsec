@@ -295,20 +295,17 @@ impl Parser {
     /// against the directory of the file currently being parsed, matching how
     /// ModSecurity/CRS reference their `.data` files.
     fn resolve_operator_file_path(&self, operator: &mut OperatorSpec) {
-        if !matches!(
-            operator.name,
-            OperatorName::PmFromFile | OperatorName::IpMatchFromFile
-        ) {
+        if !operator.name.uses_data_file() {
             return;
         }
         if std::path::Path::new(&operator.argument).is_absolute() {
             return;
         }
         if let Some(parent) = self.location.file.as_ref().and_then(|f| f.parent()) {
-            let joined = parent.join(&operator.argument);
-            if joined.exists() {
-                operator.argument = joined.to_string_lossy().into_owned();
-            }
+            operator.argument = parent
+                .join(&operator.argument)
+                .to_string_lossy()
+                .into_owned();
         }
     }
 

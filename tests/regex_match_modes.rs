@@ -80,3 +80,45 @@ fn exact_crs_php_comment_and_sql_newline_cases_match() {
 fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
     ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }
+
+#[test]
+fn rule_search_without_groups_preserves_the_same_binary_match_portion() {
+    use zentinel_modsec::operators::{Operator, RxOperator};
+    let op = RxOperator::new(r"(a)?(b)(\xff)").unwrap();
+    for input in [b"ab\xff".as_slice(), b"b\xff", b"abc"] {
+        let full = op.execute_bytes(input).unwrap();
+        let without_groups = op.execute_rule_bytes(input, false).unwrap();
+        assert_eq!(without_groups.matched, full.matched);
+        assert_eq!(without_groups.matched_value, full.matched_value);
+        assert!(without_groups.captures.is_empty());
+        assert_eq!(
+            op.execute_rule_bytes(input, true).unwrap().captures,
+            full.captures
+        );
+    }
+    assert_eq!(
+        op.execute_bytes(b"b\xff").unwrap().captures,
+        [b"".as_slice(), b"b", b"\xff"]
+    );
+}
+
+#[test]
+fn legacy_custom_operators_retain_decisions_portions_captures_and_errors() {
+    use zentinel_modsec::operators::{Operator, OperatorResult};
+    struct Legacy;
+    impl Operator for Legacy {
+        fn name(&self) -> &'static str {
+            "legacy"
+        }
+        fn execute(&self, input: &str) -> OperatorResult {
+            OperatorResult::matched_with_captures(input.to_string(), vec!["group".into()])
+        }
+    }
+    for capture in [false, true] {
+        let result = Legacy.execute_rule_bytes(b"example", capture).unwrap();
+        assert!(result.matched);
+        assert_eq!(result.matched_value.as_deref(), Some(b"example".as_slice()));
+        assert_eq!(result.captures, [b"group"]);
+        assert!(Legacy.execute_rule_bytes(b"\xff", capture).is_err());
+    }
+}

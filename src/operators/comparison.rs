@@ -19,11 +19,7 @@ impl ContainsOperator {
 impl Operator for ContainsOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
         Ok(
-            if self.needle.is_empty()
-                || value
-                    .windows(self.needle.len())
-                    .any(|w| w == self.needle.as_bytes())
-            {
+            if memchr::memmem::find(value, self.needle.as_bytes()).is_some() {
                 ByteOperatorResult::matched(self.needle.as_bytes().to_vec())
             } else {
                 ByteOperatorResult::no_match()
@@ -41,6 +37,53 @@ impl Operator for ContainsOperator {
 
     fn name(&self) -> &'static str {
         "contains"
+    }
+}
+
+/// Case-sensitive `@containsWord` with ModSecurity v3's ASCII-letter boundaries.
+pub(super) struct ContainsWordOperator {
+    finder: memchr::memmem::Finder<'static>,
+}
+
+impl ContainsWordOperator {
+    pub(super) fn new(needle: &[u8]) -> Self {
+        Self {
+            finder: memchr::memmem::Finder::new(needle).into_owned(),
+        }
+    }
+
+    fn find(&self, value: &[u8]) -> ByteOperatorResult {
+        let needle = self.finder.needle();
+        if needle.is_empty() {
+            return ByteOperatorResult::matched(Vec::new());
+        }
+        let mut start = 0;
+        while let Some(offset) = self.finder.find(&value[start..]) {
+            let pos = start + offset;
+            let end = pos + needle.len();
+            if (pos == 0 || !value[pos - 1].is_ascii_alphabetic())
+                && (end == value.len() || !value[end].is_ascii_alphabetic())
+            {
+                return ByteOperatorResult::matched(needle);
+            }
+            // The next acceptable occurrence may overlap this rejected one.
+            start = pos + 1;
+        }
+        ByteOperatorResult::no_match()
+    }
+}
+
+impl Operator for ContainsWordOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(self.find(value))
+    }
+
+    fn execute(&self, value: &str) -> OperatorResult {
+        self.find(value.as_bytes()).into_text()
+    }
+
+    fn name(&self) -> &'static str {
+        "containsWord"
     }
 }
 

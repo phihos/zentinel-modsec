@@ -5,8 +5,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parser::{
-    Action, DataAction, Directive, DisruptiveAction, FlowAction, LoggingAction, MetadataAction,
-    OperatorName, Selection, SetVarValue, VariableName, VariableSpec, XmlTarget,
+    Action, DataAction, Directive, FlowAction, LoggingAction, MetadataAction, OperatorName,
+    Selection, SetVarValue, VariableName, VariableSpec, XmlTarget,
 };
 use crate::variables::SelectorPrograms;
 
@@ -88,10 +88,7 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
                 OperatorName::Rbl | OperatorName::GeoLookup | OperatorName::GsbLookup |
                 OperatorName::InspectFile | OperatorName::FuzzyHash | OperatorName::Rsub =>
                     Some("operator is a placeholder and always returns no match (negation may invert that result)"),
-                OperatorName::ContainsWord => Some("word boundaries are not implemented; this operator uses substring matching"),
                 OperatorName::StrMatch => Some("operator is approximated by substring matching"),
-                OperatorName::Pmf => Some("file loading is not implemented for this alias; its argument is treated as inline phrases; use @pmFromFile"),
-                OperatorName::IpMatchF => Some("file loading is not implemented for this alias; its argument is treated as inline addresses; use @ipMatchFromFile"),
                 _ => None,
             };
             if let Some(reason) = reason {
@@ -103,7 +100,9 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
                     &effective_id,
                 );
             }
-            report_macros(&mut found, &operator.argument, &effective_id);
+            if !operator.name.uses_data_file() {
+                report_macros(&mut found, &operator.argument, &effective_id);
+            }
         }
         for action in actions {
             report_action(&mut found, action, &effective_id);
@@ -217,14 +216,6 @@ fn report_action(found: &mut Diagnostics, action: &Action, id: &str) {
         Action::Data(DataAction::Exec(_)) => ("exec", ignored),
         Action::Data(DataAction::Prepend(_)) => ("prepend", ignored),
         Action::Data(DataAction::Append(_)) => ("append", ignored),
-        Action::Disruptive(DisruptiveAction::AllowPhase) => (
-            "allow:phase",
-            "phase-scoped allow is not implemented; treated as global allow",
-        ),
-        Action::Disruptive(DisruptiveAction::AllowRequest) => (
-            "allow:request",
-            "request-scoped allow is not implemented; treated as global allow",
-        ),
         Action::Logging(action) => {
             let name = match action {
                 LoggingAction::Log => "log",

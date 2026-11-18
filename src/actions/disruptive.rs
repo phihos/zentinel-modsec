@@ -7,7 +7,9 @@ pub fn status_for_outcome(outcome: &DisruptiveOutcome, default_status: u16) -> u
     match outcome {
         DisruptiveOutcome::Deny(status) => *status,
         DisruptiveOutcome::Block => default_status,
-        DisruptiveOutcome::Allow => 200,
+        DisruptiveOutcome::Allow
+        | DisruptiveOutcome::AllowPhase
+        | DisruptiveOutcome::AllowRequest => 200,
         DisruptiveOutcome::Redirect(_) => 302,
         DisruptiveOutcome::Pass => 200,
         DisruptiveOutcome::Drop => 0, // connection drop without an HTTP response
@@ -27,5 +29,8 @@ pub fn is_terminal(outcome: &DisruptiveOutcome) -> bool {
 
 /// Check if the outcome is an allow (should skip further rules).
 pub fn is_allow(outcome: &DisruptiveOutcome) -> bool {
-    matches!(outcome, DisruptiveOutcome::Allow)
+    matches!(
+        outcome,
+        DisruptiveOutcome::Allow | DisruptiveOutcome::AllowPhase | DisruptiveOutcome::AllowRequest
+    )
 }

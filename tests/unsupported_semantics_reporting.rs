@@ -57,21 +57,12 @@ fn placeholder_operators_report_the_affected_rule_at_load() {
 }
 
 #[test]
-fn approximated_operators_report_the_affected_rule_at_load() {
-    for operator in ["containsWord", "strmatch", "pmf", "ipMatchF"] {
-        let argument = if operator == "ipMatchF" {
-            "127.0.0.1"
-        } else {
-            "example"
-        };
-        let (_, log) = load_logs(&format!(
-            r#"SecRule ARGS "@{operator} {argument}" "id:102,phase:2,pass""#
-        ));
-        assert!(
-            log.contains("operator") && log.contains("rule_ids=102"),
-            "{operator}: {log}"
-        );
-    }
+fn approximated_operator_reports_the_affected_rule_at_load() {
+    let (_, log) = load_logs(r#"SecRule ARGS "@strmatch example" "id:102,phase:2,pass""#);
+    assert!(
+        log.contains("operator") && log.contains("rule_ids=102"),
+        "{log}"
+    );
 }
 
 #[test]
@@ -106,8 +97,6 @@ fn ignored_actions_on_chain_children_name_the_chain_starter() {
         "noauditlog",
         "log",
         "nolog",
-        "allow:phase",
-        "allow:request",
         "setvar:ip.score=+1",
     ] {
         let (_, log) = load_logs(&format!(
@@ -166,6 +155,8 @@ fn supported_semantics_and_component_metadata_do_not_warn() {
     let (_, log) = load_logs(
         r#"
 SecComponentSignature "example"
+SecAction "id:107,phase:2,allow:phase"
+SecAction "id:108,phase:2,allow:request"
 SecRule ARGS "@contains attack" "id:109,phase:2,pass,t:lowercase,setvar:tx.score=+1"
 "#,
     );

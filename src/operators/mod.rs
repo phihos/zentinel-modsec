@@ -41,9 +41,14 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
     let argument = &spec.argument;
     match name {
         OperatorName::Rx => Ok(Arc::new(RxOperator::new(argument)?)),
-        OperatorName::Pm | OperatorName::Pmf => Ok(Arc::new(PmOperator::new(argument)?)),
-        OperatorName::PmFromFile => Ok(Arc::new(PmOperator::from_file(argument)?)),
+        OperatorName::Pm => Ok(Arc::new(PmOperator::new(argument)?)),
+        OperatorName::PmFromFile | OperatorName::Pmf => {
+            Ok(Arc::new(PmOperator::from_file(argument)?))
+        }
         OperatorName::Contains => Ok(Arc::new(ContainsOperator::new(argument))),
+        OperatorName::ContainsWord => Ok(Arc::new(comparison::ContainsWordOperator::new(
+            argument.as_bytes(),
+        ))),
         OperatorName::BeginsWith => Ok(Arc::new(BeginsWithOperator::new(argument))),
         OperatorName::EndsWith => Ok(Arc::new(EndsWithOperator::new(argument))),
         OperatorName::StreQ => Ok(Arc::new(StreqOperator::new(argument))),
@@ -56,10 +61,10 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         OperatorName::DetectXss => Ok(Arc::new(DetectXssOperator)),
         OperatorName::ValidateUrlEncoding => Ok(Arc::new(ValidateUrlEncodingOperator)),
         OperatorName::ValidateUtf8Encoding => Ok(Arc::new(ValidateUtf8EncodingOperator)),
-        OperatorName::IpMatch | OperatorName::IpMatchF => {
-            Ok(Arc::new(IpMatchOperator::new(argument)?))
+        OperatorName::IpMatch => Ok(Arc::new(IpMatchOperator::new(argument)?)),
+        OperatorName::IpMatchFromFile | OperatorName::IpMatchF => {
+            Ok(Arc::new(IpMatchOperator::from_file(argument)?))
         }
-        OperatorName::IpMatchFromFile => Ok(Arc::new(IpMatchOperator::from_file(argument)?)),
         OperatorName::NoMatch => Ok(Arc::new(NoMatchOperator)),
         OperatorName::UnconditionalMatch => Ok(Arc::new(UnconditionalMatchOperator)),
         OperatorName::ValidateByteRange => Ok(Arc::new(ValidateByteRangeOperator::new(argument))),
@@ -76,7 +81,6 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         OperatorName::InspectFile | OperatorName::FuzzyHash | OperatorName::Rsub => {
             Ok(Arc::new(NoMatchOperator))
         }
-        OperatorName::ContainsWord => Ok(Arc::new(ContainsOperator::new(argument))),
         OperatorName::Within => Ok(Arc::new(WithinOperator::new(argument))),
         OperatorName::StrMatch => Ok(Arc::new(ContainsOperator::new(argument))),
         OperatorName::Ne => Ok(Arc::new(NeOperator::new(argument))),
@@ -193,11 +197,7 @@ impl WithinOperator {
     }
 
     fn matches(&self, needle: &[u8]) -> bool {
-        needle.is_empty()
-            || self
-                .haystack
-                .windows(needle.len())
-                .any(|part| part == needle)
+        memchr::memmem::find(&self.haystack, needle).is_some()
     }
 }
 

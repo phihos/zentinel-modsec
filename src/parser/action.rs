@@ -298,11 +298,16 @@ fn parse_single_action(input: &str) -> Result<Action> {
         "block" => Ok(Action::Disruptive(DisruptiveAction::Block)),
         "pass" => Ok(Action::Disruptive(DisruptiveAction::Pass)),
         "allow" => {
-            let action = match argument.as_deref().map(str::to_ascii_lowercase).as_deref() {
-                None => DisruptiveAction::Allow,
-                Some("phase") => DisruptiveAction::AllowPhase,
-                Some("request") => DisruptiveAction::AllowRequest,
-                Some(_) => {
+            let argument = argument.as_deref().unwrap_or_default().trim();
+            let scope = argument
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+                .unwrap_or(argument);
+            let action = match scope {
+                "" => DisruptiveAction::Allow,
+                "phase" => DisruptiveAction::AllowPhase,
+                "request" => DisruptiveAction::AllowRequest,
+                _ => {
                     return Err(Error::InvalidActionArgument {
                         action: "allow".into(),
                         message: "expected phase or request".into(),
@@ -464,12 +469,12 @@ fn parse_single_action(input: &str) -> Result<Action> {
                 action: "ctl".to_string(),
                 message: "missing control specification".to_string(),
             })?;
-            let (directive, value) = if let Some(pos) = spec.find('=') {
-                (spec[..pos].to_string(), spec[pos + 1..].to_string())
-            } else {
-                (spec, String::new())
-            };
-            Ok(Action::Control(ControlAction { directive, value }))
+            let spec = unquote(&spec);
+            let (directive, value) = spec.split_once('=').unwrap_or((spec, ""));
+            Ok(Action::Control(ControlAction {
+                directive: directive.to_owned(),
+                value: value.to_owned(),
+            }))
         }
 
         // initcol:collection=key - initialize a persistent collection
@@ -541,19 +546,22 @@ fn parse_single_action(input: &str) -> Result<Action> {
     }
 }
 
-/// Parse a setvar specification.
-fn parse_setvar(input: &str) -> Result<SetVarSpec> {
-    let input = input.trim();
-    // CRS writes setvar specs in quoted form, e.g. setvar:'tx.score=+5'.
-    // Strip a matching pair of surrounding quotes so the value parses correctly.
-    let input = if input.len() >= 2
+fn unquote(input: &str) -> &str {
+    if input.len() >= 2
         && ((input.starts_with('\'') && input.ends_with('\''))
             || (input.starts_with('"') && input.ends_with('"')))
     {
         &input[1..input.len() - 1]
     } else {
         input
-    };
+    }
+}
+
+/// Parse a setvar specification.
+fn parse_setvar(input: &str) -> Result<SetVarSpec> {
+    let input = input.trim();
+    // CRS writes setvar specs in quoted form, e.g. setvar:'tx.score=+5'.
+    let input = unquote(input);
 
     // Check for delete (!var)
     if let Some(var) = input.strip_prefix('!') {
