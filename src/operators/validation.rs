@@ -1,11 +1,30 @@
 //! Validation operators (@validateUrlEncoding, @validateUtf8Encoding).
 
-use super::traits::{Operator, OperatorResult};
+use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 
 /// URL encoding validation operator (@validateUrlEncoding).
 pub struct ValidateUrlEncodingOperator;
 
 impl Operator for ValidateUrlEncodingOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        let mut i = 0;
+        while i < value.len() {
+            if value[i] == b'%' {
+                if i + 2 >= value.len()
+                    || !value[i + 1].is_ascii_hexdigit()
+                    || !value[i + 2].is_ascii_hexdigit()
+                {
+                    return Ok(ByteOperatorResult::matched(
+                        b"invalid URL encoding".to_vec(),
+                    ));
+                }
+                i += 2;
+            }
+            i += 1;
+        }
+        Ok(ByteOperatorResult::no_match())
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if is_valid_url_encoding(value) {
             OperatorResult::no_match() // Valid encoding = no match (not an attack)
@@ -23,6 +42,14 @@ impl Operator for ValidateUrlEncodingOperator {
 pub struct ValidateUtf8EncodingOperator;
 
 impl Operator for ValidateUtf8EncodingOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(if std::str::from_utf8(value).is_err() {
+            ByteOperatorResult::matched(b"invalid UTF-8 encoding".to_vec())
+        } else {
+            ByteOperatorResult::no_match()
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         // In Rust, &str is always valid UTF-8, so we check for overlong encodings
         // and other invalid sequences that might have been decoded

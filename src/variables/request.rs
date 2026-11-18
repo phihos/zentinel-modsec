@@ -72,11 +72,11 @@ impl RequestData {
         self.uri_raw = uri.to_string();
 
         if let Some(pos) = uri.find('?') {
-            self.path = uri[..pos].to_string();
+            self.path = decoded_request_path(&uri[..pos]);
             self.query_string = uri[pos + 1..].to_string();
             self.parse_query_string(&self.query_string.clone());
         } else {
-            self.path = uri.to_string();
+            self.path = decoded_request_path(uri);
             self.query_string.clear();
         }
     }
@@ -526,6 +526,43 @@ fn decode_name(raw: &[u8]) -> String {
 /// or an `xmlns:<prefix>`.
 fn is_namespace_declaration(name: &str) -> bool {
     name == "xmlns" || name.starts_with("xmlns:")
+}
+
+/// Decode only the path component. Query delimiters are split by the caller
+/// before decoding, and a literal plus in a path is never form-decoded.
+fn decoded_request_path(input: &str) -> String {
+    let without_fragment = input.split('#').next().unwrap_or(input);
+    let path = if let Some((scheme, rest)) = without_fragment.split_once("://") {
+        if !scheme.is_empty()
+            && scheme.bytes().enumerate().all(|(i, b)| {
+                b.is_ascii_alphabetic() || i > 0 && (b.is_ascii_digit() || b"+-.".contains(&b))
+            })
+        {
+            rest.find('/').map_or("", |offset| &rest[offset..])
+        } else {
+            without_fragment
+        }
+    } else {
+        without_fragment
+    };
+    let bytes = path.as_bytes();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'%'
+            && !bytes
+                .get(index + 1..index + 3)
+                .is_some_and(|pair| pair.iter().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            // Match the reference parser's whole-path fallback on malformed
+            // escapes, rather than partially decoding an invalid path.
+            return input.to_string();
+        }
+    }
+    percent_encoding::percent_decode_str(path)
+        .decode_utf8()
+        .map(|decoded| decoded.into_owned())
+        // Preserve the source at the current string API boundary instead of
+        // replacing an invalid decoded byte with a replacement character.
+        .unwrap_or_else(|_| input.to_string())
 }
 
 /// Decode one component of `application/x-www-form-urlencoded` input.

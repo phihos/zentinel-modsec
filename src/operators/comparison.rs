@@ -1,6 +1,6 @@
 //! Comparison operators (@contains, @eq, @gt, etc.).
 
-use super::traits::{Operator, OperatorResult};
+use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 
 /// Contains operator (@contains).
 pub struct ContainsOperator {
@@ -17,6 +17,20 @@ impl ContainsOperator {
 }
 
 impl Operator for ContainsOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(
+            if self.needle.is_empty()
+                || value
+                    .windows(self.needle.len())
+                    .any(|w| w == self.needle.as_bytes())
+            {
+                ByteOperatorResult::matched(self.needle.as_bytes().to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if value.contains(&self.needle) {
             OperatorResult::matched(self.needle.clone())
@@ -45,6 +59,14 @@ impl BeginsWithOperator {
 }
 
 impl Operator for BeginsWithOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(if value.starts_with(self.prefix.as_bytes()) {
+            ByteOperatorResult::matched(self.prefix.as_bytes().to_vec())
+        } else {
+            ByteOperatorResult::no_match()
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if value.starts_with(&self.prefix) {
             OperatorResult::matched(self.prefix.clone())
@@ -73,6 +95,14 @@ impl EndsWithOperator {
 }
 
 impl Operator for EndsWithOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(if value.ends_with(self.suffix.as_bytes()) {
+            ByteOperatorResult::matched(self.suffix.as_bytes().to_vec())
+        } else {
+            ByteOperatorResult::no_match()
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if value.ends_with(&self.suffix) {
             OperatorResult::matched(self.suffix.clone())
@@ -101,6 +131,14 @@ impl StreqOperator {
 }
 
 impl Operator for StreqOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(if value == self.expected.as_bytes() {
+            ByteOperatorResult::matched(value.to_vec())
+        } else {
+            ByteOperatorResult::no_match()
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if value == self.expected {
             OperatorResult::matched(value.to_string())
@@ -139,6 +177,14 @@ impl EqOperator {
 }
 
 impl Operator for EqOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        // A binary string is not a decimal number; do not replace its bytes.
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(target) = self.target_value() {
             if let Ok(n) = value.parse::<i64>() {
@@ -179,6 +225,14 @@ impl GtOperator {
 }
 
 impl Operator for GtOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        // A binary string is not a decimal number; do not replace its bytes.
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(target) = self.target_value() {
             if let Ok(n) = value.parse::<i64>() {
@@ -217,6 +271,14 @@ impl LtOperator {
 }
 
 impl Operator for LtOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        // A binary string is not a decimal number; do not replace its bytes.
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(target) = self.target_value() {
             if let Ok(n) = value.parse::<i64>() {
@@ -255,6 +317,14 @@ impl GeOperator {
 }
 
 impl Operator for GeOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        // A binary string is not a decimal number; do not replace its bytes.
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(target) = self.target_value() {
             if let Ok(n) = value.parse::<i64>() {
@@ -293,6 +363,14 @@ impl LeOperator {
 }
 
 impl Operator for LeOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        // A binary string is not a decimal number; do not replace its bytes.
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::no_match(),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(target) = self.target_value() {
             if let Ok(n) = value.parse::<i64>() {

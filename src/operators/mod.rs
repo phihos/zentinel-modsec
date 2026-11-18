@@ -12,7 +12,7 @@ pub use comparison::{EqOperator, GeOperator, GtOperator, LeOperator, LtOperator}
 pub use detection::{DetectSqliOperator, DetectXssOperator};
 pub use network::IpMatchOperator;
 pub use pattern::{PmOperator, RxOperator};
-pub use traits::{Operator, OperatorResult};
+pub use traits::{ByteOperatorResult, Operator, OperatorResult};
 pub use validation::{ValidateUrlEncodingOperator, ValidateUtf8EncodingOperator};
 
 use crate::error::Result;
@@ -85,6 +85,10 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
 pub struct NoMatchOperator;
 
 impl Operator for NoMatchOperator {
+    fn execute_bytes(&self, _value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(ByteOperatorResult::no_match())
+    }
+
     fn execute(&self, _value: &str) -> OperatorResult {
         OperatorResult::no_match()
     }
@@ -98,6 +102,10 @@ impl Operator for NoMatchOperator {
 pub struct UnconditionalMatchOperator;
 
 impl Operator for UnconditionalMatchOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(ByteOperatorResult::matched(value.to_vec()))
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         OperatorResult::matched(value.to_string())
     }
@@ -136,6 +144,19 @@ impl ValidateByteRangeOperator {
 }
 
 impl Operator for ValidateByteRangeOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(
+            if value
+                .iter()
+                .any(|byte| !self.ranges.iter().any(|(a, b)| byte >= a && byte <= b))
+            {
+                ByteOperatorResult::matched(value.to_vec())
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         // Check if all bytes are within the allowed ranges
         for byte in value.bytes() {
@@ -171,6 +192,14 @@ impl WithinOperator {
 }
 
 impl Operator for WithinOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(if self.values.iter().any(|v| v.as_bytes() == value) {
+            ByteOperatorResult::matched(value.to_vec())
+        } else {
+            ByteOperatorResult::no_match()
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if self.values.iter().any(|v| v == value) {
             OperatorResult::matched(value.to_string())
@@ -199,6 +228,13 @@ impl NeOperator {
 }
 
 impl Operator for NeOperator {
+    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+        Ok(match std::str::from_utf8(value) {
+            Ok(text) => self.execute(text).into(),
+            Err(_) => ByteOperatorResult::matched(value.to_vec()),
+        })
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         // Try numeric comparison first
         if let (Ok(a), Ok(b)) = (value.parse::<i64>(), self.expected.parse::<i64>()) {

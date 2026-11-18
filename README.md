@@ -286,7 +286,7 @@ naming the rule IDs that must, or must not, appear in the log for a request.
 | | |
 |---|---|
 | Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **4,971 of 5,184 runnable cases (95.9%)** (`MIN_PASSING`) |
+| Passing | **5,016 of 5,184 runnable cases (96.8%)** (`MIN_PASSING`) |
 
 ```bash
 mkdir -p test-rules
