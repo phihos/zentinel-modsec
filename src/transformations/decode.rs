@@ -7,6 +7,10 @@ use std::borrow::Cow;
 pub struct UrlDecode;
 
 impl Transformation for UrlDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(super::bytes::url_decode_stage(input, false))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         match percent_encoding::percent_decode_str(input).decode_utf8() {
             Ok(decoded) => {
@@ -29,24 +33,37 @@ impl Transformation for UrlDecode {
 pub struct UrlDecodeUni;
 
 impl Transformation for UrlDecodeUni {
-    fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // Handle %uXXXX unicode escapes in addition to standard URL encoding
-        let mut result = String::new();
-        let mut chars = input.chars().peekable();
-        let mut modified = false;
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(super::bytes::url_decode_stage(input, true))
+    }
 
-        while let Some(c) = chars.next() {
-            if c == '%' {
-                if chars.peek() == Some(&'u') || chars.peek() == Some(&'U') {
-                    chars.next(); // consume 'u'
-                                  // Read 4 hex digits
-                    let mut hex = String::new();
-                    for _ in 0..4 {
-                        if let Some(h) = chars.next() {
-                            hex.push(h);
-                        }
-                    }
-                    if let Ok(code) = u32::from_str_radix(&hex, 16) {
+    fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
+        // Decode original input positions exactly once. Invalid/truncated
+        // escapes must not swallow the following character (which may itself
+        // be a '+' or the start of a valid escape).
+        let mut result = String::with_capacity(input.len());
+        let mut modified = false;
+        let mut offset = 0;
+        while offset < input.len() {
+            let tail = &input[offset..];
+            if tail.starts_with('+') {
+                result.push(' ');
+                modified = true;
+                offset += 1;
+                continue;
+            }
+            if tail.starts_with('%') {
+                if tail
+                    .as_bytes()
+                    .get(1)
+                    .is_some_and(|c| *c == b'u' || *c == b'U')
+                {
+                    if let Some(code) = tail.get(2..6).and_then(|hex| {
+                        hex.bytes()
+                            .all(|b| b.is_ascii_hexdigit())
+                            .then(|| u32::from_str_radix(hex, 16).ok())
+                            .flatten()
+                    }) {
                         let code = if (0xff01..=0xff5e).contains(&code) {
                             code - 0xfee0
                         } else {
@@ -55,31 +72,25 @@ impl Transformation for UrlDecodeUni {
                         if let Some(decoded) = char::from_u32(code) {
                             result.push(decoded);
                             modified = true;
+                            offset += 6;
                             continue;
                         }
                     }
-                    result.push('%');
-                    result.push('u');
-                    result.push_str(&hex);
-                } else {
-                    // Standard URL encoding
-                    let mut hex = String::new();
-                    for _ in 0..2 {
-                        if let Some(h) = chars.next() {
-                            hex.push(h);
-                        }
-                    }
-                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                        result.push(byte as char);
-                        modified = true;
-                    } else {
-                        result.push('%');
-                        result.push_str(&hex);
-                    }
+                } else if let Some(byte) = tail.get(1..3).and_then(|hex| {
+                    hex.bytes()
+                        .all(|b| b.is_ascii_hexdigit())
+                        .then(|| u8::from_str_radix(hex, 16).ok())
+                        .flatten()
+                }) {
+                    result.push(byte as char);
+                    modified = true;
+                    offset += 3;
+                    continue;
                 }
-            } else {
-                result.push(c);
             }
+            let literal = tail.chars().next().expect("nonempty tail");
+            result.push(literal);
+            offset += literal.len_utf8();
         }
 
         if modified {
@@ -98,6 +109,10 @@ impl Transformation for UrlDecodeUni {
 pub struct Base64Decode;
 
 impl Transformation for Base64Decode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use base64::Engine;
         match base64::engine::general_purpose::STANDARD.decode(input) {
@@ -115,6 +130,10 @@ impl Transformation for Base64Decode {
 pub struct Base64DecodeExt;
 
 impl Transformation for Base64DecodeExt {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use base64::Engine;
         // Try URL-safe first, then standard
@@ -137,6 +156,10 @@ impl Transformation for Base64DecodeExt {
 pub struct HexDecode;
 
 impl Transformation for HexDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = Vec::new();
         let mut chars = input.chars().peekable();
@@ -168,6 +191,10 @@ impl Transformation for HexDecode {
 pub struct HtmlEntityDecode;
 
 impl Transformation for HtmlEntityDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(super::bytes::html_entity_stage(input))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let decoded = html_escape::decode_html_entities(input);
         if decoded == input {
@@ -186,6 +213,10 @@ impl Transformation for HtmlEntityDecode {
 pub struct JsDecode;
 
 impl Transformation for JsDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(super::bytes::escape_decode_stage(input, false, true))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut chars = input.chars().peekable();
@@ -266,6 +297,10 @@ impl Transformation for JsDecode {
 pub struct CssDecode;
 
 impl Transformation for CssDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(super::bytes::escape_decode_stage(input, true, false))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut chars = input.chars().peekable();
@@ -328,18 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn url_decode_uni_folds_fullwidth_ascii_escapes() {
-        let t = UrlDecodeUni;
-        for ascii in b'!'..=b'~' {
-            let escaped = format!("%u{:04X}", u32::from(ascii) + 0xfee0);
-            assert_eq!(t.transform(&escaped), char::from(ascii).to_string());
-        }
-        assert_eq!(t.transform("%UFF21"), "A");
-        assert_eq!(t.transform("%uFF00%uFF5F"), "＀｟");
-        assert_eq!(t.transform("Ａ"), "Ａ");
-    }
-
-    #[test]
     fn test_base64_decode() {
         let t = Base64Decode;
         assert_eq!(t.transform("aGVsbG8="), "hello");
@@ -357,5 +380,31 @@ mod tests {
         let t = JsDecode;
         assert_eq!(t.transform(r"\x3cscript\x3e"), "<script>");
         assert_eq!(t.transform(r"\u003c"), "<");
+    }
+}
+
+#[cfg(test)]
+mod unicode_width_tests {
+    use super::*;
+
+    #[test]
+    fn url_decode_uni_maps_full_width_ascii_for_crs_941110() {
+        let t = UrlDecodeUni;
+        assert_eq!(
+            t.transform("%uFF1Cscript%uFF1Ealert(1)%uFF1C/script%uFF1E"),
+            "<script>alert(1)</script>"
+        );
+        assert_eq!(t.transform("%UFF1cscript%uFF1e"), "<script>");
+        for ascii in 0x21u32..=0x7e {
+            let encoded = format!("%u{:04X}", ascii + 0xfee0);
+            assert_eq!(
+                t.transform(&encoded),
+                char::from_u32(ascii).unwrap().to_string()
+            );
+        }
+        // Only encoded full-width ASCII is folded; literal Unicode is left
+        // for the explicit utf8toUnicode transformation in the CRS chain.
+        assert_eq!(t.transform("＜script＞"), "＜script＞");
+        assert_eq!(t.transform("%uFF00%uFF5F"), "＀｟");
     }
 }

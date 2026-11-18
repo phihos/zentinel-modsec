@@ -5,10 +5,56 @@ use crate::error::Result;
 use std::borrow::Cow;
 use std::sync::Arc;
 
+// For built-in normalization pipelines, these flags mark bytes that may
+// change at least one stage. A byte outside every stage's trigger set is
+// copied verbatim by each of them, so even multiMatch has no stage to visit.
+const DECODE: u8 = 1;
+const UPPER: u8 = 2;
+const SPACE: u8 = 4;
+const PUNCT: u8 = 8;
+const BYTE_FLAGS: [u8; 256] = {
+    let mut flags = [0; 256];
+    let mut i = 0;
+    while i < flags.len() {
+        let b = i as u8;
+        if !b.is_ascii() || matches!(b, 0 | b'%' | b'+' | b'&' | b'\\') {
+            flags[i] |= DECODE;
+        }
+        if b.is_ascii_uppercase() {
+            flags[i] |= UPPER;
+        }
+        if b.is_ascii_whitespace() || b == 0x0b {
+            flags[i] |= SPACE;
+        }
+        if !b.is_ascii_alphanumeric() {
+            flags[i] |= PUNCT;
+        }
+        i += 1;
+    }
+    flags
+};
+
+fn byte_triggers(name: &str) -> Option<u8> {
+    match name {
+        "utf8ToUnicode" | "urlDecode" | "urlDecodeUni" | "htmlEntityDecode" | "jsDecode"
+        | "cssDecode" | "escapeSeqDecode" | "removeNulls" => Some(DECODE),
+        "lowercase" => Some(DECODE | UPPER),
+        "removeWhitespace" | "compressWhitespace" => Some(DECODE | SPACE),
+        // These stages preserve ASCII letters and digits. Punctuation can
+        // affect paths or comment delimiters, and cmdLine also folds case.
+        "normalizePath" | "normalizePathWin" | "replaceComments" | "removeCommentsChar" => {
+            Some(PUNCT)
+        }
+        "cmdLine" => Some(PUNCT | UPPER),
+        _ => None,
+    }
+}
+
 /// A pipeline of transformations to apply in sequence.
 #[derive(Clone)]
 pub struct TransformationPipeline {
     transformations: Vec<Arc<dyn Transformation>>,
+    byte_triggers: Option<u8>,
 }
 
 impl TransformationPipeline {
@@ -16,29 +62,40 @@ impl TransformationPipeline {
     pub fn new() -> Self {
         Self {
             transformations: Vec::new(),
+            byte_triggers: None,
         }
     }
 
     /// Create a pipeline from transformation names.
     pub fn from_names(names: &[String]) -> Result<Self> {
         let mut transformations = Vec::new();
+        let mut triggers = Some(0);
 
         for name in names {
             // Handle "none" specially - it clears the pipeline
             if name.eq_ignore_ascii_case("none") {
                 transformations.clear();
+                triggers = Some(0);
                 continue;
             }
 
             let t = create_transformation(name)?;
+            triggers = triggers
+                .zip(byte_triggers(t.name()))
+                .map(|(combined, stage)| combined | stage);
             transformations.push(t);
         }
 
-        Ok(Self { transformations })
+        Ok(Self {
+            byte_triggers: triggers.filter(|_| !transformations.is_empty()),
+            transformations,
+        })
     }
 
     /// Add a transformation to the pipeline.
     pub fn add(&mut self, transformation: Arc<dyn Transformation>) {
+        // A custom stage may use any name and can have arbitrary behavior.
+        self.byte_triggers = None;
         self.transformations.push(transformation);
     }
 
@@ -56,7 +113,12 @@ impl TransformationPipeline {
                 Cow::Owned(s) => {
                     let transformed = t.transform(&s);
                     match transformed {
-                        Cow::Borrowed(_) => Cow::Owned(s),
+                        Cow::Borrowed(next)
+                            if next.as_ptr() == s.as_ptr() && next.len() == s.len() =>
+                        {
+                            Cow::Owned(s)
+                        }
+                        Cow::Borrowed(next) => Cow::Owned(next.to_owned()),
                         Cow::Owned(new) => Cow::Owned(new),
                     }
                 }
@@ -64,6 +126,114 @@ impl TransformationPipeline {
         }
 
         current
+    }
+
+    /// Apply each transformation without converting binary values into text.
+    #[inline]
+    pub fn apply_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        if self.input_is_unchanged(input) {
+            return Ok(Cow::Borrowed(input));
+        }
+        self.apply_byte_stages(input)
+    }
+
+    fn apply_byte_stages<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+        if let [only] = self.transformations.as_slice() {
+            return only.transform_bytes(input);
+        }
+        let mut current = Cow::Borrowed(input);
+        for transformation in &self.transformations {
+            current = match current {
+                Cow::Borrowed(value) => transformation.transform_bytes(value)?,
+                Cow::Owned(value) => match transformation.transform_bytes(&value)? {
+                    Cow::Borrowed(next)
+                        if next.as_ptr() == value.as_ptr() && next.len() == value.len() =>
+                    {
+                        Cow::Owned(value)
+                    }
+                    Cow::Borrowed(next) => Cow::Owned(next.to_vec()),
+                    Cow::Owned(next) => Cow::Owned(next),
+                },
+            };
+        }
+        Ok(current)
+    }
+
+    /// Visit the original value and every stage whose output changes it.
+    ///
+    /// `multiMatch` evaluates each of these values, including a match that a
+    /// later transformation removes. Unchanged stages are not duplicate
+    /// evaluations; revisiting a previous value after a real change is.
+    pub fn for_each_stage(&self, input: &str, mut visit: impl FnMut(&str)) {
+        let mut current: Cow<'_, str> = Cow::Borrowed(input);
+        visit(&current);
+        for transformation in &self.transformations {
+            let next = transformation.transform(&current);
+            if next.as_ref() != current.as_ref() {
+                visit(&next);
+                current = Cow::Owned(next.into_owned());
+            }
+        }
+    }
+
+    /// Visit original bytes and each changed stage for `multiMatch`.
+    pub fn for_each_byte_stage(
+        &self,
+        input: &[u8],
+        mut visit: impl FnMut(&[u8]) -> Result<()>,
+    ) -> Result<()> {
+        self.visit_byte_stages(input, None, |_, value| {
+            visit(value)?;
+            Ok(None::<()>)
+        })?;
+        Ok(())
+    }
+
+    /// Stop at a changed stage and resume after it without repeating the
+    /// transformation or operator. Stage zero denotes the original value.
+    pub(crate) fn visit_byte_stages<B>(
+        &self,
+        input: &[u8],
+        after: Option<usize>,
+        mut visit: impl FnMut(usize, &[u8]) -> Result<Option<B>>,
+    ) -> Result<Option<B>> {
+        if after.is_none() {
+            if let Some(done) = visit(0, input)? {
+                return Ok(Some(done));
+            }
+        }
+        if self.input_is_unchanged(input) {
+            return Ok(None);
+        }
+        let mut current: Cow<'_, [u8]> = Cow::Borrowed(input);
+        for (index, transformation) in self
+            .transformations
+            .iter()
+            .enumerate()
+            .skip(after.unwrap_or(0))
+        {
+            let next = transformation.transform_bytes(&current)?;
+            if next.as_ref() != current.as_ref() {
+                if let Some(done) = visit(index + 1, &next)? {
+                    return Ok(Some(done));
+                }
+                current = Cow::Owned(next.into_owned());
+            }
+        }
+        Ok(None)
+    }
+
+    #[inline]
+    fn input_is_unchanged(&self, input: &[u8]) -> bool {
+        // Above a short header or argument, the stages' vectorized searches
+        // are faster than scanning a byte classification table.
+        self.transformations.is_empty()
+            || input.len() <= 64
+                && self.byte_triggers.is_some_and(|flags| {
+                    input
+                        .iter()
+                        .all(|&byte| BYTE_FLAGS[usize::from(byte)] & flags == 0)
+                })
     }
 
     /// Check if the pipeline is empty.
@@ -120,6 +290,95 @@ mod tests {
             TransformationPipeline::from_names(&["urlDecode".to_string(), "lowercase".to_string()])
                 .unwrap();
         assert_eq!(pipeline.apply("HELLO%20WORLD"), "hello world");
+    }
+
+    #[test]
+    fn compiled_shortcuts_preserve_output_and_changed_stages() {
+        let mut inputs: Vec<Vec<u8>> = (0..=255).map(|byte| vec![b'a', byte, b'b']).collect();
+        inputs.extend([
+            b"catalog".to_vec(),
+            b"%26amp%3B".to_vec(),
+            br"a\x42".to_vec(),
+            b"ab\x00cd".to_vec(),
+            b"a/../b".to_vec(),
+            b"one  two".to_vec(),
+            "Straße Σ".as_bytes().to_vec(),
+            b"a\xffZ".to_vec(),
+            vec![b'a'; 65],
+        ]);
+        for names in [
+            "urlDecodeUni",
+            "cmdLine",
+            "lowercase",
+            "normalizePath",
+            "replaceComments",
+            "compressWhitespace",
+            "utf8ToUnicode urlDecodeUni htmlEntityDecode jsDecode cssDecode removeNulls",
+            "urlDecode removeWhitespace",
+            "urlDecodeUni lowercase",
+            "cmdLine normalizePath",
+            "normalizePathWin escapeSeqDecode",
+            "replaceComments removeCommentsChar",
+            "compressWhitespace removeNulls",
+            "hexDecode none urlDecode jsDecode",
+        ] {
+            let names: Vec<String> = names.split_whitespace().map(str::to_owned).collect();
+            let compiled = TransformationPipeline::from_names(&names).unwrap();
+            let mut individual = TransformationPipeline::new();
+            for name in names {
+                if name == "none" {
+                    individual = TransformationPipeline::new();
+                } else {
+                    individual.add(create_transformation(&name).unwrap());
+                }
+            }
+            for input in &inputs {
+                let expected = individual.apply_bytes(input).unwrap();
+                let actual = compiled.apply_bytes(input).unwrap();
+                assert_eq!(actual, expected);
+                assert_eq!(
+                    matches!(actual, Cow::Borrowed(_)),
+                    matches!(expected, Cow::Borrowed(_))
+                );
+                for after in [None, Some(1)] {
+                    let stages = |pipeline: &TransformationPipeline| {
+                        let mut rows = Vec::new();
+                        pipeline
+                            .visit_byte_stages(input, after, |index, value| {
+                                rows.push((index, value.to_vec()));
+                                Ok(None::<()>)
+                            })
+                            .unwrap();
+                        rows
+                    };
+                    assert_eq!(stages(&compiled), stages(&individual));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_custom_stage_is_executed_even_when_its_name_matches_a_builtin() {
+        struct Custom;
+        impl Transformation for Custom {
+            fn name(&self) -> &'static str {
+                "urlDecode"
+            }
+            fn transform<'a>(&self, _: &'a str) -> Cow<'a, str> {
+                Cow::Borrowed("custom")
+            }
+        }
+        let mut pipeline =
+            TransformationPipeline::from_names(&["urlDecode".into(), "jsDecode".into()]).unwrap();
+        assert!(matches!(
+            pipeline.apply_bytes(b"catalog").unwrap(),
+            Cow::Borrowed(_)
+        ));
+        pipeline.add(Arc::new(Custom));
+        assert_eq!(
+            pipeline.apply_bytes(b"catalog").unwrap().as_ref(),
+            b"custom"
+        );
     }
 
     #[test]

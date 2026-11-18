@@ -7,6 +7,10 @@ use std::borrow::Cow;
 pub struct Base64Encode;
 
 impl Transformation for Base64Encode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use base64::Engine;
         Cow::Owned(base64::engine::general_purpose::STANDARD.encode(input))
@@ -21,6 +25,10 @@ impl Transformation for Base64Encode {
 pub struct HexEncode;
 
 impl Transformation for HexEncode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let encoded: String = input.bytes().map(|b| format!("{:02x}", b)).collect();
         Cow::Owned(encoded)
@@ -35,6 +43,10 @@ impl Transformation for HexEncode {
 pub struct UrlEncode;
 
 impl Transformation for UrlEncode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
         let encoded = utf8_percent_encode(input, NON_ALPHANUMERIC).to_string();
@@ -54,6 +66,10 @@ impl Transformation for UrlEncode {
 pub struct Md5;
 
 impl Transformation for Md5 {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use md5::{Digest, Md5 as Md5Hasher};
         let mut hasher = Md5Hasher::new();
@@ -71,6 +87,10 @@ impl Transformation for Md5 {
 pub struct Sha1;
 
 impl Transformation for Sha1 {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use sha1::{Digest, Sha1 as Sha1Hasher};
         let mut hasher = Sha1Hasher::new();

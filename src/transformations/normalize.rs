@@ -7,6 +7,17 @@ use std::borrow::Cow;
 pub struct Lowercase;
 
 impl Transformation for Lowercase {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if input.is_ascii() {
+            return Ok(if input.iter().any(u8::is_ascii_uppercase) {
+                Cow::Owned(input.to_ascii_lowercase())
+            } else {
+                Cow::Borrowed(input)
+            });
+        }
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let lower = input.to_lowercase();
         if lower == input {
@@ -25,6 +36,10 @@ impl Transformation for Lowercase {
 pub struct Uppercase;
 
 impl Transformation for Uppercase {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let upper = input.to_uppercase();
         if upper == input {
@@ -42,32 +57,62 @@ impl Transformation for Uppercase {
 /// Compress whitespace transformation.
 pub struct CompressWhitespace;
 
-impl Transformation for CompressWhitespace {
-    fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        let mut result = String::new();
-        let mut last_was_space = false;
-        let mut modified = false;
-
-        for c in input.chars() {
-            if c.is_whitespace() {
-                if !last_was_space {
-                    result.push(' ');
-                } else {
-                    modified = true;
+impl CompressWhitespace {
+    fn compress(input: &[u8]) -> Cow<'_, [u8]> {
+        let mut output = Vec::new();
+        let mut copied = 0;
+        let mut previous_space_end = None;
+        let mut space_at = |start: usize, width: usize| {
+            let adjacent = previous_space_end == Some(start);
+            previous_space_end = Some(start + width);
+            if adjacent || input[start] != b' ' {
+                output.extend_from_slice(&input[copied..start]);
+                if !adjacent {
+                    output.push(b' ');
                 }
-                last_was_space = true;
-            } else {
-                result.push(c);
-                last_was_space = false;
+                copied = start + width;
+            }
+        };
+
+        let mut offset = 0;
+        for chunk in input.utf8_chunks() {
+            for (index, ch) in chunk.valid().char_indices() {
+                // Coraza compresses the Latin-1 whitespace set.
+                if matches!(ch, ' ' | '\t'..='\r' | '\u{85}' | '\u{a0}') {
+                    space_at(offset + index, ch.len_utf8());
+                }
+            }
+            offset += chunk.valid().len();
+            for &byte in chunk.invalid() {
+                // At an invalid UTF-8 boundary, 0xA0 is a bare Latin-1 NBSP.
+                // Other malformed bytes pass through exactly as received.
+                if byte == 0xa0 {
+                    space_at(offset, 1);
+                }
+                offset += 1;
             }
         }
 
-        if modified || result.chars().any(|c| c.is_whitespace() && c != ' ') {
-            Cow::Owned(result)
-        } else if result == input {
-            Cow::Borrowed(input)
-        } else {
-            Cow::Owned(result)
+        if copied == 0 {
+            return Cow::Borrowed(input);
+        }
+        output.extend_from_slice(&input[copied..]);
+        Cow::Owned(output)
+    }
+}
+
+impl Transformation for CompressWhitespace {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(Self::compress(input))
+    }
+
+    fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
+        match Self::compress(input.as_bytes()) {
+            Cow::Borrowed(_) => Cow::Borrowed(input),
+            Cow::Owned(bytes) => Cow::Owned(
+                String::from_utf8(bytes)
+                    .expect("replacing whole whitespace characters preserves UTF-8"),
+            ),
         }
     }
 
@@ -80,6 +125,10 @@ impl Transformation for CompressWhitespace {
 pub struct RemoveWhitespace;
 
 impl Transformation for RemoveWhitespace {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let result: String = input.chars().filter(|c| !c.is_whitespace()).collect();
         if result == input {
@@ -98,6 +147,13 @@ impl Transformation for RemoveWhitespace {
 pub struct RemoveNulls;
 
 impl Transformation for RemoveNulls {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if memchr::memchr(0, input).is_none() {
+            return Ok(Cow::Borrowed(input));
+        }
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         if !input.contains('\0') {
             return Cow::Borrowed(input);
@@ -114,6 +170,10 @@ impl Transformation for RemoveNulls {
 pub struct ReplaceNulls;
 
 impl Transformation for ReplaceNulls {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         if !input.contains('\0') {
             return Cow::Borrowed(input);
@@ -130,6 +190,10 @@ impl Transformation for ReplaceNulls {
 pub struct Trim;
 
 impl Transformation for Trim {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let trimmed = input.trim();
         if trimmed.len() == input.len() {
@@ -148,6 +212,10 @@ impl Transformation for Trim {
 pub struct TrimLeft;
 
 impl Transformation for TrimLeft {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let trimmed = input.trim_start();
         if trimmed.len() == input.len() {
@@ -166,6 +234,10 @@ impl Transformation for TrimLeft {
 pub struct TrimRight;
 
 impl Transformation for TrimRight {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let trimmed = input.trim_end();
         if trimmed.len() == input.len() {
@@ -180,65 +252,71 @@ impl Transformation for TrimRight {
     }
 }
 
+// Pinned Coraza uses Linux filepath.Clean, maps a current-directory result
+// to the empty string, and restores an input's trailing separator.
+fn normalize_path(input: &[u8], windows: bool) -> Cow<'_, [u8]> {
+    let separator = |byte: &u8| *byte == b'/' || (windows && *byte == b'\\');
+    let needs_cleaning = input == b"/"
+        || (windows && input.contains(&b'\\'))
+        || input.windows(2).any(|pair| pair == b"//")
+        || input
+            .split(|b| *b == b'/')
+            .any(|part| matches!(part, b"." | b".."));
+    if !needs_cleaning {
+        return Cow::Borrowed(input);
+    }
+
+    let absolute = separator(&input[0]);
+    let mut components: Vec<&[u8]> = Vec::new();
+    for part in input.split(separator) {
+        match part {
+            b"" | b"." => {}
+            b".." if components.last().is_some_and(|last| *last != b"..") => {
+                components.pop();
+            }
+            b".." if absolute => {}
+            _ => components.push(part),
+        }
+    }
+    let mut result = Vec::with_capacity(input.len());
+    if absolute {
+        result.push(b'/');
+    }
+    for (i, part) in components.iter().enumerate() {
+        if i > 0 {
+            result.push(b'/');
+        }
+        result.extend_from_slice(part);
+    }
+    if !result.is_empty() && input.last().is_some_and(separator) {
+        result.push(b'/');
+    }
+    if result == input {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(result)
+    }
+}
+
+fn normalize_text_path(input: &str, windows: bool) -> Cow<'_, str> {
+    match normalize_path(input.as_bytes(), windows) {
+        Cow::Borrowed(_) => Cow::Borrowed(input),
+        Cow::Owned(path) => {
+            Cow::Owned(String::from_utf8(path).expect("rearranged UTF-8 components"))
+        }
+    }
+}
+
 /// Normalize path transformation (Unix-style).
 pub struct NormalizePath;
 
 impl Transformation for NormalizePath {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(normalize_path(input, false))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        let mut result = String::new();
-        let mut modified = false;
-
-        // Replace backslashes with forward slashes
-        let normalized = if input.contains('\\') {
-            modified = true;
-            Cow::Owned(input.replace('\\', "/"))
-        } else {
-            Cow::Borrowed(input)
-        };
-
-        // Collapse multiple slashes
-        let mut last_was_slash = false;
-        for c in normalized.chars() {
-            if c == '/' {
-                if !last_was_slash {
-                    result.push('/');
-                } else {
-                    modified = true;
-                }
-                last_was_slash = true;
-            } else {
-                result.push(c);
-                last_was_slash = false;
-            }
-        }
-
-        // Remove . and .. components
-        let parts: Vec<&str> = result.split('/').collect();
-        let mut stack: Vec<&str> = Vec::new();
-
-        for part in parts {
-            match part {
-                "." => {
-                    modified = true;
-                }
-                ".." => {
-                    modified = true;
-                    stack.pop();
-                }
-                "" if !stack.is_empty() => {
-                    // Keep leading empty string for absolute paths
-                }
-                other => {
-                    stack.push(other);
-                }
-            }
-        }
-
-        if modified {
-            Cow::Owned(stack.join("/"))
-        } else {
-            Cow::Borrowed(input)
-        }
+        normalize_text_path(input, false)
     }
 
     fn name(&self) -> &'static str {
@@ -250,8 +328,12 @@ impl Transformation for NormalizePath {
 pub struct NormalizePathWin;
 
 impl Transformation for NormalizePathWin {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(normalize_path(input, true))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        NormalizePath.transform(input)
+        normalize_text_path(input, true)
     }
 
     fn name(&self) -> &'static str {
@@ -263,6 +345,10 @@ impl Transformation for NormalizePathWin {
 pub struct RemoveComments;
 
 impl Transformation for RemoveComments {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut in_comment = false;
@@ -298,6 +384,10 @@ impl Transformation for RemoveComments {
 pub struct ReplaceComments;
 
 impl Transformation for ReplaceComments {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         let mut result = String::new();
         let mut in_comment = false;
@@ -336,6 +426,10 @@ impl Transformation for ReplaceComments {
 pub struct RemoveCommentsChar;
 
 impl Transformation for RemoveCommentsChar {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Remove /*, */, --, and #
         let mut result = input.to_string();
@@ -360,6 +454,10 @@ impl Transformation for RemoveCommentsChar {
 pub struct SqlHexDecode;
 
 impl Transformation for SqlHexDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         // Decode SQL hex strings like 0x41424344 to ABCD
         let mut result = String::new();
@@ -403,11 +501,21 @@ impl Transformation for SqlHexDecode {
     }
 }
 
-/// Serialize non-ASCII code points as IIS-style %u escapes.
+/// UTF-8 to Unicode transformation (pass-through for now).
 pub struct Utf8ToUnicode;
 
 impl Transformation for Utf8ToUnicode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if input.is_ascii() {
+            return Ok(Cow::Borrowed(input));
+        }
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
+        // SecLang's transformation serializes non-ASCII code points as
+        // IIS-style %u escapes; valid Rust UTF-8 is still subject to this
+        // normalization. The following urlDecodeUni can then fold width.
         if input.is_ascii() {
             return Cow::Borrowed(input);
         }
@@ -432,6 +540,13 @@ impl Transformation for Utf8ToUnicode {
 pub struct CmdLine;
 
 impl Transformation for CmdLine {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if input.is_ascii() {
+            return Ok(super::bytes::cmd_line(input));
+        }
+        super::bytes::apply(self, input)
+    }
+
     /// Normalise a Windows/Unix command line the way ModSecurity does.
     ///
     /// The steps, and the order, are ModSecurity's:
@@ -501,76 +616,63 @@ impl Transformation for CmdLine {
 pub struct EscapeSeqDecode;
 
 impl Transformation for EscapeSeqDecode {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(super::bytes::escape_decode_stage(input, false, false))
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        // Decode escape sequences like \n, \r, \t, \xHH, \uHHHH
-        let mut result = String::new();
+        // ModSecurity's ANSI C escape decoding: fixed controls, quotes,
+        // two-digit hex, up to three octal digits, and unknown-escape slash
+        // removal. Unicode escapes belong to jsDecode, not this transform.
+        let mut result = String::with_capacity(input.len());
         let mut chars = input.chars().peekable();
         let mut modified = false;
-
-        while let Some(c) = chars.next() {
-            if c == '\\' {
-                if let Some(&next) = chars.peek() {
-                    modified = true;
-                    chars.next();
-                    match next {
-                        'n' => result.push('\n'),
-                        'r' => result.push('\r'),
-                        't' => result.push('\t'),
-                        '\\' => result.push('\\'),
-                        '0' => result.push('\0'),
-                        'x' => {
-                            // Hex escape \xHH
-                            let mut hex = String::new();
-                            for _ in 0..2 {
-                                if let Some(&h) = chars.peek() {
-                                    if h.is_ascii_hexdigit() {
-                                        hex.push(chars.next().unwrap());
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-                            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                                result.push(byte as char);
-                            } else {
-                                result.push('x');
-                                result.push_str(&hex);
-                            }
+        while let Some(character) = chars.next() {
+            if character != '\\' {
+                result.push(character);
+                continue;
+            }
+            let Some(escaped) = chars.next() else {
+                result.push('\\');
+                break;
+            };
+            modified = true;
+            match escaped {
+                'a' => result.push('\x07'),
+                'b' => result.push('\x08'),
+                'f' => result.push('\x0c'),
+                'n' => result.push('\n'),
+                'r' => result.push('\r'),
+                't' => result.push('\t'),
+                'v' => result.push('\x0b'),
+                '\\' | '\'' | '"' | '?' => result.push(escaped),
+                'x' | 'X' => {
+                    let mut candidate = chars.clone();
+                    match (candidate.next(), candidate.next()) {
+                        (Some(high), Some(low))
+                            if high.is_ascii_hexdigit() && low.is_ascii_hexdigit() =>
+                        {
+                            let byte = high.to_digit(16).unwrap() * 16 + low.to_digit(16).unwrap();
+                            result.push(byte as u8 as char);
+                            chars = candidate;
                         }
-                        'u' => {
-                            // Unicode escape \uHHHH
-                            let mut hex = String::new();
-                            for _ in 0..4 {
-                                if let Some(&h) = chars.peek() {
-                                    if h.is_ascii_hexdigit() {
-                                        hex.push(chars.next().unwrap());
-                                    } else {
-                                        break;
-                                    }
-                                }
+                        _ => result.push(escaped),
+                    }
+                }
+                '0'..='7' => {
+                    let mut value = escaped as u16 - '0' as u16;
+                    for _ in 0..2 {
+                        match chars.peek().copied() {
+                            Some(digit @ '0'..='7') => {
+                                chars.next();
+                                value = value * 8 + digit as u16 - '0' as u16;
                             }
-                            if let Ok(code) = u32::from_str_radix(&hex, 16) {
-                                if let Some(c) = char::from_u32(code) {
-                                    result.push(c);
-                                } else {
-                                    result.push('u');
-                                    result.push_str(&hex);
-                                }
-                            } else {
-                                result.push('u');
-                                result.push_str(&hex);
-                            }
-                        }
-                        _ => {
-                            result.push('\\');
-                            result.push(next);
+                            _ => break,
                         }
                     }
-                } else {
-                    result.push(c);
+                    result.push((value & 0xff) as u8 as char);
                 }
-            } else {
-                result.push(c);
+                other => result.push(other),
             }
         }
 
@@ -590,6 +692,10 @@ impl Transformation for EscapeSeqDecode {
 pub struct Sha256;
 
 impl Transformation for Sha256 {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        super::bytes::apply(self, input)
+    }
+
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         use sha2::{Digest, Sha256 as Sha256Hasher};
         let mut hasher = Sha256Hasher::new();
@@ -608,10 +714,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn utf8_to_unicode_encodes_non_ascii_code_points() {
-        let t = Utf8ToUnicode;
-        assert_eq!(t.transform("École Ａ 🍺"), "%u00c9cole %uff21 %u1f37a");
-        assert!(matches!(t.transform("ASCII%20\0"), Cow::Borrowed(_)));
+    fn cmdline_byte_fast_path_matches_text_on_ascii_and_unicode() {
+        for a in 0..128 {
+            for b in 0..128 {
+                let bytes = [b'a', a, b, b'/', b'z'];
+                let text = std::str::from_utf8(&bytes).unwrap();
+                let expected = CmdLine.transform(text);
+                let actual = CmdLine.transform_bytes(&bytes).unwrap();
+                assert_eq!(actual.as_ref(), expected.as_bytes());
+                assert_eq!(matches!(actual, Cow::Borrowed(_)), expected == text);
+            }
+        }
+        let text = "ÀİΛ,\u{2003}/ Catalog";
+        assert_eq!(
+            CmdLine.transform_bytes(text.as_bytes()).unwrap().as_ref(),
+            CmdLine.transform(text).as_bytes()
+        );
+        assert_eq!(
+            CmdLine
+                .transform_bytes(b"\xff one ; /CAT")
+                .unwrap()
+                .as_ref(),
+            b"\xff one/cat"
+        );
     }
 
     #[test]
@@ -639,14 +764,59 @@ mod tests {
         let t = NormalizePath;
         assert_eq!(t.transform("/a/b/../c"), "/a/c");
         assert_eq!(t.transform("/a//b/./c"), "/a/b/c");
-        assert_eq!(t.transform("a\\b\\c"), "a/b/c");
+        assert_eq!(t.transform(r"a\b\c"), r"a\b\c");
     }
 
     #[test]
-    fn normalize_path_win_uses_forward_slashes() {
+    fn path_cleaning_preserves_relative_parents_and_trailing_separators() {
+        for (input, expected) in [
+            ("../blue", "../blue"),
+            ("../../a/../blue/", "../../blue/"),
+            ("/../blue", "/blue"),
+            ("a/../", ""),
+            ("/", "//"),
+        ] {
+            for transform in [&NormalizePath as &dyn Transformation, &NormalizePathWin] {
+                assert_eq!(transform.transform(input), expected);
+                assert_eq!(
+                    transform
+                        .transform_bytes(input.as_bytes())
+                        .unwrap()
+                        .as_ref(),
+                    expected.as_bytes()
+                );
+            }
+        }
+        assert_eq!(
+            NormalizePathWin
+                .transform_bytes(b"..\\a\\..\\b\xff")
+                .unwrap()
+                .as_ref(),
+            b"../b\xff"
+        );
+    }
+
+    #[test]
+    fn normalize_path_win_uses_forward_slashes_for_crs_lfi_targets() {
         let t = NormalizePathWin;
-        assert_eq!(t.transform("/var/log"), "/var/log");
-        assert_eq!(t.transform(r"C:\temp\..\docs/file"), "C:/docs/file");
+        for (input, expected) in [
+            ("/.git/config", "/.git/config"),
+            ("/sys/class/net", "/sys/class/net"),
+            ("/etc/subuid", "/etc/subuid"),
+            (r"C:\temp\..\Windows\win.ini", "C:/Windows/win.ini"),
+            (r"a\b/c", "a/b/c"),
+        ] {
+            assert_eq!(t.transform(input), expected, "input: {input}");
+        }
+    }
+
+    #[test]
+    fn utf8_to_unicode_encodes_non_ascii_for_crs_xss_chain() {
+        let t = Utf8ToUnicode;
+        assert_eq!(t.transform("＜script＞"), "%uff1cscript%uff1e");
+        assert_eq!(t.transform("ĤéllŌ"), "%u0124%u00e9ll%u014c");
+        assert_eq!(t.transform("hello 🍺"), "hello %u1f37a");
+        assert!(matches!(t.transform("plain ASCII%20\0"), Cow::Borrowed(_)));
     }
 
     #[test]
