@@ -3,7 +3,7 @@
 //! the already completed row for that child. Neither traversal grows the stack.
 use super::arena::{child, Arena};
 use super::documents::SchemaDocuments;
-use super::reference::LocalRefs;
+use super::reference::{DynamicScope, LocalRefs};
 use super::{inspection_depth, UniqueItems};
 use jsonschema::{Draft, Validator};
 use serde_json::{Map, Value};
@@ -65,18 +65,31 @@ struct Array {
 struct Compiler<'a> {
     refs: LocalRefs<'a>,
     draft: Draft,
-    queued: Vec<&'a Value>,
-    indices: HashMap<*const Value, Id>,
+    scope: DynamicScope,
+    queued: Vec<(&'a Value, DynamicScope)>,
+    indices: HashMap<(*const Value, DynamicScope), Id>,
+    incomplete: bool,
+    unique_schemas: HashSet<*const Value>,
 }
 
 impl<'a> Compiler<'a> {
     fn id(&mut self, schema: &'a Value) -> Id {
-        let key = std::ptr::from_ref(schema);
+        let Some(scope) = self.refs.enter_scope(&self.scope, schema) else {
+            self.incomplete = true;
+            return 0;
+        };
+        let key = (std::ptr::from_ref(schema), scope.clone());
         if let Some(&id) = self.indices.get(&key) {
             return id;
         }
         let id = self.queued.len();
-        self.queued.push(schema);
+        // Configuration can compose independent dynamic bindings combinatorially.
+        // Bound the compiled graph before allocating any per-instance result rows.
+        if !self.unique_schemas.insert(key.0) && id - self.unique_schemas.len() >= 16_384 {
+            self.incomplete = true;
+            return 0;
+        }
+        self.queued.push((schema, scope));
         self.indices.insert(key, id);
         id
     }
@@ -107,11 +120,15 @@ impl<'a> Compiler<'a> {
                 "$ref" | "$schema" | "$id" | "id" | "$anchor" | "$dynamicAnchor"
                 | "$recursiveAnchor" | "$defs" | "definitions" | "$comment" => {}
                 "$recursiveRef" if self.draft == Draft::Draft201909 => {
-                    let target = self.refs.resolve_recursive(schema, value.as_str()?)?;
+                    let target =
+                        self.refs
+                            .resolve_recursive_in(schema, value.as_str()?, &self.scope)?;
                     state.same.push(Op::All(vec![self.id(target)]));
                 }
                 "$dynamicRef" if prefix => {
-                    let target = self.refs.resolve_dynamic(schema, value.as_str()?)?;
+                    let target =
+                        self.refs
+                            .resolve_dynamic_in(schema, value.as_str()?, &self.scope)?;
                     state.same.push(Op::All(vec![self.id(target)]));
                 }
                 "$vocabulary" => return None,
@@ -130,7 +147,7 @@ impl<'a> Compiler<'a> {
                         state.same.push(Op::Dependent(name.clone(), self.id(s)));
                     }
                 }
-                "dependencies" if !modern => {
+                "dependencies" => {
                     let mut required = Map::new();
                     for (name, s) in value.as_object()? {
                         if s.is_array() {
@@ -189,6 +206,11 @@ impl<'a> Compiler<'a> {
                     ));
                 }
                 "minContains" | "maxContains" => {}
+                "contentMediaType" | "contentEncoding"
+                    if matches!(self.draft, Draft::Draft6 | Draft::Draft7) =>
+                {
+                    leaf.insert(key.clone(), value.clone());
+                }
                 "type" | "format" | "pattern" | "minLength" | "maxLength" | "minimum"
                 | "maximum" | "exclusiveMinimum" | "exclusiveMaximum" | "multipleOf"
                 | "minProperties" | "maxProperties" | "required" | "dependentRequired"
@@ -240,14 +262,21 @@ impl Program {
         let mut compiler = Compiler {
             refs,
             draft,
+            scope: DynamicScope::default(),
+            incomplete: false,
+            unique_schemas: HashSet::new(),
             queued: vec![],
             indices: HashMap::new(),
         };
         compiler.id(root);
         let mut states = Vec::new();
         while states.len() < compiler.queued.len() {
-            let schema = compiler.queued[states.len()];
+            let (schema, scope) = compiler.queued[states.len()].clone();
+            compiler.scope = scope;
             states.push(compiler.state(schema)?);
+            if compiler.incomplete {
+                return None;
+            }
         }
 
         // Only same-instance edges constrain the order. A cycle among these
@@ -556,5 +585,89 @@ impl Program {
             }
         }
         results.valid(arena.root, 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn program(schema: &Value) -> Program {
+        let base = url::Url::parse("file:///policy/schema.json").unwrap();
+        let draft = Draft::default().detect(schema);
+        Program::compile(schema, &base, &SchemaDocuments::new(), draft)
+            .unwrap_or_else(|| panic!("no program for {schema}"))
+    }
+
+    #[test]
+    fn heap_results_match_the_compiled_validator_on_shallow_inputs() {
+        let mut values = vec![
+            json!(null),
+            json!(true),
+            json!(0),
+            json!(2),
+            json!("hi"),
+            json!([]),
+            json!({}),
+        ];
+        for _ in 0..3 {
+            for v in values.clone() {
+                values.extend([
+                    json!([v]),
+                    json!([v, 2]),
+                    json!({"p":v}),
+                    json!({"q":v,"p":[2]}),
+                ]);
+            }
+        }
+        let schemas = [
+            json!({"$ref":"#/$defs/n","$defs":{"n":{"anyOf":[{"type":"integer"},{"type":"array","items":{"$ref":"#/$defs/n"}}]}}}),
+            json!({"if":{"type":"object"},"then":{"allOf":[{"properties":{"p":{"$ref":"#"}}}],"unevaluatedProperties":false},"else":{"type":["integer","boolean"]}}),
+            json!({"properties":{"p":true},"patternProperties":{"^p":{"type":"array"}},"additionalProperties":{"type":"integer"}}),
+            json!({"anyOf":[{"properties":{"p":true}},{"properties":{"q":true}}],"unevaluatedProperties":false}),
+            json!({"oneOf":[{"required":["p"],"properties":{"p":true}},{"required":["q"],"properties":{"q":true}}],"unevaluatedProperties":false}),
+            json!({"not":{"properties":{"q":{"type":"string"}}},"unevaluatedProperties":false}),
+            json!({"if":{"required":["p"],"properties":{"p":true}},"then":{"properties":{"q":{"type":"array"}}},"unevaluatedProperties":false}),
+            json!({"dependentSchemas":{"q":{"properties":{"p":true}}},"unevaluatedProperties":false}),
+            json!({"contains":{"type":"integer"},"minContains":0,"maxContains":1,"unevaluatedItems":{"type":"array"}}),
+            json!({"prefixItems":[true],"items":{"enum":[0,2]},"uniqueItems":true}),
+            json!({"allOf":[{"contains":{"const":2}},{"prefixItems":[true]}],"unevaluatedItems":false}),
+            json!({"propertyNames":{"not":{"const":"q"}},"required":["p"],"minProperties":1}),
+            json!({"$schema":"http://json-schema.org/draft-07/schema#","contentMediaType":"application/json"}),
+            json!({"dependencies":{"p":["q"],"q":{"properties":{"p":{"type":"array"}}}}}),
+            json!({"$schema":"http://json-schema.org/draft-07/schema#","$ref":"#/definitions/n","not":{},"definitions":{"n":{"items":[{"type":"integer"}],"additionalItems":false}}}),
+            json!({"$schema":"http://json-schema.org/draft-07/schema#","dependencies":{"p":["q"],"q":{"properties":{"p":{"type":"array"}}}}}),
+            json!({"$schema":"https://json-schema.org/draft/2019-09/schema","items":[true],"additionalItems":{"type":"integer"},"unevaluatedItems":false}),
+            json!({"$schema":"http://json-schema.org/draft-04/schema#","properties":{"p":{"type":"array"}},"additionalProperties":false}),
+        ];
+        for schema in schemas {
+            let native = jsonschema::validator_for(&schema).unwrap();
+            let heap = program(&schema);
+            for v in &values {
+                assert_eq!(
+                    heap.is_valid(&serde_json::to_vec(v).unwrap()),
+                    native.is_valid(v),
+                    "{schema} {v}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn recursive_graph_runs_on_a_small_stack_and_observes_every_wide_member() {
+        std::thread::Builder::new().stack_size(1024*1024).spawn(||{
+            let schema=json!({"anyOf":[{"type":"integer"},{"type":"array","items":{"$ref":"#"}},{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"$ref":"#"}}]});
+            let heap=program(&schema);
+            for (levels,tail,ok) in [(10_000,"2",true),(10_000,"false",false),(10_001,"2",false)] {
+                let doc=format!("{}{tail}{}", "[".repeat(levels), "]".repeat(levels));
+                assert_eq!(heap.is_valid(doc.as_bytes()),ok);
+            }
+            let prefix=(0..4096).map(|i|format!(r#""k{i}":[2]"#)).collect::<Vec<_>>().join(",");
+            for (last,ok) in [("2",true),("false",false)] {
+                let doc=format!(r#"{{{prefix},"last":[{last}]}}"#);
+                assert_eq!(heap.is_valid(doc.as_bytes()),ok);
+            }
+        }).unwrap().join().unwrap();
     }
 }

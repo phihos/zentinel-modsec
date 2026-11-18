@@ -47,6 +47,9 @@ impl<'a> LocalRefs<'a> {
         let retrieval = uri::from_str(base.as_str()).ok()?;
         let mut pending = vec![(root, None::<usize>, self.default_draft)];
         while let Some((node, parent, inherited_draft)) = pending.pop() {
+            if self.scopes.contains_key(&std::ptr::from_ref(node).addr()) {
+                continue;
+            }
             let draft = inherited_draft.detect(node);
             if draft == Draft::Unknown || !(node.is_object() || node.is_boolean()) {
                 return None;
@@ -120,6 +123,27 @@ impl<'a> LocalRefs<'a> {
                     self.resources[scope].dynamic.push(name);
                     let slot = self.dynamic_names.len();
                     self.dynamic_names.entry(name).or_insert((slot, 0)).1 += 1;
+                }
+            }
+            // Draft 4 allows booleans in these positions without treating them
+            // as independently referenceable subschemas.
+            if draft == Draft::Draft4 {
+                for key in ["additionalProperties", "additionalItems"] {
+                    if let Some(flag) = node.get(key).filter(|v| v.is_boolean()) {
+                        self.scopes
+                            .insert(std::ptr::from_ref(flag).addr(), (scope, draft));
+                    }
+                }
+            }
+            // The pinned validator also accepts the legacy dependencies keyword
+            // alongside modern applicators.
+            if draft >= Draft::Draft201909 {
+                if let Some(deps) = node.get("dependencies").and_then(Value::as_object) {
+                    pending.extend(
+                        deps.values()
+                            .filter(|v| v.is_object() || v.is_boolean())
+                            .map(|child| (child, Some(scope), draft)),
+                    );
                 }
             }
             // The validator supplies the schema-bearing keywords for each dialect.
@@ -236,36 +260,6 @@ impl<'a> LocalRefs<'a> {
         }
         Some(target)
     }
-
-    pub(super) fn resolve_dynamic(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
-        let target = self.resolve(from, reference)?;
-        if let Some((_, name)) = reference.rsplit_once('#') {
-            if self.draft_for(target) == Some(Draft::Draft202012)
-                && target.get("$dynamicAnchor").and_then(Value::as_str) == Some(name)
-                && self
-                    .dynamic_names
-                    .get(name)
-                    .is_some_and(|&(_, count)| count > 1)
-            {
-                return None;
-            }
-        }
-        Some(target)
-    }
-
-    pub(super) fn resolve_recursive(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
-        if reference != "#" {
-            return None;
-        }
-        let target = self.resolve(from, reference)?;
-        if self.recursive_roots > 1
-            && self.draft_for(target) == Some(Draft::Draft201909)
-            && target.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true)
-        {
-            return None;
-        }
-        Some(target)
-    }
 }
 
 #[cfg(test)]
@@ -318,24 +312,6 @@ mod tests {
             .unwrap();
         assert_eq!(refs.resolve(&root, "retrieved.json#child"), Some(&other));
         assert_eq!(refs.resolve(&other, "../root.json"), Some(&root));
-    }
-
-    #[test]
-    fn dynamic_and_recursive_references_require_scope_invariant_targets() {
-        let base = Url::parse("file:///root.json").unwrap();
-        let root = json!({"$dynamicAnchor":"node","$recursiveAnchor":true});
-        let mut refs = LocalRefs::new(&root, &base).unwrap();
-        assert_eq!(refs.resolve_dynamic(&root, "#node"), Some(&root));
-        assert_eq!(refs.resolve_recursive(&root, "#"), Some(&root));
-        let other = json!({"$dynamicAnchor":"node","$recursiveAnchor":true,"$anchor":"other"});
-        refs.add_document(&other, &base.join("other.json").unwrap())
-            .unwrap();
-        assert!(refs.resolve_dynamic(&root, "#node").is_none());
-        assert_eq!(refs.resolve_recursive(&root, "#"), Some(&root));
-        assert_eq!(
-            refs.resolve_dynamic(&root, "other.json#other"),
-            Some(&other)
-        );
     }
 
     #[test]

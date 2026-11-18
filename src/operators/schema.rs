@@ -191,7 +191,7 @@ fn inspection_depth(schema: &Value) -> Option<(usize, bool)> {
                 | "definitions" | "title" | "description" | "examples" | "default" | "type"
                 | "format" | "pattern" | "minLength" | "maxLength" | "minimum" | "maximum"
                 | "exclusiveMinimum" | "exclusiveMaximum" | "multipleOf" | "readOnly"
-                | "writeOnly" | "deprecated" => 0,
+                | "writeOnly" | "deprecated" | "contentMediaType" | "contentEncoding" => 0,
                 "minProperties" | "maxProperties" | "required" | "dependentRequired"
                 | "minItems" | "maxItems" | "minContains" | "maxContains" | "propertyNames" => 1,
                 "uniqueItems" if value == false => 0,
