@@ -1821,6 +1821,7 @@ SecRule ARGS "@rx (?:.{0})" "id:55,phase:2,pass"
 SecRule ARGS "@rx [!]" "id:56,phase:2,pass,t:hexDecode"
 SecRule ARGS "@rx (?-u:\xFF)" "id:57,phase:2,pass,capture"
 SecRule ARGS "@rx %{tx.needle}" "id:58,phase:2,pass"
+SecRule ARGS "@pm item.ok longer" "id:60,phase:2,pass,t:none,t:lowercase,capture"
 SecRule ARGS "@rx ^.{65}$" "id:59,phase:2,deny,status:406""#;
         let fast = make_ruleset(config);
         assert!(fast.summarize_arguments[Phase::RequestBody.index()]);
@@ -1868,6 +1869,10 @@ SecRule ARGS "@rx ^.{65}$" "id:59,phase:2,deny,status:406""#;
                 b.intervention().map(|i| i.status)
             );
             assert!(a.matched_rules().iter().any(|id| id == "52"));
+            assert_eq!(
+                a.matched_rules().iter().any(|id| id == "60"),
+                uri.contains("ITEM.ok")
+            );
             if content_type == "application/xml" {
                 let first = a
                     .matched_data()

@@ -120,6 +120,13 @@ pub trait Operator: Send + Sync {
         self.execute_bytes(value)
     }
 
+    /// Minimum matching byte lengths on ASCII alphanumerics and on path tokens
+    /// (alphanumerics plus `_-./:`), capped at 65. Zero disables a bound.
+    fn short_token_minimums(&self) -> [u8; 2] {
+        self.compiled_regex()
+            .map_or([0; 2], |rx| rx.token_minimums())
+    }
+
     /// Expose a compiled regex when it completely describes this operator's
     /// byte matching and capture behavior, including empty and binary matches.
     fn compiled_regex(&self) -> Option<&super::RxOperator> {
