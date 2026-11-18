@@ -21,11 +21,6 @@ fn checked_result(result: c_int, fingerprint: impl FnOnce() -> String) -> Detect
     }
 }
 
-/// Detect SQLi with upstream libinjection, including its native fingerprint.
-pub fn detect_sqli(input: &str) -> DetectionResult {
-    detect_sqli_bytes(input.as_bytes())
-}
-
 /// Detect SQLi in the original bytes, including invalid UTF-8 and embedded NULs.
 pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
     // Upstream requires at least eight bytes and writes an ASCII C string.
@@ -43,11 +38,6 @@ pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
             .map(|&byte| char::from(byte as u8))
             .collect()
     })
-}
-
-/// Detect XSS with upstream libinjection.
-pub fn detect_xss(input: &str) -> DetectionResult {
-    detect_xss_bytes(input.as_bytes())
 }
 
 /// Detect XSS in the original bytes, including invalid UTF-8 and embedded NULs.

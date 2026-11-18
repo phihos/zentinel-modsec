@@ -35,14 +35,14 @@
 //! cargo test --test crs_conformance -- --nocapture
 //! ```
 //!
-//! CI checks every stage against the backend-specific outcome for its pinned
+//! CI checks every stage against the shared reference outcome for its pinned
 //! CRS revision. A missing file or stage, a changed rule-ID expectation result,
 //! and an engine callback error all fail the gate.
 //!
 //! `CRS_DIR` overrides the location. `SKIP_CRS_CONFORMANCE=1` skips these tests
 //! when the corpus is not present — CI's unit-test job sets it, because the
 //! dedicated `conformance` jobs fetch the corpus and run release builds for
-//! the heuristic and FFI backends. Those jobs must never set
+//! the Rust and FFI backends. Those jobs must never set
 //! it: a gate that can silently not run is not a gate.
 //!
 //! Absence of the checkout is otherwise a failure rather than a skip, with
@@ -342,9 +342,7 @@ fn crs_regression_corpus() {
     );
 }
 
-/// The fixture groups outcomes by path. Each row records a shared result or
-/// separate Rust/FFI results if the backends differ. Even unsupported stages
-/// retain their identities and a reason.
+/// The fixture groups shared Rust and C reference outcomes by path.
 fn expected_outcomes() -> BTreeMap<String, String> {
     let mut expected = BTreeMap::new();
     let mut file = "";
@@ -358,17 +356,11 @@ fn expected_outcomes() -> BTreeMap<String, String> {
         }
         let mut fields = line.split('\t');
         let stage = fields.next().expect("stage");
-        let heuristic = fields.next().expect("Rust outcome");
-        let ffi = fields.next().unwrap_or(heuristic);
+        let outcome = fields.next().expect("stage outcome");
         assert!(
             !file.is_empty() && fields.next().is_none(),
             "invalid manifest line {line}"
         );
-        let outcome = if cfg!(feature = "libinjection-ffi") {
-            ffi
-        } else {
-            heuristic
-        };
         let id = format!("{file}#{stage}");
         assert!(
             expected.insert(id.clone(), outcome.to_owned()).is_none(),

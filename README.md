@@ -26,7 +26,7 @@
 `zentinel-modsec` parses ModSecurity `.conf` rule files and evaluates them
 against requests and responses. The default build has no C or C++ dependency
 and no FFI (`#![deny(unsafe_code)]`). SQL injection and XSS detection
-(`@detectSQLi`, `@detectXSS`) use Rust heuristics by default; the optional
+(`@detectSQLi`, `@detectXSS`) use the Rust port of libinjection by default. The optional
 `libinjection-ffi` feature selects upstream C libinjection. CI checks individual CRS regression stages on both backends for pull requests and pushes to `main`.
 See [CRS conformance](#crs-conformance).
 
@@ -52,10 +52,16 @@ semantics differ from upstream. Native parser errors are logged and reported
 as matches rather than silently allowing the input. Source provenance and the
 third-party license are in [vendor/libinjection](vendor/libinjection/README.md).
 
+The default backend uses `barbacane-libinjection` 0.1.3 and returns upstream-style
+SQL fingerprints and the `XSS` label for HTML matches. To compare both
+implementations on the v4.0.2 upstream data files, point `LIBINJECTION_DATA_DIR`
+at the upstream checkout’s `data` directory and run
+`cargo test --release --features libinjection-ffi --test libinjection_conformance upstream_dataset -- --ignored`.
+
 To compare per-call cost, run
 `cargo run --release --features libinjection-ffi --example libinjection_cost`.
-The example reports raw FFI, the public API including result conversion, and
-the original Rust backend. A standalone native C control is provided in
+The example reports raw FFI, the selected API including result conversion,
+the Rust port, and the original heuristic. A standalone native C control is provided in
 `examples/libinjection_native_cost.c`; compile with `cc -O3 -Ivendor/libinjection
 examples/libinjection_native_cost.c vendor/libinjection/libinjection_sqli.c
 vendor/libinjection/libinjection_xss.c vendor/libinjection/libinjection_html5.c
@@ -348,8 +354,8 @@ YAML files, including one comment-only file. Of the 5,263 stages, 5,187 have
 structured input and rule-ID expectations. The other 76 use encoded requests
 or have no rule-ID assertion.
 
-On this pin the default Rust heuristic backend passes 5,091 of the 5,187
-executed stages, and `libinjection-ffi` passes 5,096. CI runs both.
+On this pin both the default Rust port and `libinjection-ffi` pass the same
+5,096 of 5,187 executed stages. CI checks each backend against the shared manifest.
 [The reviewed outcome manifest](tests/fixtures/crs-native-outcomes.tsv)
 records each stage by file, test ID and stage number. A changed outcome,
 missing or new stage, fixture error, or incomplete engine callback fails CI.

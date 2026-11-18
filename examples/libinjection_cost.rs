@@ -26,7 +26,7 @@ fn main() {
         ("xss-safe", "hello world", false),
         ("xss-attack", "<img src=x onerror=alert(1)>", false),
     ] {
-        for backend in ["raw-ffi", "selected", "pure-rust"] {
+        for backend in ["raw-ffi", "selected", "pure-rust", "legacy-heuristic"] {
             let mut hits = 0;
             let start = Instant::now();
             for _ in 0..n {
@@ -52,6 +52,13 @@ fn main() {
                             libinjection::is_sqli(input)
                         } else {
                             libinjection::is_xss(input)
+                        }
+                    }
+                    "pure-rust" => {
+                        if sqli {
+                            libinjection::rust::detect_sqli_bytes(input.as_bytes()).is_injection
+                        } else {
+                            libinjection::rust::detect_xss_bytes(input.as_bytes()).is_injection
                         }
                     }
                     _ => {

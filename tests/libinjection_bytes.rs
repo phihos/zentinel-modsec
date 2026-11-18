@@ -1,9 +1,8 @@
-//! The native bridge accepts the original bytes without UTF-8 replacement.
+//! Both detectors accept the original bytes without UTF-8 replacement.
 use zentinel_modsec::libinjection;
 
-#[cfg(feature = "libinjection-ffi")]
 #[test]
-fn native_backend_inspects_arbitrary_bytes_after_nul_and_invalid_utf8() {
+fn selected_backend_inspects_arbitrary_bytes_after_nul_and_invalid_utf8() {
     assert!(
         libinjection::detect_xss_bytes(b"\xff\x00<script>alert(1)</script>")
             .unwrap()
@@ -43,9 +42,8 @@ SecRule ARGS:q "@endsWith blue" "id:3,phase:1,pass"
     assert_eq!(tx.matched_rules(), ["3"]);
 }
 
-#[cfg(not(feature = "libinjection-ffi"))]
 #[test]
-fn rust_backend_checks_raw_bytes_with_existing_detection_patterns() {
+fn selected_backend_checks_raw_bytes() {
     for input in [&b"\xff<script>"[..], &b"<script>"[..]] {
         assert!(libinjection::detect_xss_bytes(input).unwrap().is_injection);
     }

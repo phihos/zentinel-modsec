@@ -1,49 +1,39 @@
 //! SQLi and XSS detection with selectable backends.
 //!
-//! The default backend is the original Rust heuristic implementation. Enabling
-//! `libinjection-ffi` selects vendored upstream C libinjection for the root API
-//! and the engine operators. The `sqli` and `xss` submodules always expose the
-//! original Rust backend for explicit comparison or use.
+//! The default backend uses the Rust libinjection port. The optional
+//! `libinjection-ffi` feature selects vendored upstream C for the root API and
+//! engine operators. The `sqli` and `xss` submodules expose the legacy heuristics.
 
+pub mod rust;
 pub mod sqli;
 pub mod xss;
 
 #[cfg(feature = "libinjection-ffi")]
-#[allow(unsafe_code)] // Audited, length-aware C bridge; keep the rest of the crate safe.
+#[allow(unsafe_code)] // Audited, length-aware C bridge.
 mod ffi;
 #[cfg(feature = "libinjection-ffi")]
-pub use ffi::{detect_sqli, detect_xss};
+use ffi as selected;
 #[cfg(not(feature = "libinjection-ffi"))]
-pub use sqli::detect_sqli;
-#[cfg(not(feature = "libinjection-ffi"))]
-pub use xss::detect_xss;
+use rust as selected;
 
-/// Detect SQL injection without replacing invalid UTF-8 input.
-///
-/// Both the native and Rust heuristic backends inspect the original bytes.
-pub fn detect_sqli_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
-    #[cfg(feature = "libinjection-ffi")]
-    {
-        Ok(ffi::detect_sqli_bytes(input))
-    }
-    #[cfg(not(feature = "libinjection-ffi"))]
-    {
-        Ok(sqli::detect_sqli_bytes(input))
-    }
+/// Detect SQL injection in a UTF-8 string.
+pub fn detect_sqli(input: &str) -> DetectionResult {
+    selected::detect_sqli_bytes(input.as_bytes())
 }
 
-/// Detect XSS without replacing invalid UTF-8 input.
-///
-/// Both the native and Rust heuristic backends inspect the original bytes.
+/// Detect SQL injection in the original bytes, including embedded NULs.
+pub fn detect_sqli_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
+    Ok(selected::detect_sqli_bytes(input))
+}
+
+/// Detect XSS in a UTF-8 string.
+pub fn detect_xss(input: &str) -> DetectionResult {
+    selected::detect_xss_bytes(input.as_bytes())
+}
+
+/// Detect XSS in the original bytes, including embedded NULs.
 pub fn detect_xss_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
-    #[cfg(feature = "libinjection-ffi")]
-    {
-        Ok(ffi::detect_xss_bytes(input))
-    }
-    #[cfg(not(feature = "libinjection-ffi"))]
-    {
-        Ok(xss::detect_xss_bytes(input))
-    }
+    Ok(selected::detect_xss_bytes(input))
 }
 
 /// Check for SQL injection using the selected backend.
