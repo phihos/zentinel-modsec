@@ -1201,38 +1201,16 @@ impl Transaction {
                 assignment(op.value).value.as_ref().unwrap().clone(),
             );
         }
-        for &index in &defaults.ids {
-            let index = usize::from(index);
-            self.matched_rules
-                .push(ruleset, RuleLocation { phase, index });
-        }
-        let count_value = |(index, n): (u8, u8)| {
-            let name = dispatch[usize::from(index)].selections[0]
-                .match_name
-                .as_deref()
-                .unwrap();
-            (name.clone(), ByteValue::decimal(i64::from(n)))
-        };
-        self.matched_data.extend(
-            ruleset,
-            defaults.counts.iter().map(|&entry| {
-                let (variable, value) = count_value(entry);
-                (
-                    RuleLocation {
-                        phase,
-                        index: usize::from(entry.0),
-                    },
-                    RawMatch {
-                        variable,
-                        portion: Some(value.clone()),
-                        value,
-                    },
-                )
-            }),
-        );
+        // These are the first matches in a fresh transaction. The ruleset
+        // already contains their IDs and count results in execution order.
+        self.matched_rules = MatchedRules::from_defaults(&defaults.ids);
+        self.matched_data = MatchLog::with_default_prefix(!defaults.counts.is_empty());
         self.matched_vars.clear();
-        self.matched_vars
-            .extend(defaults.last_count.map(count_value));
+        self.matched_vars.extend(
+            defaults
+                .last_count
+                .map(|entry| super::initialization::TxDefaults::count_value(dispatch, entry)),
+        );
     }
 
     /// A target's values are snapshotted together. The next target is
