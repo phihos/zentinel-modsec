@@ -251,6 +251,8 @@ impl TransformationPipeline {
                 })
     }
 
+    // These stages also preserve dotted words: without a separator, path cleaning
+    // can only shorten a standalone dot component.
     pub(crate) fn preserves_alphanumeric_width_bounds(&self) -> bool {
         self.is_empty() || self.byte_triggers.is_some()
     }

@@ -170,6 +170,7 @@ impl RuleDispatch {
             let [word, path] = rule.operator.short_token_minimums();
             [
                 word,
+                rule.operator.dotted_token_minimum(),
                 if rule.transformations.preserves_token_width_bounds() {
                     path
                 } else {
@@ -177,7 +178,7 @@ impl RuleDispatch {
                 },
             ]
         } else {
-            [0; 2]
+            [0; 3]
         };
         let mut dispatch = Self {
             targets: super::target_indices::TargetIndices::compile(&rule.variables, minimum),

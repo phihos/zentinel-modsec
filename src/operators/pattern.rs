@@ -23,50 +23,43 @@ struct MatchRequirements {
     any: usize,
     token: usize,
     alphanumeric: u8,
+    dotted: u8,
     required: Option<u8>,
 }
 
 // ASCII letters, digits, underscore, hyphen and the path separators '.', '/', ':'.
 const TOKEN_RANGES: [(u8, u8); 4] = [(b'-', b':'), (b'A', b'Z'), (b'_', b'_'), (b'a', b'z')];
 
-fn overlaps_token(lo: u32, hi: u32) -> bool {
-    TOKEN_RANGES
+const WORD_RANGES: [(u8, u8); 3] = [(b'0', b'9'), (b'A', b'Z'), (b'a', b'z')];
+const DOTTED_RANGES: [(u8, u8); 4] = [(b'.', b'.'), WORD_RANGES[0], WORD_RANGES[1], WORD_RANGES[2]];
+
+fn overlaps(ranges: &[(u8, u8)], lo: u32, hi: u32) -> bool {
+    ranges
         .iter()
         .any(|&(start, end)| lo <= u32::from(end) && u32::from(start) <= hi)
 }
 
 pub(crate) fn token_byte(byte: u8) -> bool {
-    overlaps_token(byte.into(), byte.into())
+    overlaps(&TOKEN_RANGES, byte.into(), byte.into())
 }
 
 // Minimum match width over the token alphabet. An impossible branch has
 // infinite width. Ignoring boundary assertions gives a conservative bound.
-fn token_width<const ALNUM: bool>(hir: &regex_syntax::hir::Hir, depth: usize) -> usize {
+fn token_width(hir: &regex_syntax::hir::Hir, depth: usize, ranges: &[(u8, u8)]) -> usize {
     use regex_syntax::hir::{Class, HirKind};
     // Bound our own stack usage independently of the parser's nesting limit.
     if depth == 0 {
         return hir.properties().minimum_len().unwrap_or(0);
     }
-    let width = |part: &regex_syntax::hir::Hir| token_width::<ALNUM>(part, depth - 1);
-    let overlaps = |lo, hi| {
-        if ALNUM {
-            [(b'0', b'9'), (b'A', b'Z'), (b'a', b'z')]
-                .iter()
-                .any(|&(a, b)| lo <= u32::from(b) && u32::from(a) <= hi)
-        } else {
-            overlaps_token(lo, hi)
-        }
-    };
+    let width = |part: &regex_syntax::hir::Hir| token_width(part, depth - 1, ranges);
     match hir.kind() {
         HirKind::Empty | HirKind::Look(_) => 0,
         HirKind::Literal(literal) => {
-            if literal.0.iter().copied().all(|b| {
-                if ALNUM {
-                    b.is_ascii_alphanumeric()
-                } else {
-                    token_byte(b)
-                }
-            }) {
+            if literal
+                .0
+                .iter()
+                .all(|&b| overlaps(ranges, b.into(), b.into()))
+            {
                 literal.0.len()
             } else {
                 usize::MAX
@@ -76,10 +69,10 @@ fn token_width<const ALNUM: bool>(hir: &regex_syntax::hir::Hir, depth: usize) ->
             let possible = match class {
                 Class::Bytes(bytes) => bytes
                     .iter()
-                    .any(|r| overlaps(r.start().into(), r.end().into())),
+                    .any(|r| overlaps(ranges, r.start().into(), r.end().into())),
                 Class::Unicode(chars) => chars
                     .iter()
-                    .any(|r| overlaps(r.start().into(), r.end().into())),
+                    .any(|r| overlaps(ranges, r.start().into(), r.end().into())),
             };
             if possible {
                 1
@@ -193,8 +186,9 @@ impl RegexCache {
             })?;
         let requirements = MatchRequirements {
             any: hir.properties().minimum_len().unwrap_or(0),
-            token: token_width::<false>(&hir, 32),
-            alphanumeric: token_width::<true>(&hir, 32).min(65) as u8,
+            token: token_width(&hir, 32, &TOKEN_RANGES),
+            alphanumeric: token_width(&hir, 32, &WORD_RANGES).min(65) as u8,
+            dotted: token_width(&hir, 32, &DOTTED_RANGES).min(65) as u8,
             required: required_byte(&hir, 32),
         };
         let regex = Arc::new(RegexProgram {
@@ -325,6 +319,10 @@ impl RxOperator {
         })
     }
 
+    pub(crate) fn dotted_minimum(&self) -> u8 {
+        self.requirements.dotted
+    }
+
     pub(crate) fn token_minimums(&self) -> [u8; 2] {
         [
             self.requirements.alphanumeric,
@@ -416,6 +414,7 @@ pub struct PmOperator {
     program: Arc<AhoCorasick>,
     min_len: usize,
     min_alphanumeric: usize,
+    min_dotted: u8,
 }
 
 /// Exact parsed phrases, including order and case, identify the program.
@@ -474,16 +473,21 @@ impl PmOperator {
     }
 
     fn compile(patterns: Vec<Vec<u8>>) -> Result<Self> {
-        let min_alphanumeric = patterns
-            .iter()
-            .filter(|p| p.iter().all(u8::is_ascii_alphanumeric))
-            .map(Vec::len)
-            .min()
-            .unwrap_or(usize::MAX);
+        let minimum = |accept: fn(&u8) -> bool| {
+            patterns
+                .iter()
+                .filter(|p| p.iter().all(accept))
+                .map(Vec::len)
+                .min()
+                .unwrap_or(usize::MAX)
+        };
+        let min_alphanumeric = minimum(u8::is_ascii_alphanumeric);
+        let min_dotted = minimum(|b| b.is_ascii_alphanumeric() || *b == b'.').min(65) as u8;
         let program = PHRASE_CACHE.get(patterns)?;
         Ok(Self {
             min_len: program.min_pattern_len(),
             min_alphanumeric,
+            min_dotted,
             program,
         })
     }
@@ -519,6 +523,10 @@ impl PmOperator {
 }
 
 impl Operator for PmOperator {
+    fn dotted_token_minimum(&self) -> u8 {
+        self.min_dotted
+    }
+
     fn short_token_minimums(&self) -> [u8; 2] {
         [
             self.min_alphanumeric.min(65) as u8,
