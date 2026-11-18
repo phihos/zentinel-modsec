@@ -22,6 +22,7 @@ struct RegexCache {
 struct MatchRequirements {
     any: usize,
     token: usize,
+    alphanumeric: u8,
     required: Option<u8>,
 }
 
@@ -40,17 +41,32 @@ fn token_byte(byte: u8) -> bool {
 
 // Minimum match width over the token alphabet. An impossible branch has
 // infinite width. Ignoring boundary assertions gives a conservative bound.
-fn token_width(hir: &regex_syntax::hir::Hir, depth: usize) -> usize {
+fn token_width<const ALNUM: bool>(hir: &regex_syntax::hir::Hir, depth: usize) -> usize {
     use regex_syntax::hir::{Class, HirKind};
     // Bound our own stack usage independently of the parser's nesting limit.
     if depth == 0 {
         return hir.properties().minimum_len().unwrap_or(0);
     }
-    let width = |part: &regex_syntax::hir::Hir| token_width(part, depth - 1);
+    let width = |part: &regex_syntax::hir::Hir| token_width::<ALNUM>(part, depth - 1);
+    let overlaps = |lo, hi| {
+        if ALNUM {
+            [(b'0', b'9'), (b'A', b'Z'), (b'a', b'z')]
+                .iter()
+                .any(|&(a, b)| lo <= u32::from(b) && u32::from(a) <= hi)
+        } else {
+            overlaps_token(lo, hi)
+        }
+    };
     match hir.kind() {
         HirKind::Empty | HirKind::Look(_) => 0,
         HirKind::Literal(literal) => {
-            if literal.0.iter().copied().all(token_byte) {
+            if literal.0.iter().copied().all(|b| {
+                if ALNUM {
+                    b.is_ascii_alphanumeric()
+                } else {
+                    token_byte(b)
+                }
+            }) {
                 literal.0.len()
             } else {
                 usize::MAX
@@ -60,10 +76,10 @@ fn token_width(hir: &regex_syntax::hir::Hir, depth: usize) -> usize {
             let possible = match class {
                 Class::Bytes(bytes) => bytes
                     .iter()
-                    .any(|r| overlaps_token(r.start().into(), r.end().into())),
+                    .any(|r| overlaps(r.start().into(), r.end().into())),
                 Class::Unicode(chars) => chars
                     .iter()
-                    .any(|r| overlaps_token(r.start().into(), r.end().into())),
+                    .any(|r| overlaps(r.start().into(), r.end().into())),
             };
             if possible {
                 1
@@ -106,7 +122,13 @@ fn required_byte(hir: &regex_syntax::hir::Hir, depth: usize) -> Option<u8> {
 impl MatchRequirements {
     #[inline]
     fn rejects_short_token(self, value: &[u8]) -> bool {
-        value.len() < self.token && value.len() <= 64 && value.iter().copied().all(token_byte)
+        if value.len() > 64 {
+            return false;
+        }
+        if value.len() < self.token {
+            return value.iter().copied().all(token_byte);
+        }
+        value.len() < usize::from(self.alphanumeric) && value.iter().all(u8::is_ascii_alphanumeric)
     }
 
     #[inline]
@@ -171,7 +193,8 @@ impl RegexCache {
             })?;
         let requirements = MatchRequirements {
             any: hir.properties().minimum_len().unwrap_or(0),
-            token: token_width(&hir, 32),
+            token: token_width::<false>(&hir, 32),
+            alphanumeric: token_width::<true>(&hir, 32).min(65) as u8,
             required: required_byte(&hir, 32),
         };
         let regex = Arc::new(RegexProgram {
@@ -559,6 +582,23 @@ mod tests {
                 byte.is_ascii_alphanumeric() || b"_-./:".contains(&byte)
             );
         }
+    }
+
+    #[test]
+    fn alphanumeric_width_keeps_short_separator_and_long_letter_matches() {
+        for pattern in [r"^([_./:-]|[a-z]{4})$", r"^(?-u:([_./:-]|[a-z]{4}))$"] {
+            let rx = RxOperator::new(pattern).unwrap();
+            assert_eq!(rx.requirements.token, 1);
+            assert_eq!(rx.requirements.alphanumeric, 4);
+            assert!(rx.requirements.rules_out(b"ABC"));
+            for value in [&b"abcd"[..], b"_", b".", b"/", b":", b"-"] {
+                let result = rx.rule_match(value, true, false).unwrap();
+                assert_eq!(result.captures, [value]);
+            }
+        }
+        let rx = RxOperator::new(r"^(?:/|a{65})$").unwrap();
+        assert!(rx.requirements.rules_out(&[b'a'; 64]));
+        assert!(rx.rule_match(&[b'a'; 65], false, false).is_some());
     }
 
     #[test]
