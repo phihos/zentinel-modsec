@@ -601,8 +601,10 @@ needs a separate, representative integration/traffic and concurrency/reload
 qualification. Installed HAPTIC/cgo qualification and production deployment remain open.
 Upstream issue #68 tracks submitted and queued changes.
 
-Body spooling, persistent collections, general XPath and engine-owned audit
-storage remain outside the implemented feature set. The supported action updates
+Request acquisition now supports disk spooling. The pinned standard Coraza build
+also leaves persistent collection initialization inactive and provides only the
+two documented XML selectors. Engine-owned audit files, retained upload archives,
+DNS lookups and external inspection programs belong to the embedding connector. The supported action updates
 and transaction controls are listed in the README. Both static and transaction-local
 tag exclusions work, and `@within` performs a byte substring search. Custom XML DTD/entities remain literal
 with an error; no external entity resolution was added. C libinjection and the
