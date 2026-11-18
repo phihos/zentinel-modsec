@@ -1,7 +1,7 @@
 //! Precompute leading TX defaults whose only input is the initially empty collection.
 use super::ruleset::{CompiledFlow, CompiledRule, RuleDispatch};
 use crate::parser::{Action, DataAction, OperatorName, SetVarValue};
-use crate::variables::{folded_key, MemberSelector};
+use crate::variables::{folded_key, ByteValue, MemberSelector};
 use indexmap::IndexMap;
 
 // Bound both the planner's work and the per-ruleset positions it retains.
@@ -27,6 +27,14 @@ pub(super) struct TxDefaults {
 }
 
 impl TxDefaults {
+    pub fn count_value(dispatch: &[RuleDispatch], (index, n): (u8, u8)) -> (ByteValue, ByteValue) {
+        let name = dispatch[usize::from(index)].selections[0]
+            .match_name
+            .as_deref()
+            .unwrap();
+        (name.clone(), ByteValue::decimal(i64::from(n)))
+    }
+
     pub fn compile(rules: &[CompiledRule], dispatch: &[RuleDispatch]) -> Option<Box<Self>> {
         let mut assignments = IndexMap::<&[u8], TxWrite>::new();
         let mut ids = Vec::new();
@@ -162,6 +170,45 @@ mod tests {
                 1,
                 "{boundary}"
             );
+        }
+    }
+
+    #[test]
+    fn audit_reads_before_and_after_phase_changes_publish_each_match_once() {
+        let mut config = String::from("SecRuleEngine On\n");
+        for i in 1..=8 {
+            config.push_str(&format!(
+                "SecRule &TX:k{i} \"@eq 0\" \"id:{i},phase:1,pass,setvar:tx.k{i}=1\"\n"
+            ));
+        }
+        config.push_str(
+            r#"SecRule REQUEST_URI "@streq /" "id:9,phase:1,pass"
+SecRule TX:k1 "@eq 1" "id:10,phase:2,pass"
+SecRule TX:k2 "@eq 1" "id:11,phase:5,pass""#,
+        );
+        let engine = ModSecurity::from_string(&config).unwrap();
+        for read_between_phases in [false, true] {
+            let mut fast = engine.new_transaction();
+            let mut reference = engine.new_transaction();
+            reference.set_record_setvar_effects(true);
+            for tx in [&mut fast, &mut reference] {
+                assert!(tx.matched_rules().is_empty());
+                assert!(tx.matched_data().is_empty());
+                tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+                tx.process_request_headers().unwrap();
+            }
+            if read_between_phases {
+                assert_eq!(fast.matched_rules(), reference.matched_rules());
+                assert_eq!(fast.matched_data(), reference.matched_data());
+                assert_eq!(fast.matched_data().len(), 9);
+            }
+            for tx in [&mut fast, &mut reference] {
+                tx.process_request_body().unwrap();
+                tx.process_logging().unwrap();
+            }
+            assert_eq!(fast.matched_rules(), reference.matched_rules());
+            assert_eq!(fast.matched_data(), reference.matched_data());
+            assert_eq!(fast.matched_data().len(), 11);
         }
     }
 

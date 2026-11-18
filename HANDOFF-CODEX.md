@@ -1,6 +1,18 @@
 # Coraza parity handoff — 2026-11-18
 
-## Current local checkpoint
+## Current checkpoint
+
+Engine commits `32f40b6`, `7c1cf5b` and `9762969` defer fixed phase-one audit
+records, skip transformations proven to preserve a field, and reject short
+alphanumeric values that cannot match a regex. Against the previous fork
+checkpoint `573f9bc`, the 698-rule OWASP CRS 4.25.0 benchmark measured paired
+latency reductions of 4.4% for GET, 4.8% for form POST and 8.8% for nested JSON POST.
+Rust p99 on the 24 mixed fixtures fell from 191.4 to 181.9 µs. Fresh full-CRS
+loading measured 272.2 to 274.5 ms. Both detector backends retained the corpus
+outcomes, blocking traces and audit records. The [benchmark report and samples](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round3/RESULTS.md)
+include allocations for callers that read audit data early, late or never.
+
+## Phase-one defaults and regex checkpoint at `2725d4b`
 
 Engine commits `d410f28` and `2725d4b` prepare deterministic phase-1 TX defaults
 and avoid regex searches on inputs that cannot match. Compared with the previous
