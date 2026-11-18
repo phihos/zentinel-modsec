@@ -1,0 +1,49 @@
+{
+  "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "tree": "804fa95f5b3986b9b38ab7f33c6cc650ae10ce8d",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "7f2cb7e2f40f8dcc05f47a19f95d5d96f4928cd29757fd0de655859039a82337",
+      "oracle": "sweep.rs",
+      "oracle_sha256": "400f03dfef1c050a2628b281922711442952f4efea2d9ba57f8e00499fe9ce5e",
+      "combined_sha256": "079ec736f067938be7977dfa82155e14ab7ceee36f91daafd4f0d5e70b9ea600"
+    },
+    "src/operators/pattern.rs": {
+      "production_sha256": "841bd501ec6d15f0bb508dccf0fe8816eb422e256b5cdeda8e22b4071ecec32f",
+      "oracle": "differential.rs",
+      "oracle_sha256": "f121d2186c3ca79c99956ab67a271baec06be00d11b94bd519c489156c13c125",
+      "combined_sha256": "8b78013d855927bca17b28cd1e1d363d5e42176504eec5f5f23a8c5a0c1966b2"
+    },
+    "src/engine/ruleset.rs": {
+      "production_sha256": "bab53959525ea11e8c324cf646ea0680112bda163d04d0decf1fa621e6548c62",
+      "oracle": "access.ruleset.rs",
+      "oracle_sha256": "de05ef530fe350945a675b03edc2257e8c6e5f960681efdd3961f0c5704bcfc1",
+      "combined_sha256": "7cda0dfe1c9bc46384ff170bc34a8613818eab881269d1bc23cf5e69819e4683"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "23e5faedb4f1c5bb5e6dcd27e77326d039ea82dd1f8efe29326e48f9d81feafc",
+  "results": [
+    "CRS rules 698, distinct static RX 291, inputs 72988, comparisons 21239508, prefilter rejections 17924412, matching portions 230828, subgroups 10096, mismatches 0",
+    "early rejection actual target pruning counts [arguments,filename,headers] [2520415, 384547, 238140]; new dotted targets 156256",
+    "early rejection eligible rules 291, early rejections crosschecked 2001553, summarized width rejections 2138553, final bytes changed 209803",
+    "live shapes 35, including individual stages 46, inputs 71966, checked final values and ownership 3310436, checked multiMatch stage visits 3700372, mismatches 0",
+    "test result: ok. 216 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.17s"
+  ]
+}

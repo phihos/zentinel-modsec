@@ -1,0 +1,20 @@
+{
+  "baseline": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+  "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "fixture": "8f2dfca7079b478fed3641502adff2b4466c23f192916fba0b1325c5429b7bcd",
+  "cases": 840,
+  "backends": {
+    "default": {
+      "rlib": "656fa786310ef073ae0c3b0ff171e922bc77785d32ff5e63f8045d1272e7ef73",
+      "binary": "fa1685ad918b0040708d5ffb90227433c6539943e1549a2dc7bac6c6f0fcf948",
+      "output_matches_baseline": true,
+      "output_sha256": "fea4c6c226b789154f56b55c79b74113b2cedbb63e2bc47195c8536bc094b08e"
+    },
+    "ffi": {
+      "rlib": "585729d061514da5fa6daae0c9f6c493080e868932860a81b82bafe23513ed04",
+      "binary": "19d4fce7ffabd2611fa64a958e1ae24f2ab77b3bd9011447f47c626ad20ea749",
+      "output_matches_baseline": true,
+      "output_sha256": "fea4c6c226b789154f56b55c79b74113b2cedbb63e2bc47195c8536bc094b08e"
+    }
+  }
+}

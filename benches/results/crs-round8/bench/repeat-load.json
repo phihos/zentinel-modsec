@@ -1,0 +1,30 @@
+{
+  "preflight_cpu6_cpu14_percent": [
+    [
+      20.0,
+      13.1
+    ],
+    [
+      28.3,
+      23.2
+    ],
+    [
+      19.0,
+      9.1
+    ],
+    [
+      17.3,
+      11.2
+    ],
+    [
+      13.4,
+      5.2
+    ],
+    [
+      12.2,
+      6.2
+    ]
+  ],
+  "cpu6_percent_during_repeat": 7.0,
+  "cpu14_percent_during_repeat": 98.5
+}

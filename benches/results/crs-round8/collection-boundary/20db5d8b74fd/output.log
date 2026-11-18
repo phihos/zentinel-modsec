@@ -1,0 +1,13 @@
+   Compiling zentinel-modsec v0.6.0 (/tmp/zentinel-r8-collections-20db5d8b74fd)
+    Finished `release` profile [optimized] target(s) in 18.11s
+     Running unittests src/lib.rs (/tmp/zentinel-next-regex-target/release/deps/zentinel_modsec-4b42985b4d595045)
+
+running 1 test
+boundary sweep mutation snapshots 1110, independently rescanned alphabet/length decisions 488400, cold/warm append, clone, set, delete, clear, safe missed pruning opportunities 0, unsound decisions 0
+boundary sweep CRS: fixtures 336, rules 698, removed targets 46704, source members checked 6885132, unfiltered transformed-stage decisions 7563544, over-4KiB rule masks checked 134016, targets pruned over 4KiB 26496, differences 0
+boundary sweep controls: fixtures 336, rules 11, removed targets 672, source members checked 98400, unfiltered transformed-stage decisions 123000, over-4KiB rule masks checked 2112, targets pruned over 4KiB 384, differences 0
+late matches fixtures 336, fixtures above reference 4KiB charged budget 192, last-field positives 336, late positives above reference 4KiB charged budget 192, above 4KiB actual name/value bytes 96, late positives grouped by member count {32: 24, 33: 24, 64: 72, 127: 24, 128: 72, 129: 24, 256: 48, 257: 24, 384: 24}, matched rule and audit differences 0
+test operators::pattern::full_collections_at_arg_limits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 214 filtered out; finished in 1.50s
+

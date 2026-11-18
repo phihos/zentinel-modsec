@@ -1,0 +1,53 @@
+{
+  "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "tree": "804fa95f5b3986b9b38ab7f33c6cc650ae10ce8d",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/operators/pattern.rs": {
+      "production_sha256": "841bd501ec6d15f0bb508dccf0fe8816eb422e256b5cdeda8e22b4071ecec32f",
+      "oracle": "differential.rs",
+      "oracle_sha256": "0a81ac2ccdf9bf449aa8b42b459ff24e3dc04a48c2146ab60525d198c9369bbb",
+      "combined_sha256": "4fbf5865d4c471b5358dc4aeb828d16c8b794b01ddd2218748aec65b2bea6b42"
+    },
+    "src/operators/traits.rs": {
+      "combined_sha256": "2a8c09be87ac3a83b176cc529e076f0c365cedb615751b463da19fdd0f13eacf"
+    },
+    "src/engine/ruleset.rs": {
+      "production_sha256": "bab53959525ea11e8c324cf646ea0680112bda163d04d0decf1fa621e6548c62",
+      "oracle": "access.ruleset.rs",
+      "oracle_sha256": "09333867180cbb4c58ba6093494aa8ae935b032436705f87e89d51cd90b07b07",
+      "combined_sha256": "b28bb7177e986637c1ecf8a7a61dba2e212ebc7ec281b2beec53a3c6609f5b7b"
+    },
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "7f2cb7e2f40f8dcc05f47a19f95d5d96f4928cd29757fd0de655859039a82337",
+      "oracle": "access.pipeline.rs",
+      "oracle_sha256": "22936020507f9a6bec9c4d0a55b815ec35ca5466e994154532e3962a87c53620",
+      "combined_sha256": "3c048e2023cbe7114f3dc9722ad45302a79f22e7d9b9670fd7680b5748f199f1"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "full_collections_at_arg_limits",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "7b3c5242663af924ae6445dc6802571fdc6b0d65cbc8c6b07f70090902a09ebd",
+  "results": [
+    "boundary sweep mutation snapshots 1110, independently rescanned alphabet/length decisions 488400, cold/warm append, clone, set, delete, clear, safe missed pruning opportunities 0, unsound decisions 0",
+    "boundary sweep CRS: fixtures 336, rules 698, removed targets 46704, source members checked 6885132, unfiltered transformed-stage decisions 7563544, over-4KiB rule masks checked 134016, targets pruned over 4KiB 26496, differences 0",
+    "boundary sweep controls: fixtures 336, rules 11, removed targets 672, source members checked 98400, unfiltered transformed-stage decisions 123000, over-4KiB rule masks checked 2112, targets pruned over 4KiB 384, differences 0",
+    "late matches fixtures 336, fixtures above reference 4KiB charged budget 192, last-field positives 336, late positives above reference 4KiB charged budget 192, above 4KiB actual name/value bytes 96, late positives grouped by member count {32: 24, 33: 24, 64: 72, 127: 24, 128: 72, 129: 24, 256: 48, 257: 24, 384: 24}, matched rule and audit differences 0",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 214 filtered out; finished in 1.50s"
+  ]
+}

@@ -1,0 +1,311 @@
+    Blocking waiting for file lock on package cache
+   Compiling zentinel-modsec v0.6.0 (/home/phil/Quellcode/zentinel-review-worktrees/round8-final-equivalence)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 49.49s
+     Running unittests src/lib.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/zentinel_modsec-bfe5a47c17dfd4e7)
+
+running 214 tests
+test actions::data::tests::test_setvar_decrement ... ok
+test actions::data::tests::test_setvar_increment ... ok
+test actions::data::tests::test_macro_expansion ... ok
+test actions::data::tests::test_setvar_set ... ok
+test actions::metadata::tests::test_severity_from_u8 ... ok
+test actions::tests::allow_outcomes_preserve_the_parsed_scope ... ok
+test actions::metadata::tests::test_format_log ... ok
+test actions::tests::test_execute_deny ... ok
+test actions::tests::test_execute_metadata ... ok
+test engine::chain::tests::test_chain_state ... ok
+test engine::control::tests::a_keyed_target_does_not_match_a_scalar_variable ... ok
+test engine::control::tests::a_keyed_target_excludes_one_member_of_a_collection_rule ... ok
+test engine::control::tests::an_inverted_range_is_rejected_rather_than_silently_empty ... ok
+test engine::control::tests::an_unkeyed_target_excludes_the_whole_collection ... ok
+test engine::control::tests::argument_exclusions_fold_the_observed_member_name ... ok
+test engine::control::tests::body_access_defaults_to_on ... ok
+test engine::control::tests::directive_names_are_case_insensitive ... ok
+test engine::control::tests::engine_mode_defers_to_the_ruleset_when_unset ... ok
+test engine::control::tests::implemented_body_processors_are_accepted ... ok
+test engine::control::tests::overlapping_adjacent_and_repeated_id_removals_remain_a_union ... ok
+test engine::control::tests::ranges_match_ids_by_number_not_string ... ok
+test engine::control::tests::removals_accumulate_but_engine_mode_is_replaced ... ok
+test engine::control::tests::remove_target_requires_both_halves ... ok
+test engine::control::tests::rule_engine_values_are_case_insensitive ... ok
+test engine::control::tests::single_ids_ranges_and_lists_all_parse ... ok
+test engine::control::tests::target_matching_uses_seclang_names ... ok
+test engine::control::tests::unimplemented_features_are_reported_not_accepted ... ok
+test engine::initialization::tests::audit_reads_before_and_after_phase_changes_publish_each_match_once ... ok
+test engine::initialization::tests::leaves_request_inputs_and_observable_actions_for_the_interpreter ... ok
+test engine::initialization::tests::clearing_a_seeded_capture_does_not_change_another_transaction ... ok
+test engine::initialization::tests::replay_preserves_order_and_match_evidence_before_a_request_dependent_rule ... ok
+test engine::intervention::tests::test_builder ... ok
+test engine::intervention::tests::test_deny_intervention ... ok
+test engine::intervention::tests::test_format_log ... ok
+test engine::intervention::tests::test_redirect_intervention ... ok
+test engine::phase::tests::test_is_request_phase ... ok
+test engine::phase::tests::test_phase_from_number ... ok
+test engine::phase::tests::test_phase_number ... ok
+test engine::ruleset::tests::test_compile_multiple_phases ... ok
+test engine::ruleset::tests::test_compile_simple_rule ... ok
+test engine::ruleset::tests::test_engine_mode ... ok
+test engine::scoring::tests::test_anomaly_score ... ok
+test engine::scoring::tests::test_scoring_config ... ok
+test engine::scoring::tests::test_sync_to_tx ... ok
+test engine::target_indices::tests::can_skip_only_when_every_target_is_known_absent ... ok
+test engine::target_indices::tests::checks_late_arguments_and_refreshes_bounds_after_changes ... ok
+test engine::target_indices::tests::constant_prefix_still_checks_long_list_tail_and_indexed_headers ... ok
+test engine::target_indices::tests::long_lists_keep_order_counts_and_mutable_targets_for_all_collection_states ... ok
+test engine::target_indices::tests::optional_presence_only_prunes_when_all_named_sources_are_absent ... ok
+test engine::target_indices::tests::prune_values_and_observed_names_independently_and_keep_counts ... ok
+test engine::target_indices::tests::selected_prefix_and_uncompiled_tail_keep_original_order ... ok
+test engine::tests::test_modsec_from_string ... ok
+test engine::tests::test_new_transaction ... ok
+test engine::transaction::body_buffer_boundaries::engine_off_never_acquires_body_bytes_even_after_the_body_callback ... ok
+test engine::transaction::body_buffer_boundaries::partial_body_reserves_only_its_bounded_prefix ... ok
+test engine::transaction::body_buffer_boundaries::reject_does_not_reserve_or_copy_the_over_limit_chunk ... ok
+test engine::transaction::body_buffer_boundaries::small_writes_grow_amortized_and_respect_a_non_power_of_two_limit ... ok
+test engine::transaction::tests::first_static_hit_resumes_once_and_preserves_effects_before_a_callback_error ... ok
+test engine::transaction::tests::empty_target_runs_preserve_counted_skips_markers_and_chains ... ok
+test engine::transaction::tests::argument_width_pruning_matches_unpruned_evaluation ... ok
+test engine::transaction::tests::macro_expansion_preserves_literals_and_first_binary_values ... ok
+test engine::transaction::tests::literal_argument_lookups_do_not_request_a_collection_scan ... ok
+test engine::transaction::tests::header_masks_match_unpruned_evaluation_with_empty_and_duplicate_headers ... ok
+test engine::transaction::tests::test_basic_match ... ok
+test engine::transaction::tests::test_detection_only_mode ... ok
+test engine::transaction::tests::test_negated_within_macro_blocks_disallowed ... ok
+test engine::transaction::tests::test_negated_within_macro_does_not_block_allowed ... ok
+test engine::transaction::tests::test_no_match ... ok
+test engine::transaction::tests::test_operator_arg_macro_ge_below_threshold ... ok
+test engine::transaction::tests::test_operator_arg_macro_ge_threshold ... ok
+test engine::transaction::tests::test_request_header_named_selector_matches ... ok
+test engine::transaction::tests::test_secaction_sets_tx_and_macro_resolves ... ok
+test engine::transaction::tests::test_setvar ... ok
+test engine::transaction::tests::test_setvar_value_macro_accumulates ... ok
+test engine::transaction::tests::test_setvar_value_macro_unresolved_is_noop ... ok
+test libinjection::sqli::tests::test_fingerprint ... ok
+test libinjection::sqli::tests::test_classic_injection ... ok
+test libinjection::sqli::tests::test_comment_injection ... ok
+test libinjection::sqli::tests::test_safe_input ... ok
+test libinjection::sqli::tests::test_stacked_queries ... ok
+test libinjection::sqli::tests::test_union_injection ... ok
+test libinjection::tests::test_sqli_detection ... ok
+test libinjection::xss::tests::test_dom_xss ... ok
+test libinjection::tests::test_xss_detection ... ok
+test libinjection::xss::tests::test_event_handlers ... ok
+test libinjection::xss::tests::test_encoded_xss ... ok
+test libinjection::xss::tests::test_iframe ... ok
+test libinjection::xss::tests::test_quick_reject ... ok
+test libinjection::xss::tests::test_javascript_url ... ok
+test libinjection::xss::tests::test_safe_input ... ok
+test libinjection::xss::tests::test_svg_xss ... ok
+test libinjection::xss::tests::test_script_tag ... ok
+test operators::comparison::tests::test_begins_with ... ok
+test operators::comparison::tests::test_contains ... ok
+test operators::comparison::tests::test_ends_with ... ok
+test operators::comparison::tests::test_numeric_operators ... ok
+test operators::comparison::tests::test_streq ... ok
+test operators::network::tests::invalid_mapped_prefix_rejects_an_otherwise_valid_list ... ok
+test operators::network::tests::ipv4_mapped_networks_and_addresses_use_the_ipv4_mask ... ok
+test operators::network::tests::test_ip_match_cidr ... ok
+test operators::network::tests::test_ip_match_comma_and_space_mixed ... ok
+test operators::network::tests::test_ip_match_comma_separated ... ok
+test operators::network::tests::test_ip_match_multiple ... ok
+test operators::network::tests::test_ip_match_single ... ok
+test operators::network::tests::the_masked_network_number_determines_the_address_family ... ok
+test operators::pattern::tests::alphanumeric_width_keeps_short_separator_and_long_letter_matches ... ok
+test operators::pattern::tests::concurrent_phrase_loads_share_a_single_compiled_automaton ... ok
+test operators::pattern::tests::dropped_phrase_programs_release_automata_and_prune_stale_keys ... ok
+test operators::pattern::tests::different_flags_do_not_share_or_change_matching ... ok
+test operators::pattern::tests::dropped_regexes_are_released_and_stale_keys_are_pruned ... ok
+test operators::pattern::tests::concurrent_loads_share_a_single_compiled_regex ... ok
+test operators::pattern::tests::phrase_cache_shares_exact_parsed_content_and_retains_match_portions ... ok
+test operators::pattern::tests::phrase_cache_uses_file_content_instead_of_path ... ok
+test operators::pattern::tests::identical_patterns_share_the_compiled_regex ... ok
+test operators::pattern::tests::phrase_widths_respect_case_folding_and_binary_phrases ... ok
+test operators::pattern::tests::program_size_failure_is_reported_at_load_time ... ok
+test operators::pattern::tests::required_literal_is_present_in_every_matching_branch ... ok
+test operators::pattern::tests::early_length_checks_preserve_regex_matches ... ok
+test operators::pattern::tests::rulesets_with_different_exclusions_share_regexes ... ok
+test operators::pattern::tests::shared_phrase_programs_do_not_share_target_exclusions ... ok
+test operators::pattern::tests::test_pm_case_insensitive ... ok
+test operators::pattern::tests::test_pm_simple ... ok
+test operators::pattern::tests::test_rx_captures ... ok
+test operators::pattern::tests::test_rx_simple ... ok
+test operators::validation::tests::test_valid_url_encoding ... ok
+test operators::pattern::tests::token_width_keeps_literal_and_character_class_separators ... ok
+test operators::validation::tests::test_validate_url_encoding_operator ... ok
+test parser::action::tests::test_parse_action_with_msg ... ok
+test parser::action::tests::test_parse_chain ... ok
+test parser::action::tests::test_parse_setvar ... ok
+test parser::action::tests::test_parse_setvar_quoted_increment ... ok
+test parser::action::tests::test_parse_setvar_quoted_set ... ok
+test parser::action::tests::test_parse_simple_actions ... ok
+test parser::action::tests::test_parse_transformation ... ok
+test parser::lexer::tests::test_crlf_line_continuation ... ok
+test parser::lexer::tests::test_crlf_line_endings_do_not_end_the_token_stream ... ok
+test parser::lexer::tests::test_lex_comment ... ok
+test parser::lexer::tests::test_lex_directive ... ok
+test parser::lexer::tests::test_lex_escaped_quote ... ok
+test parser::lexer::tests::test_lex_full_rule ... ok
+test parser::lexer::tests::test_lex_line_continuation ... ok
+test parser::lexer::tests::test_lex_line_continuation_between_tokens ... ok
+test parser::lexer::tests::test_lex_quoted_string ... ok
+test parser::operator::tests::test_operator_lookup_case_insensitive ... ok
+test parser::operator::tests::test_parse_contains ... ok
+test parser::operator::tests::test_parse_detectsqli ... ok
+test parser::operator::tests::test_parse_implicit_rx ... ok
+test parser::operator::tests::test_parse_negated_operator ... ok
+test parser::operator::tests::test_parse_pm ... ok
+test parser::operator::tests::test_parse_rx_operator ... ok
+test parser::tests::test_normalise_path_transformation_alias ... ok
+test parser::tests::test_parse_secruleengine ... ok
+test parser::tests::test_parse_simple_rule ... ok
+test parser::tests::test_pmfromfile_relative_path_resolves ... ok
+test parser::tests::test_relative_include_glob_resolves ... ok
+test parser::variable::tests::test_parse_count_mode ... ok
+test parser::variable::tests::test_parse_multipart_part_headers ... ok
+test parser::variable::tests::test_parse_multiple_variables ... ok
+test parser::variable::tests::test_parse_simple_variable ... ok
+test parser::variable::tests::test_parse_variable_with_regex ... ok
+test parser::variable::tests::test_parse_variable_with_selection ... ok
+test parser::variable::tests::test_variable_lookup_case_insensitive ... ok
+test transformations::decode::tests::test_base64_decode ... ok
+test transformations::decode::tests::test_html_entity_decode ... ok
+test transformations::decode::tests::test_js_decode ... ok
+test transformations::decode::tests::test_url_decode ... ok
+test transformations::decode::unicode_width_tests::url_decode_uni_maps_full_width_ascii_for_crs_941110 ... ok
+test transformations::encode::tests::test_base64_encode ... ok
+test transformations::encode::tests::test_hex_encode ... ok
+test transformations::encode::tests::test_md5 ... ok
+test transformations::encode::tests::test_sha1 ... ok
+test transformations::normalize::tests::normalize_path_win_uses_forward_slashes_for_crs_lfi_targets ... ok
+test transformations::normalize::tests::path_cleaning_preserves_relative_parents_and_trailing_separators ... ok
+test transformations::normalize::tests::test_cmdline ... ok
+test transformations::normalize::tests::test_compress_whitespace ... ok
+test transformations::normalize::tests::test_lowercase ... ok
+test transformations::normalize::tests::test_normalize_path ... ok
+test transformations::normalize::tests::test_remove_whitespace ... ok
+test transformations::normalize::tests::utf8_to_unicode_encodes_non_ascii_for_crs_xss_chain ... ok
+test transformations::pipeline::tests::a_custom_stage_is_executed_even_when_its_name_matches_a_builtin ... ok
+test transformations::pipeline::tests::compiled_shortcuts_preserve_output_and_changed_stages ... ok
+test transformations::pipeline::tests::only_token_preserving_pipelines_can_skip_a_regex_search ... ok
+test transformations::pipeline::tests::test_empty_pipeline ... ok
+test transformations::pipeline::tests::test_multiple_transformations ... ok
+test transformations::pipeline::tests::test_none_clears_pipeline ... ok
+test transformations::pipeline::tests::test_single_transformation ... ok
+test variables::collection::byte_tests::binary_keys_never_alias_escaped_text_and_mutation_preserves_order ... ok
+test variables::json::tests::duplicate_keys_keep_both_values ... ok
+test transformations::normalize::tests::cmdline_byte_fast_path_matches_text_on_ascii_and_unicode ... ok
+test variables::json::tests::nested_structures_emit_scalar_values_and_array_length ... ok
+test variables::json::tests::number_tokens_keep_precision_and_spelling ... ok
+test variables::json::tests::object_keys_retain_input_order ... ok
+test variables::json::tests::store_accepts_exact_byte_budget_and_preserves_previous_entries_on_error ... ok
+test variables::json::tests::top_level_scalars_keep_their_values ... ok
+test variables::request::tests::form_decoding_preserves_fields_across_block_boundaries ... ok
+test variables::request::tests::test_parse_cookie_header ... ok
+test variables::request::tests::form_parsing_preserves_observed_names_binary_data_and_field_boundaries ... ok
+test variables::request::tests::test_parse_multipart_body_fields_and_headers ... ok
+test variables::request::tests::test_parse_multipart_body_missing_boundary ... ok
+test variables::request::tests::test_parse_multipart_body_quoted_boundary_and_lf_only ... ok
+test variables::resolver::tests::invalid_regex_exclusion_leaves_the_member_selected ... ok
+test variables::resolver::tests::request_line_cache_retains_only_complete_lines_within_its_bound ... ok
+test variables::resolver::tests::test_exclusion_exact_key ... ok
+test variables::resolver::tests::test_exclusion_whole_collection ... ok
+test variables::resolver::tests::test_exclusion_regex_key ... ok
+test variables::tx::tests::literal_prefix_visits_match_the_regex_for_folded_and_opaque_keys ... ok
+test variables::value::tests::binary_audit_can_consume_shared_or_unique_storage ... ok
+test variables::value::tests::binary_audit_populates_the_shared_display_only_with_multiple_remaining_owners ... ok
+test variables::value::tests::binary_display_matches_standard_escaping_across_blocks ... ok
+test variables::value::tests::every_byte_roundtrips_without_display_collisions ... ok
+test variables::selectors::tests::concurrent_loads_share_live_programs_and_drop_the_last_owner ... ok
+test variables::value::tests::printable_block_keeps_standard_escaping_for_each_byte ... ok
+test variables::value::tests::text_storage_boundaries_preserve_borrowed_and_owned_representations ... ok
+test operators::pattern::tests::syntax_and_size_errors_match_the_byte_regex_builder ... ok
+
+test result: ok. 214 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.43s
+
+     Running tests/args_macros.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/args_macros-69c154877ec6eb0a)
+
+running 3 tests
+test a_known_but_absent_argument_preserves_the_macro_token_text ... ok
+test crs_method_and_multipart_charset_macros_read_arguments ... ok
+test merged_args_use_first_value_in_get_then_post_order_with_folded_keys ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ctl_actions.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/ctl_actions-ad06bcca39314d43)
+
+running 22 tests
+test an_unsupported_ctl_does_not_prevent_rules_from_loading ... ok
+test a_range_does_not_remove_rules_outside_it ... ok
+test an_unsupported_ctl_does_not_disable_the_engine ... ok
+test controls_do_not_leak_into_other_transactions ... ok
+test detection_only_still_matches_but_does_not_block ... ok
+test controls_are_isolated_across_threads ... ok
+test forced_urlencoded_processor_parses_a_body_with_no_content_type ... ok
+test excluding_a_target_from_a_negated_rule_does_not_make_it_match ... ok
+test removal_persists_into_later_phases ... ok
+test remove_target_applies_only_to_the_named_rule ... ok
+test remove_target_excludes_only_the_named_target ... ok
+test removing_a_chain_starter_removes_the_whole_chain ... ok
+test removing_every_target_leaves_nothing_to_match ... ok
+test request_body_access_defaults_to_on ... ok
+test request_body_access_off_suppresses_body_arguments ... ok
+test rule_engine_can_be_switched_back_on ... ok
+test rule_engine_off_stops_evaluation_for_the_transaction ... ok
+test rule_engine_off_takes_effect_within_the_same_phase ... ok
+test rule_remove_by_id_accepts_a_range ... ok
+test rule_remove_by_id_suppresses_the_named_rule ... ok
+test the_same_rules_block_without_the_ctl_action ... ok
+test the_negated_rule_blocks_when_its_target_is_not_excluded ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/dotted_width.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/dotted_width-5cf0769c718bb045)
+
+running 1 test
+test dotted_bounds_preserve_matches_at_each_transformation_stage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/form_decoding.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/form_decoding-98e333c336034f58)
+
+running 12 tests
+test a_json_body_keeps_its_pluses ... ok
+test a_double_encoded_plus_is_not_over_decoded ... ok
+test an_escaped_plus_stays_a_plus ... ok
+test a_windows_command_line_becomes_readable ... ok
+test a_space_separated_payload_cannot_hide_behind_plus_encoding ... ok
+test an_xml_body_keeps_its_pluses ... ok
+test percent_20_is_still_a_space ... ok
+test plus_is_a_space_in_a_query_string ... ok
+test plus_is_a_space_in_a_urlencoded_body ... ok
+test plus_is_a_space_in_a_valueless_argument ... ok
+test plus_is_a_space_in_an_argument_name ... ok
+test the_request_uri_is_not_form_decoded ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/valueless_form_param.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/valueless_form_param-6fdcb091845e92d6)
+
+running 7 tests
+test a_body_with_no_separator_is_still_a_parameter ... ok
+test an_sqli_payload_cannot_hide_by_encoding_its_separators ... ok
+test a_valueless_pair_alongside_ordinary_ones_is_not_lost ... ok
+test empty_segments_do_not_become_arguments ... ok
+test its_value_is_empty_rather_than_the_name_repeated ... ok
+test the_name_carries_the_decoded_text ... ok
+test the_query_string_still_behaves_the_same_way ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+   Compiling zentinel-modsec v0.6.0 (/home/phil/Quellcode/zentinel-review-worktrees/round8-final-equivalence)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.16s
+     Running tests/validation_operators.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/validation_operators-20872124dacaff23)
+
+running 5 tests
+test encoding_validators_agree_on_text_and_keep_binary_validation ... ok
+test compiled_ranges_match_the_reference_at_every_byte_boundary ... ok
+test malformed_static_rules_fail_at_load_and_dynamic_lists_validate_at_evaluation ... ok
+test phase_pruning_preserves_validation_matches_after_transformation_and_negation ... ok
+test range_bounds_require_every_member_of_the_reported_alphabet ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

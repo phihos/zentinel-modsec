@@ -1,0 +1,112 @@
+{
+  "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "reference_inputs": {
+    "/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-adapter-source-worker-v2/src/main.rs": "e91e09356a0657aa217d1cfb02d2ff7832bb4ad132846d89fc8c30fd523d0fe6",
+    "/home/phil/Quellcode/zentinel-eval/results/parity-goal/bin/ftw-v2.1": "c8fd3fe6601ffcff0e2895bbf13c8cf727e8120f9828b4410a5f439241825fde",
+    "/home/phil/Quellcode/zentinel-eval/results/parity-goal/ftw-zentinel-v2.conf": "9ddeb44d69c61e2d29771ab1aba96a58ff9881d84edee74ba21ae428206e176d",
+    "/home/phil/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules/@coraza.conf-recommended": "78ce259a1f37313c8eed9239c40025684d55cc04926ff6a9f7cc1f3281beb211"
+  },
+  "engines": {
+    "default": {
+      "case_sets": {
+        "success": {
+          "count": 4655,
+          "delta": [],
+          "sha256": "4f97c9d2f793ed3bb8b289cf04082bcc36c3b9f1305c0f1339f7bdbf61479991"
+        },
+        "failed": {
+          "count": 17,
+          "delta": [],
+          "sha256": "74c4cf3aad9ab25604cb2f40c126e76889fec8931869186b9ec260bb8a308e7c"
+        },
+        "errored": {
+          "count": 1,
+          "delta": [],
+          "sha256": "441ff763d3e4362ce82ee2cc5927fdac10c30f63d8fe3025c8d6ace6d46a2233"
+        }
+      },
+      "command": {
+        "command": [
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/bin/ftw-v2.1",
+          "-engine",
+          "zentinel",
+          "-worker",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/20db5d8b74fd/external/worker-default",
+          "-zconf",
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/ftw-zentinel-v2.conf",
+          "-recommended",
+          "/home/phil/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules/@coraza.conf-recommended",
+          "-log",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/20db5d8b74fd/external/default.log"
+        ],
+        "exit": 0
+      }
+    },
+    "ffi": {
+      "case_sets": {
+        "success": {
+          "count": 4655,
+          "delta": [],
+          "sha256": "4f97c9d2f793ed3bb8b289cf04082bcc36c3b9f1305c0f1339f7bdbf61479991"
+        },
+        "failed": {
+          "count": 17,
+          "delta": [],
+          "sha256": "74c4cf3aad9ab25604cb2f40c126e76889fec8931869186b9ec260bb8a308e7c"
+        },
+        "errored": {
+          "count": 1,
+          "delta": [],
+          "sha256": "f20894eed8dc1384fd425a0c24dc771734e41c271c07f265ad7ebdb34b851926"
+        }
+      },
+      "command": {
+        "command": [
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/bin/ftw-v2.1",
+          "-engine",
+          "zentinel",
+          "-worker",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/20db5d8b74fd/external/worker-ffi",
+          "-zconf",
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/ftw-zentinel-v2.conf",
+          "-recommended",
+          "/home/phil/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules/@coraza.conf-recommended",
+          "-log",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/20db5d8b74fd/external/ffi.log"
+        ],
+        "exit": 0
+      }
+    },
+    "coraza": {
+      "case_sets": {
+        "success": {
+          "count": 4655,
+          "delta": [],
+          "sha256": "4f97c9d2f793ed3bb8b289cf04082bcc36c3b9f1305c0f1339f7bdbf61479991"
+        },
+        "failed": {
+          "count": 17,
+          "delta": [],
+          "sha256": "74c4cf3aad9ab25604cb2f40c126e76889fec8931869186b9ec260bb8a308e7c"
+        },
+        "errored": {
+          "count": 1,
+          "delta": [],
+          "sha256": "2d53251aed8d64fae0cb992ce3002dc4ba625206b8de2e12b13efee3c010a3ba"
+        }
+      },
+      "command": {
+        "command": [
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/bin/ftw-v2.1",
+          "-engine",
+          "coraza",
+          "-recommended",
+          "/home/phil/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules/@coraza.conf-recommended",
+          "-log",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/20db5d8b74fd/external/coraza.log"
+        ],
+        "exit": 0
+      }
+    }
+  }
+}

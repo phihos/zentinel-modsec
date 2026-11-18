@@ -1,0 +1,19 @@
+{
+  "baseline": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+  "candidate": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "fixture_sha256": "18e67db1d2900b17825728c1f7f811d6b7e77113752b355f38676db9fb73025a",
+  "fixtures": 256,
+  "seed": 2039,
+  "sides": {
+    "before": {
+      "engine_sha256": "1346c63caf450d83671855dc15d19e0baace5cdafb20b618f93a9ce9c7ea3a78",
+      "bytes": 2557834,
+      "observed": "84abbd8b9f4fa73130c0b7fd75828913dd4ff235d14f0862582a606366fdc943"
+    },
+    "after": {
+      "engine_sha256": "a63ff0bb5a53447571955279a1a7571f98ba7c106e4972f7a9e10b254daef454",
+      "bytes": 2557834,
+      "observed": "84abbd8b9f4fa73130c0b7fd75828913dd4ff235d14f0862582a606366fdc943"
+    }
+  }
+}

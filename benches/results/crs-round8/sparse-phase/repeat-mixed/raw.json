@@ -1,0 +1,2690 @@
+[
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 334,
+          "query_parse_or_post_parse_evaluate": 1248045,
+          "through_request_body": 1251942,
+          "full_request_including_drop": 1277235
+        },
+        "post-plain": {
+          "create": 334,
+          "query_parse_or_post_parse_evaluate": 1118404,
+          "through_request_body": 1125956,
+          "full_request_including_drop": 1150488
+        },
+        "get-early": {
+          "create": 288,
+          "query_parse_or_post_parse_evaluate": 1205376,
+          "through_request_body": 1209118,
+          "full_request_including_drop": 1234976
+        },
+        "post-early": {
+          "create": 319,
+          "query_parse_or_post_parse_evaluate": 1129015,
+          "through_request_body": 1137212,
+          "full_request_including_drop": 1162149
+        },
+        "get-late": {
+          "create": 337,
+          "query_parse_or_post_parse_evaluate": 1182867,
+          "through_request_body": 1186586,
+          "full_request_including_drop": 1214071
+        },
+        "post-late": {
+          "create": 380,
+          "query_parse_or_post_parse_evaluate": 1194384,
+          "through_request_body": 1202494,
+          "full_request_including_drop": 1228549
+        },
+        "get-dense": {
+          "create": 332,
+          "query_parse_or_post_parse_evaluate": 1453503,
+          "through_request_body": 1457652,
+          "full_request_including_drop": 1485026
+        },
+        "post-dense": {
+          "create": 369,
+          "query_parse_or_post_parse_evaluate": 1401066,
+          "through_request_body": 1409765,
+          "full_request_including_drop": 1436006
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 323,
+          "query_parse_or_post_parse_evaluate": 932824,
+          "through_request_body": 936248,
+          "full_request_including_drop": 955141
+        },
+        "post-plain": {
+          "create": 303,
+          "query_parse_or_post_parse_evaluate": 888186,
+          "through_request_body": 894117,
+          "full_request_including_drop": 913989
+        },
+        "get-early": {
+          "create": 314,
+          "query_parse_or_post_parse_evaluate": 931724,
+          "through_request_body": 935221,
+          "full_request_including_drop": 953985
+        },
+        "post-early": {
+          "create": 305,
+          "query_parse_or_post_parse_evaluate": 905537,
+          "through_request_body": 911394,
+          "full_request_including_drop": 933439
+        },
+        "get-late": {
+          "create": 330,
+          "query_parse_or_post_parse_evaluate": 965864,
+          "through_request_body": 969943,
+          "full_request_including_drop": 989808
+        },
+        "post-late": {
+          "create": 328,
+          "query_parse_or_post_parse_evaluate": 899878,
+          "through_request_body": 906259,
+          "full_request_including_drop": 927031
+        },
+        "get-dense": {
+          "create": 333,
+          "query_parse_or_post_parse_evaluate": 1424457,
+          "through_request_body": 1428687,
+          "full_request_including_drop": 1449012
+        },
+        "post-dense": {
+          "create": 394,
+          "query_parse_or_post_parse_evaluate": 1408302,
+          "through_request_body": 1415345,
+          "full_request_including_drop": 1434910
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 38.23529411764706,
+      "after": 40.625
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 271,
+          "query_parse_or_post_parse_evaluate": 855245,
+          "through_request_body": 858334,
+          "full_request_including_drop": 876366
+        },
+        "post-plain": {
+          "create": 302,
+          "query_parse_or_post_parse_evaluate": 843901,
+          "through_request_body": 850215,
+          "full_request_including_drop": 867562
+        },
+        "get-early": {
+          "create": 282,
+          "query_parse_or_post_parse_evaluate": 858559,
+          "through_request_body": 861321,
+          "full_request_including_drop": 878168
+        },
+        "post-early": {
+          "create": 265,
+          "query_parse_or_post_parse_evaluate": 813934,
+          "through_request_body": 820244,
+          "full_request_including_drop": 838010
+        },
+        "get-late": {
+          "create": 253,
+          "query_parse_or_post_parse_evaluate": 841328,
+          "through_request_body": 843891,
+          "full_request_including_drop": 860713
+        },
+        "post-late": {
+          "create": 249,
+          "query_parse_or_post_parse_evaluate": 791417,
+          "through_request_body": 798021,
+          "full_request_including_drop": 814460
+        },
+        "get-dense": {
+          "create": 240,
+          "query_parse_or_post_parse_evaluate": 1377081,
+          "through_request_body": 1380251,
+          "full_request_including_drop": 1397248
+        },
+        "post-dense": {
+          "create": 289,
+          "query_parse_or_post_parse_evaluate": 1380121,
+          "through_request_body": 1386955,
+          "full_request_including_drop": 1404460
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 491,
+          "query_parse_or_post_parse_evaluate": 1091303,
+          "through_request_body": 1094342,
+          "full_request_including_drop": 1117024
+        },
+        "post-plain": {
+          "create": 277,
+          "query_parse_or_post_parse_evaluate": 1086297,
+          "through_request_body": 1091663,
+          "full_request_including_drop": 1115730
+        },
+        "get-early": {
+          "create": 291,
+          "query_parse_or_post_parse_evaluate": 1137216,
+          "through_request_body": 1140296,
+          "full_request_including_drop": 1164567
+        },
+        "post-early": {
+          "create": 277,
+          "query_parse_or_post_parse_evaluate": 1160908,
+          "through_request_body": 1166419,
+          "full_request_including_drop": 1190353
+        },
+        "get-late": {
+          "create": 297,
+          "query_parse_or_post_parse_evaluate": 1115330,
+          "through_request_body": 1118284,
+          "full_request_including_drop": 1143107
+        },
+        "post-late": {
+          "create": 274,
+          "query_parse_or_post_parse_evaluate": 1140607,
+          "through_request_body": 1146329,
+          "full_request_including_drop": 1171310
+        },
+        "get-dense": {
+          "create": 289,
+          "query_parse_or_post_parse_evaluate": 1408188,
+          "through_request_body": 1411425,
+          "full_request_including_drop": 1435347
+        },
+        "post-dense": {
+          "create": 284,
+          "query_parse_or_post_parse_evaluate": 1341484,
+          "through_request_body": 1347712,
+          "full_request_including_drop": 1371892
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 13.793103448275868,
+      "before": 29.411764705882348
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 271,
+          "query_parse_or_post_parse_evaluate": 1199470,
+          "through_request_body": 1202622,
+          "full_request_including_drop": 1224749
+        },
+        "post-plain": {
+          "create": 312,
+          "query_parse_or_post_parse_evaluate": 1063603,
+          "through_request_body": 1068810,
+          "full_request_including_drop": 1091308
+        },
+        "get-early": {
+          "create": 294,
+          "query_parse_or_post_parse_evaluate": 1009524,
+          "through_request_body": 1012237,
+          "full_request_including_drop": 1034728
+        },
+        "post-early": {
+          "create": 290,
+          "query_parse_or_post_parse_evaluate": 1001441,
+          "through_request_body": 1006553,
+          "full_request_including_drop": 1027794
+        },
+        "get-late": {
+          "create": 251,
+          "query_parse_or_post_parse_evaluate": 1023098,
+          "through_request_body": 1025768,
+          "full_request_including_drop": 1047320
+        },
+        "post-late": {
+          "create": 258,
+          "query_parse_or_post_parse_evaluate": 998116,
+          "through_request_body": 1003174,
+          "full_request_including_drop": 1026391
+        },
+        "get-dense": {
+          "create": 262,
+          "query_parse_or_post_parse_evaluate": 1323250,
+          "through_request_body": 1326202,
+          "full_request_including_drop": 1348999
+        },
+        "post-dense": {
+          "create": 279,
+          "query_parse_or_post_parse_evaluate": 1285855,
+          "through_request_body": 1291330,
+          "full_request_including_drop": 1314111
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 336,
+          "query_parse_or_post_parse_evaluate": 872373,
+          "through_request_body": 875832,
+          "full_request_including_drop": 894305
+        },
+        "post-plain": {
+          "create": 308,
+          "query_parse_or_post_parse_evaluate": 916719,
+          "through_request_body": 922770,
+          "full_request_including_drop": 943053
+        },
+        "get-early": {
+          "create": 331,
+          "query_parse_or_post_parse_evaluate": 973854,
+          "through_request_body": 977315,
+          "full_request_including_drop": 996086
+        },
+        "post-early": {
+          "create": 300,
+          "query_parse_or_post_parse_evaluate": 899130,
+          "through_request_body": 905330,
+          "full_request_including_drop": 924182
+        },
+        "get-late": {
+          "create": 321,
+          "query_parse_or_post_parse_evaluate": 846883,
+          "through_request_body": 850249,
+          "full_request_including_drop": 869241
+        },
+        "post-late": {
+          "create": 310,
+          "query_parse_or_post_parse_evaluate": 863053,
+          "through_request_body": 869196,
+          "full_request_including_drop": 886609
+        },
+        "get-dense": {
+          "create": 289,
+          "query_parse_or_post_parse_evaluate": 1363072,
+          "through_request_body": 1366483,
+          "full_request_including_drop": 1384992
+        },
+        "post-dense": {
+          "create": 312,
+          "query_parse_or_post_parse_evaluate": 1382028,
+          "through_request_body": 1388721,
+          "full_request_including_drop": 1407477
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 21.875,
+      "after": 27.586206896551722
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 280,
+          "query_parse_or_post_parse_evaluate": 863390,
+          "through_request_body": 866183,
+          "full_request_including_drop": 882901
+        },
+        "post-plain": {
+          "create": 266,
+          "query_parse_or_post_parse_evaluate": 811818,
+          "through_request_body": 816892,
+          "full_request_including_drop": 833383
+        },
+        "get-early": {
+          "create": 236,
+          "query_parse_or_post_parse_evaluate": 797375,
+          "through_request_body": 799764,
+          "full_request_including_drop": 816310
+        },
+        "post-early": {
+          "create": 230,
+          "query_parse_or_post_parse_evaluate": 853913,
+          "through_request_body": 858838,
+          "full_request_including_drop": 876075
+        },
+        "get-late": {
+          "create": 266,
+          "query_parse_or_post_parse_evaluate": 852289,
+          "through_request_body": 855062,
+          "full_request_including_drop": 872211
+        },
+        "post-late": {
+          "create": 264,
+          "query_parse_or_post_parse_evaluate": 809204,
+          "through_request_body": 814192,
+          "full_request_including_drop": 831727
+        },
+        "get-dense": {
+          "create": 278,
+          "query_parse_or_post_parse_evaluate": 1240506,
+          "through_request_body": 1243491,
+          "full_request_including_drop": 1260304
+        },
+        "post-dense": {
+          "create": 280,
+          "query_parse_or_post_parse_evaluate": 1205591,
+          "through_request_body": 1210781,
+          "full_request_including_drop": 1227716
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 288,
+          "query_parse_or_post_parse_evaluate": 1091668,
+          "through_request_body": 1094501,
+          "full_request_including_drop": 1116772
+        },
+        "post-plain": {
+          "create": 279,
+          "query_parse_or_post_parse_evaluate": 1044024,
+          "through_request_body": 1049282,
+          "full_request_including_drop": 1071337
+        },
+        "get-early": {
+          "create": 280,
+          "query_parse_or_post_parse_evaluate": 992038,
+          "through_request_body": 994751,
+          "full_request_including_drop": 1016682
+        },
+        "post-early": {
+          "create": 264,
+          "query_parse_or_post_parse_evaluate": 1025952,
+          "through_request_body": 1031150,
+          "full_request_including_drop": 1054029
+        },
+        "get-late": {
+          "create": 276,
+          "query_parse_or_post_parse_evaluate": 1032915,
+          "through_request_body": 1035632,
+          "full_request_including_drop": 1058543
+        },
+        "post-late": {
+          "create": 265,
+          "query_parse_or_post_parse_evaluate": 1027363,
+          "through_request_body": 1032686,
+          "full_request_including_drop": 1054795
+        },
+        "get-dense": {
+          "create": 263,
+          "query_parse_or_post_parse_evaluate": 1306963,
+          "through_request_body": 1310025,
+          "full_request_including_drop": 1333752
+        },
+        "post-dense": {
+          "create": 294,
+          "query_parse_or_post_parse_evaluate": 1490172,
+          "through_request_body": 1506223,
+          "full_request_including_drop": 1529629
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 11.538461538461542,
+      "before": 20.588235294117652
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 303,
+          "query_parse_or_post_parse_evaluate": 1070085,
+          "through_request_body": 1073673,
+          "full_request_including_drop": 1097898
+        },
+        "post-plain": {
+          "create": 318,
+          "query_parse_or_post_parse_evaluate": 1121401,
+          "through_request_body": 1127320,
+          "full_request_including_drop": 1150754
+        },
+        "get-early": {
+          "create": 301,
+          "query_parse_or_post_parse_evaluate": 1069675,
+          "through_request_body": 1073068,
+          "full_request_including_drop": 1097645
+        },
+        "post-early": {
+          "create": 292,
+          "query_parse_or_post_parse_evaluate": 1128719,
+          "through_request_body": 1134485,
+          "full_request_including_drop": 1157668
+        },
+        "get-late": {
+          "create": 299,
+          "query_parse_or_post_parse_evaluate": 1096907,
+          "through_request_body": 1099792,
+          "full_request_including_drop": 1123242
+        },
+        "post-late": {
+          "create": 289,
+          "query_parse_or_post_parse_evaluate": 1135183,
+          "through_request_body": 1140947,
+          "full_request_including_drop": 1163432
+        },
+        "get-dense": {
+          "create": 265,
+          "query_parse_or_post_parse_evaluate": 1408394,
+          "through_request_body": 1411714,
+          "full_request_including_drop": 1444755
+        },
+        "post-dense": {
+          "create": 303,
+          "query_parse_or_post_parse_evaluate": 1433050,
+          "through_request_body": 1439302,
+          "full_request_including_drop": 1462802
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 347,
+          "query_parse_or_post_parse_evaluate": 851490,
+          "through_request_body": 854535,
+          "full_request_including_drop": 872568
+        },
+        "post-plain": {
+          "create": 278,
+          "query_parse_or_post_parse_evaluate": 897558,
+          "through_request_body": 902999,
+          "full_request_including_drop": 920598
+        },
+        "get-early": {
+          "create": 268,
+          "query_parse_or_post_parse_evaluate": 840786,
+          "through_request_body": 843863,
+          "full_request_including_drop": 864171
+        },
+        "post-early": {
+          "create": 284,
+          "query_parse_or_post_parse_evaluate": 865132,
+          "through_request_body": 870380,
+          "full_request_including_drop": 888682
+        },
+        "get-late": {
+          "create": 281,
+          "query_parse_or_post_parse_evaluate": 863688,
+          "through_request_body": 867069,
+          "full_request_including_drop": 891964
+        },
+        "post-late": {
+          "create": 296,
+          "query_parse_or_post_parse_evaluate": 872348,
+          "through_request_body": 877922,
+          "full_request_including_drop": 896005
+        },
+        "get-dense": {
+          "create": 500,
+          "query_parse_or_post_parse_evaluate": 1284910,
+          "through_request_body": 1287978,
+          "full_request_including_drop": 1306245
+        },
+        "post-dense": {
+          "create": 279,
+          "query_parse_or_post_parse_evaluate": 1326708,
+          "through_request_body": 1332354,
+          "full_request_including_drop": 1350433
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 31.428571428571427,
+      "after": 23.33333333333333
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 369,
+          "query_parse_or_post_parse_evaluate": 1140726,
+          "through_request_body": 1144975,
+          "full_request_including_drop": 1164146
+        },
+        "post-plain": {
+          "create": 401,
+          "query_parse_or_post_parse_evaluate": 1092406,
+          "through_request_body": 1099330,
+          "full_request_including_drop": 1120420
+        },
+        "get-early": {
+          "create": 380,
+          "query_parse_or_post_parse_evaluate": 1111166,
+          "through_request_body": 1115811,
+          "full_request_including_drop": 1136908
+        },
+        "post-early": {
+          "create": 439,
+          "query_parse_or_post_parse_evaluate": 991853,
+          "through_request_body": 998978,
+          "full_request_including_drop": 1018799
+        },
+        "get-late": {
+          "create": 357,
+          "query_parse_or_post_parse_evaluate": 1064048,
+          "through_request_body": 1068187,
+          "full_request_including_drop": 1091614
+        },
+        "post-late": {
+          "create": 374,
+          "query_parse_or_post_parse_evaluate": 1096359,
+          "through_request_body": 1103476,
+          "full_request_including_drop": 1127425
+        },
+        "get-dense": {
+          "create": 383,
+          "query_parse_or_post_parse_evaluate": 1686423,
+          "through_request_body": 1690662,
+          "full_request_including_drop": 1711072
+        },
+        "post-dense": {
+          "create": 361,
+          "query_parse_or_post_parse_evaluate": 1652229,
+          "through_request_body": 1775633,
+          "full_request_including_drop": 1795780
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 284,
+          "query_parse_or_post_parse_evaluate": 1052224,
+          "through_request_body": 1054958,
+          "full_request_including_drop": 1078174
+        },
+        "post-plain": {
+          "create": 262,
+          "query_parse_or_post_parse_evaluate": 1073703,
+          "through_request_body": 1079309,
+          "full_request_including_drop": 1101385
+        },
+        "get-early": {
+          "create": 259,
+          "query_parse_or_post_parse_evaluate": 1002990,
+          "through_request_body": 1005633,
+          "full_request_including_drop": 1028588
+        },
+        "post-early": {
+          "create": 259,
+          "query_parse_or_post_parse_evaluate": 1054021,
+          "through_request_body": 1059520,
+          "full_request_including_drop": 1081299
+        },
+        "get-late": {
+          "create": 257,
+          "query_parse_or_post_parse_evaluate": 995485,
+          "through_request_body": 997931,
+          "full_request_including_drop": 1019728
+        },
+        "post-late": {
+          "create": 238,
+          "query_parse_or_post_parse_evaluate": 1023027,
+          "through_request_body": 1028260,
+          "full_request_including_drop": 1049863
+        },
+        "get-dense": {
+          "create": 239,
+          "query_parse_or_post_parse_evaluate": 1414679,
+          "through_request_body": 1417524,
+          "full_request_including_drop": 1440767
+        },
+        "post-dense": {
+          "create": 282,
+          "query_parse_or_post_parse_evaluate": 1334142,
+          "through_request_body": 1340480,
+          "full_request_including_drop": 1363378
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 55.55555555555556,
+      "before": 21.875
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 238,
+          "query_parse_or_post_parse_evaluate": 932883,
+          "through_request_body": 935071,
+          "full_request_including_drop": 955659
+        },
+        "post-plain": {
+          "create": 229,
+          "query_parse_or_post_parse_evaluate": 931728,
+          "through_request_body": 936179,
+          "full_request_including_drop": 956189
+        },
+        "get-early": {
+          "create": 202,
+          "query_parse_or_post_parse_evaluate": 919562,
+          "through_request_body": 921617,
+          "full_request_including_drop": 941796
+        },
+        "post-early": {
+          "create": 210,
+          "query_parse_or_post_parse_evaluate": 952680,
+          "through_request_body": 956946,
+          "full_request_including_drop": 977433
+        },
+        "get-late": {
+          "create": 241,
+          "query_parse_or_post_parse_evaluate": 963367,
+          "through_request_body": 965835,
+          "full_request_including_drop": 986408
+        },
+        "post-late": {
+          "create": 238,
+          "query_parse_or_post_parse_evaluate": 978880,
+          "through_request_body": 983456,
+          "full_request_including_drop": 1004573
+        },
+        "get-dense": {
+          "create": 233,
+          "query_parse_or_post_parse_evaluate": 1224501,
+          "through_request_body": 1226654,
+          "full_request_including_drop": 1246836
+        },
+        "post-dense": {
+          "create": 220,
+          "query_parse_or_post_parse_evaluate": 1275722,
+          "through_request_body": 1280508,
+          "full_request_including_drop": 1300903
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 384,
+          "query_parse_or_post_parse_evaluate": 1025535,
+          "through_request_body": 1029773,
+          "full_request_including_drop": 1050215
+        },
+        "post-plain": {
+          "create": 326,
+          "query_parse_or_post_parse_evaluate": 1049699,
+          "through_request_body": 1057683,
+          "full_request_including_drop": 1077337
+        },
+        "get-early": {
+          "create": 318,
+          "query_parse_or_post_parse_evaluate": 1035898,
+          "through_request_body": 1039863,
+          "full_request_including_drop": 1060429
+        },
+        "post-early": {
+          "create": 340,
+          "query_parse_or_post_parse_evaluate": 1008266,
+          "through_request_body": 1016230,
+          "full_request_including_drop": 1035861
+        },
+        "get-late": {
+          "create": 341,
+          "query_parse_or_post_parse_evaluate": 1038570,
+          "through_request_body": 1042485,
+          "full_request_including_drop": 1063289
+        },
+        "post-late": {
+          "create": 342,
+          "query_parse_or_post_parse_evaluate": 1022352,
+          "through_request_body": 1030530,
+          "full_request_including_drop": 1050589
+        },
+        "get-dense": {
+          "create": 373,
+          "query_parse_or_post_parse_evaluate": 1965713,
+          "through_request_body": 1970276,
+          "full_request_including_drop": 1991416
+        },
+        "post-dense": {
+          "create": 389,
+          "query_parse_or_post_parse_evaluate": 1956733,
+          "through_request_body": 1966369,
+          "full_request_including_drop": 1988097
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 9.999999999999998,
+      "after": 50.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 317,
+          "query_parse_or_post_parse_evaluate": 939191,
+          "through_request_body": 942424,
+          "full_request_including_drop": 960853
+        },
+        "post-plain": {
+          "create": 280,
+          "query_parse_or_post_parse_evaluate": 897311,
+          "through_request_body": 904058,
+          "full_request_including_drop": 922663
+        },
+        "get-early": {
+          "create": 293,
+          "query_parse_or_post_parse_evaluate": 891583,
+          "through_request_body": 894729,
+          "full_request_including_drop": 912907
+        },
+        "post-early": {
+          "create": 288,
+          "query_parse_or_post_parse_evaluate": 918400,
+          "through_request_body": 925541,
+          "full_request_including_drop": 943904
+        },
+        "get-late": {
+          "create": 298,
+          "query_parse_or_post_parse_evaluate": 964885,
+          "through_request_body": 967988,
+          "full_request_including_drop": 986127
+        },
+        "post-late": {
+          "create": 300,
+          "query_parse_or_post_parse_evaluate": 914186,
+          "through_request_body": 921713,
+          "full_request_including_drop": 939751
+        },
+        "get-dense": {
+          "create": 278,
+          "query_parse_or_post_parse_evaluate": 1310437,
+          "through_request_body": 1313673,
+          "full_request_including_drop": 1331012
+        },
+        "post-dense": {
+          "create": 268,
+          "query_parse_or_post_parse_evaluate": 1340032,
+          "through_request_body": 1347555,
+          "full_request_including_drop": 1365901
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 304,
+          "query_parse_or_post_parse_evaluate": 1135061,
+          "through_request_body": 1138385,
+          "full_request_including_drop": 1163426
+        },
+        "post-plain": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 1117371,
+          "through_request_body": 1125293,
+          "full_request_including_drop": 1149185
+        },
+        "get-early": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 1165811,
+          "through_request_body": 1169256,
+          "full_request_including_drop": 1193305
+        },
+        "post-early": {
+          "create": 331,
+          "query_parse_or_post_parse_evaluate": 1131916,
+          "through_request_body": 1139189,
+          "full_request_including_drop": 1163209
+        },
+        "get-late": {
+          "create": 319,
+          "query_parse_or_post_parse_evaluate": 1207166,
+          "through_request_body": 1210767,
+          "full_request_including_drop": 1235432
+        },
+        "post-late": {
+          "create": 325,
+          "query_parse_or_post_parse_evaluate": 1137847,
+          "through_request_body": 1145602,
+          "full_request_including_drop": 1169033
+        },
+        "get-dense": {
+          "create": 284,
+          "query_parse_or_post_parse_evaluate": 1340742,
+          "through_request_body": 1344421,
+          "full_request_including_drop": 1368611
+        },
+        "post-dense": {
+          "create": 311,
+          "query_parse_or_post_parse_evaluate": 1334669,
+          "through_request_body": 1342659,
+          "full_request_including_drop": 1366520
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 30.000000000000004,
+      "before": 31.428571428571427
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 356,
+          "query_parse_or_post_parse_evaluate": 1319677,
+          "through_request_body": 1323835,
+          "full_request_including_drop": 1350306
+        },
+        "post-plain": {
+          "create": 354,
+          "query_parse_or_post_parse_evaluate": 1111161,
+          "through_request_body": 1117967,
+          "full_request_including_drop": 1171667
+        },
+        "get-early": {
+          "create": 378,
+          "query_parse_or_post_parse_evaluate": 1173344,
+          "through_request_body": 1177692,
+          "full_request_including_drop": 1205019
+        },
+        "post-early": {
+          "create": 348,
+          "query_parse_or_post_parse_evaluate": 1133143,
+          "through_request_body": 1140130,
+          "full_request_including_drop": 1167185
+        },
+        "get-late": {
+          "create": 339,
+          "query_parse_or_post_parse_evaluate": 1206841,
+          "through_request_body": 1210780,
+          "full_request_including_drop": 1236775
+        },
+        "post-late": {
+          "create": 334,
+          "query_parse_or_post_parse_evaluate": 1073530,
+          "through_request_body": 1080145,
+          "full_request_including_drop": 1105235
+        },
+        "get-dense": {
+          "create": 329,
+          "query_parse_or_post_parse_evaluate": 1443674,
+          "through_request_body": 1447925,
+          "full_request_including_drop": 1473760
+        },
+        "post-dense": {
+          "create": 343,
+          "query_parse_or_post_parse_evaluate": 1513864,
+          "through_request_body": 1521390,
+          "full_request_including_drop": 1546941
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 351,
+          "query_parse_or_post_parse_evaluate": 962499,
+          "through_request_body": 965912,
+          "full_request_including_drop": 985025
+        },
+        "post-plain": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 959346,
+          "through_request_body": 966923,
+          "full_request_including_drop": 986369
+        },
+        "get-early": {
+          "create": 329,
+          "query_parse_or_post_parse_evaluate": 901103,
+          "through_request_body": 904557,
+          "full_request_including_drop": 923448
+        },
+        "post-early": {
+          "create": 319,
+          "query_parse_or_post_parse_evaluate": 932849,
+          "through_request_body": 940543,
+          "full_request_including_drop": 960175
+        },
+        "get-late": {
+          "create": 305,
+          "query_parse_or_post_parse_evaluate": 905851,
+          "through_request_body": 909340,
+          "full_request_including_drop": 928902
+        },
+        "post-late": {
+          "create": 307,
+          "query_parse_or_post_parse_evaluate": 999678,
+          "through_request_body": 1006914,
+          "full_request_including_drop": 1026250
+        },
+        "get-dense": {
+          "create": 309,
+          "query_parse_or_post_parse_evaluate": 1424981,
+          "through_request_body": 1428440,
+          "full_request_including_drop": 1447704
+        },
+        "post-dense": {
+          "create": 330,
+          "query_parse_or_post_parse_evaluate": 1450326,
+          "through_request_body": 1459229,
+          "full_request_including_drop": 1479724
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 38.888888888888886,
+      "after": 38.70967741935484
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 359,
+          "query_parse_or_post_parse_evaluate": 997361,
+          "through_request_body": 1001498,
+          "full_request_including_drop": 1020847
+        },
+        "post-plain": {
+          "create": 344,
+          "query_parse_or_post_parse_evaluate": 961166,
+          "through_request_body": 968893,
+          "full_request_including_drop": 988639
+        },
+        "get-early": {
+          "create": 324,
+          "query_parse_or_post_parse_evaluate": 974908,
+          "through_request_body": 979127,
+          "full_request_including_drop": 999316
+        },
+        "post-early": {
+          "create": 355,
+          "query_parse_or_post_parse_evaluate": 964010,
+          "through_request_body": 972003,
+          "full_request_including_drop": 993285
+        },
+        "get-late": {
+          "create": 371,
+          "query_parse_or_post_parse_evaluate": 983051,
+          "through_request_body": 987054,
+          "full_request_including_drop": 1007436
+        },
+        "post-late": {
+          "create": 348,
+          "query_parse_or_post_parse_evaluate": 1030603,
+          "through_request_body": 1038971,
+          "full_request_including_drop": 1060443
+        },
+        "get-dense": {
+          "create": 361,
+          "query_parse_or_post_parse_evaluate": 1620744,
+          "through_request_body": 1624890,
+          "full_request_including_drop": 1657720
+        },
+        "post-dense": {
+          "create": 369,
+          "query_parse_or_post_parse_evaluate": 1555846,
+          "through_request_body": 1564657,
+          "full_request_including_drop": 1584810
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 256,
+          "query_parse_or_post_parse_evaluate": 992218,
+          "through_request_body": 994650,
+          "full_request_including_drop": 1015451
+        },
+        "post-plain": {
+          "create": 236,
+          "query_parse_or_post_parse_evaluate": 909311,
+          "through_request_body": 914210,
+          "full_request_including_drop": 934518
+        },
+        "get-early": {
+          "create": 225,
+          "query_parse_or_post_parse_evaluate": 982620,
+          "through_request_body": 984959,
+          "full_request_including_drop": 1005441
+        },
+        "post-early": {
+          "create": 233,
+          "query_parse_or_post_parse_evaluate": 910423,
+          "through_request_body": 915111,
+          "full_request_including_drop": 936888
+        },
+        "get-late": {
+          "create": 246,
+          "query_parse_or_post_parse_evaluate": 988566,
+          "through_request_body": 990951,
+          "full_request_including_drop": 1012788
+        },
+        "post-late": {
+          "create": 242,
+          "query_parse_or_post_parse_evaluate": 968683,
+          "through_request_body": 973628,
+          "full_request_including_drop": 995049
+        },
+        "get-dense": {
+          "create": 247,
+          "query_parse_or_post_parse_evaluate": 1255606,
+          "through_request_body": 1257943,
+          "full_request_including_drop": 1279255
+        },
+        "post-dense": {
+          "create": 235,
+          "query_parse_or_post_parse_evaluate": 1240678,
+          "through_request_body": 1246053,
+          "full_request_including_drop": 1268275
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 43.75,
+      "before": 12.5
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 468,
+          "query_parse_or_post_parse_evaluate": 1021994,
+          "through_request_body": 1025396,
+          "full_request_including_drop": 1048549
+        },
+        "post-plain": {
+          "create": 282,
+          "query_parse_or_post_parse_evaluate": 976424,
+          "through_request_body": 981906,
+          "full_request_including_drop": 1003725
+        },
+        "get-early": {
+          "create": 271,
+          "query_parse_or_post_parse_evaluate": 1005979,
+          "through_request_body": 1009044,
+          "full_request_including_drop": 1031200
+        },
+        "post-early": {
+          "create": 294,
+          "query_parse_or_post_parse_evaluate": 981472,
+          "through_request_body": 986827,
+          "full_request_including_drop": 1008626
+        },
+        "get-late": {
+          "create": 239,
+          "query_parse_or_post_parse_evaluate": 1005229,
+          "through_request_body": 1007988,
+          "full_request_including_drop": 1029415
+        },
+        "post-late": {
+          "create": 240,
+          "query_parse_or_post_parse_evaluate": 981033,
+          "through_request_body": 986209,
+          "full_request_including_drop": 1007681
+        },
+        "get-dense": {
+          "create": 250,
+          "query_parse_or_post_parse_evaluate": 1251318,
+          "through_request_body": 1254145,
+          "full_request_including_drop": 1275725
+        },
+        "post-dense": {
+          "create": 253,
+          "query_parse_or_post_parse_evaluate": 1263800,
+          "through_request_body": 1269295,
+          "full_request_including_drop": 1291309
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 354,
+          "query_parse_or_post_parse_evaluate": 958075,
+          "through_request_body": 962297,
+          "full_request_including_drop": 981575
+        },
+        "post-plain": {
+          "create": 337,
+          "query_parse_or_post_parse_evaluate": 913067,
+          "through_request_body": 920159,
+          "full_request_including_drop": 939581
+        },
+        "get-early": {
+          "create": 317,
+          "query_parse_or_post_parse_evaluate": 951264,
+          "through_request_body": 955495,
+          "full_request_including_drop": 975245
+        },
+        "post-early": {
+          "create": 319,
+          "query_parse_or_post_parse_evaluate": 895995,
+          "through_request_body": 902774,
+          "full_request_including_drop": 922398
+        },
+        "get-late": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 923505,
+          "through_request_body": 927509,
+          "full_request_including_drop": 947288
+        },
+        "post-late": {
+          "create": 322,
+          "query_parse_or_post_parse_evaluate": 978488,
+          "through_request_body": 985425,
+          "full_request_including_drop": 1005692
+        },
+        "get-dense": {
+          "create": 355,
+          "query_parse_or_post_parse_evaluate": 1490235,
+          "through_request_body": 1494931,
+          "full_request_including_drop": 1514688
+        },
+        "post-dense": {
+          "create": 364,
+          "query_parse_or_post_parse_evaluate": 1452984,
+          "through_request_body": 1460909,
+          "full_request_including_drop": 1480985
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 10.344827586206895,
+      "after": 32.25806451612904
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 339,
+          "query_parse_or_post_parse_evaluate": 944745,
+          "through_request_body": 948540,
+          "full_request_including_drop": 969088
+        },
+        "post-plain": {
+          "create": 336,
+          "query_parse_or_post_parse_evaluate": 1022547,
+          "through_request_body": 1032860,
+          "full_request_including_drop": 1055003
+        },
+        "get-early": {
+          "create": 367,
+          "query_parse_or_post_parse_evaluate": 1092073,
+          "through_request_body": 1096239,
+          "full_request_including_drop": 1116989
+        },
+        "post-early": {
+          "create": 339,
+          "query_parse_or_post_parse_evaluate": 946132,
+          "through_request_body": 953374,
+          "full_request_including_drop": 972624
+        },
+        "get-late": {
+          "create": 350,
+          "query_parse_or_post_parse_evaluate": 1056522,
+          "through_request_body": 1060657,
+          "full_request_including_drop": 1080700
+        },
+        "post-late": {
+          "create": 354,
+          "query_parse_or_post_parse_evaluate": 957083,
+          "through_request_body": 964177,
+          "full_request_including_drop": 984451
+        },
+        "get-dense": {
+          "create": 346,
+          "query_parse_or_post_parse_evaluate": 1445240,
+          "through_request_body": 1449152,
+          "full_request_including_drop": 1469224
+        },
+        "post-dense": {
+          "create": 333,
+          "query_parse_or_post_parse_evaluate": 1412793,
+          "through_request_body": 1420045,
+          "full_request_including_drop": 1440560
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 332,
+          "query_parse_or_post_parse_evaluate": 1127765,
+          "through_request_body": 1131708,
+          "full_request_including_drop": 1156433
+        },
+        "post-plain": {
+          "create": 309,
+          "query_parse_or_post_parse_evaluate": 1054451,
+          "through_request_body": 1060270,
+          "full_request_including_drop": 1085112
+        },
+        "get-early": {
+          "create": 306,
+          "query_parse_or_post_parse_evaluate": 1101786,
+          "through_request_body": 1105682,
+          "full_request_including_drop": 1129670
+        },
+        "post-early": {
+          "create": 306,
+          "query_parse_or_post_parse_evaluate": 1094658,
+          "through_request_body": 1100445,
+          "full_request_including_drop": 1124665
+        },
+        "get-late": {
+          "create": 298,
+          "query_parse_or_post_parse_evaluate": 1074705,
+          "through_request_body": 1078362,
+          "full_request_including_drop": 1104062
+        },
+        "post-late": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 1125936,
+          "through_request_body": 1131924,
+          "full_request_including_drop": 1155927
+        },
+        "get-dense": {
+          "create": 322,
+          "query_parse_or_post_parse_evaluate": 1393124,
+          "through_request_body": 1396974,
+          "full_request_including_drop": 1422824
+        },
+        "post-dense": {
+          "create": 315,
+          "query_parse_or_post_parse_evaluate": 1429407,
+          "through_request_body": 1435897,
+          "full_request_including_drop": 1460704
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 54.28571428571429,
+      "before": 29.411764705882348
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 305,
+          "query_parse_or_post_parse_evaluate": 1092167,
+          "through_request_body": 1095479,
+          "full_request_including_drop": 1118921
+        },
+        "post-plain": {
+          "create": 312,
+          "query_parse_or_post_parse_evaluate": 1049454,
+          "through_request_body": 1054889,
+          "full_request_including_drop": 1078224
+        },
+        "get-early": {
+          "create": 299,
+          "query_parse_or_post_parse_evaluate": 1047528,
+          "through_request_body": 1050834,
+          "full_request_including_drop": 1073983
+        },
+        "post-early": {
+          "create": 308,
+          "query_parse_or_post_parse_evaluate": 1025113,
+          "through_request_body": 1030612,
+          "full_request_including_drop": 1053459
+        },
+        "get-late": {
+          "create": 314,
+          "query_parse_or_post_parse_evaluate": 1030163,
+          "through_request_body": 1033212,
+          "full_request_including_drop": 1056021
+        },
+        "post-late": {
+          "create": 292,
+          "query_parse_or_post_parse_evaluate": 1006821,
+          "through_request_body": 1012127,
+          "full_request_including_drop": 1034595
+        },
+        "get-dense": {
+          "create": 277,
+          "query_parse_or_post_parse_evaluate": 1331484,
+          "through_request_body": 1334786,
+          "full_request_including_drop": 1358497
+        },
+        "post-dense": {
+          "create": 319,
+          "query_parse_or_post_parse_evaluate": 1327742,
+          "through_request_body": 1333463,
+          "full_request_including_drop": 1356428
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 281,
+          "query_parse_or_post_parse_evaluate": 830915,
+          "through_request_body": 834010,
+          "full_request_including_drop": 850432
+        },
+        "post-plain": {
+          "create": 260,
+          "query_parse_or_post_parse_evaluate": 830106,
+          "through_request_body": 835475,
+          "full_request_including_drop": 852758
+        },
+        "get-early": {
+          "create": 269,
+          "query_parse_or_post_parse_evaluate": 858830,
+          "through_request_body": 862054,
+          "full_request_including_drop": 879907
+        },
+        "post-early": {
+          "create": 264,
+          "query_parse_or_post_parse_evaluate": 832684,
+          "through_request_body": 838031,
+          "full_request_including_drop": 855845
+        },
+        "get-late": {
+          "create": 262,
+          "query_parse_or_post_parse_evaluate": 859199,
+          "through_request_body": 862408,
+          "full_request_including_drop": 880446
+        },
+        "post-late": {
+          "create": 278,
+          "query_parse_or_post_parse_evaluate": 822399,
+          "through_request_body": 828111,
+          "full_request_including_drop": 844849
+        },
+        "get-dense": {
+          "create": 252,
+          "query_parse_or_post_parse_evaluate": 1290992,
+          "through_request_body": 1293623,
+          "full_request_including_drop": 1310339
+        },
+        "post-dense": {
+          "create": 245,
+          "query_parse_or_post_parse_evaluate": 1288346,
+          "through_request_body": 1325786,
+          "full_request_including_drop": 1343291
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 21.875,
+      "after": 14.28571428571429
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 294,
+          "query_parse_or_post_parse_evaluate": 860001,
+          "through_request_body": 863145,
+          "full_request_including_drop": 880297
+        },
+        "post-plain": {
+          "create": 275,
+          "query_parse_or_post_parse_evaluate": 809565,
+          "through_request_body": 814760,
+          "full_request_including_drop": 831773
+        },
+        "get-early": {
+          "create": 255,
+          "query_parse_or_post_parse_evaluate": 849760,
+          "through_request_body": 852553,
+          "full_request_including_drop": 869702
+        },
+        "post-early": {
+          "create": 260,
+          "query_parse_or_post_parse_evaluate": 813000,
+          "through_request_body": 818157,
+          "full_request_including_drop": 835787
+        },
+        "get-late": {
+          "create": 278,
+          "query_parse_or_post_parse_evaluate": 851081,
+          "through_request_body": 854017,
+          "full_request_including_drop": 871147
+        },
+        "post-late": {
+          "create": 255,
+          "query_parse_or_post_parse_evaluate": 801245,
+          "through_request_body": 806406,
+          "full_request_including_drop": 823153
+        },
+        "get-dense": {
+          "create": 260,
+          "query_parse_or_post_parse_evaluate": 1251270,
+          "through_request_body": 1286865,
+          "full_request_including_drop": 1304829
+        },
+        "post-dense": {
+          "create": 292,
+          "query_parse_or_post_parse_evaluate": 1273394,
+          "through_request_body": 1279578,
+          "full_request_including_drop": 1296748
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 295,
+          "query_parse_or_post_parse_evaluate": 1191893,
+          "through_request_body": 1195322,
+          "full_request_including_drop": 1222676
+        },
+        "post-plain": {
+          "create": 335,
+          "query_parse_or_post_parse_evaluate": 1259567,
+          "through_request_body": 1269243,
+          "full_request_including_drop": 1295030
+        },
+        "get-early": {
+          "create": 314,
+          "query_parse_or_post_parse_evaluate": 1175815,
+          "through_request_body": 1179007,
+          "full_request_including_drop": 1204011
+        },
+        "post-early": {
+          "create": 290,
+          "query_parse_or_post_parse_evaluate": 1154517,
+          "through_request_body": 1163806,
+          "full_request_including_drop": 1189297
+        },
+        "get-late": {
+          "create": 326,
+          "query_parse_or_post_parse_evaluate": 1191954,
+          "through_request_body": 1195394,
+          "full_request_including_drop": 1222738
+        },
+        "post-late": {
+          "create": 321,
+          "query_parse_or_post_parse_evaluate": 1249941,
+          "through_request_body": 1259668,
+          "full_request_including_drop": 1285114
+        },
+        "get-dense": {
+          "create": 285,
+          "query_parse_or_post_parse_evaluate": 1487044,
+          "through_request_body": 1490341,
+          "full_request_including_drop": 1517170
+        },
+        "post-dense": {
+          "create": 311,
+          "query_parse_or_post_parse_evaluate": 1434939,
+          "through_request_body": 1445062,
+          "full_request_including_drop": 1470519
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 7.692307692307687,
+      "before": 54.054054054054056
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 277,
+          "query_parse_or_post_parse_evaluate": 999181,
+          "through_request_body": 1001676,
+          "full_request_including_drop": 1022551
+        },
+        "post-plain": {
+          "create": 252,
+          "query_parse_or_post_parse_evaluate": 1003496,
+          "through_request_body": 1008489,
+          "full_request_including_drop": 1030208
+        },
+        "get-early": {
+          "create": 249,
+          "query_parse_or_post_parse_evaluate": 995862,
+          "through_request_body": 998515,
+          "full_request_including_drop": 1019744
+        },
+        "post-early": {
+          "create": 261,
+          "query_parse_or_post_parse_evaluate": 998218,
+          "through_request_body": 1003236,
+          "full_request_including_drop": 1023709
+        },
+        "get-late": {
+          "create": 244,
+          "query_parse_or_post_parse_evaluate": 974320,
+          "through_request_body": 976587,
+          "full_request_including_drop": 997055
+        },
+        "post-late": {
+          "create": 241,
+          "query_parse_or_post_parse_evaluate": 981975,
+          "through_request_body": 986903,
+          "full_request_including_drop": 1007535
+        },
+        "get-dense": {
+          "create": 228,
+          "query_parse_or_post_parse_evaluate": 1187573,
+          "through_request_body": 1189838,
+          "full_request_including_drop": 1210360
+        },
+        "post-dense": {
+          "create": 231,
+          "query_parse_or_post_parse_evaluate": 1272901,
+          "through_request_body": 1278256,
+          "full_request_including_drop": 1299485
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 241,
+          "query_parse_or_post_parse_evaluate": 856721,
+          "through_request_body": 859026,
+          "full_request_including_drop": 876110
+        },
+        "post-plain": {
+          "create": 236,
+          "query_parse_or_post_parse_evaluate": 852139,
+          "through_request_body": 856527,
+          "full_request_including_drop": 873109
+        },
+        "get-early": {
+          "create": 231,
+          "query_parse_or_post_parse_evaluate": 841870,
+          "through_request_body": 844040,
+          "full_request_including_drop": 860353
+        },
+        "post-early": {
+          "create": 227,
+          "query_parse_or_post_parse_evaluate": 847129,
+          "through_request_body": 851376,
+          "full_request_including_drop": 868267
+        },
+        "get-late": {
+          "create": 241,
+          "query_parse_or_post_parse_evaluate": 850976,
+          "through_request_body": 853110,
+          "full_request_including_drop": 869872
+        },
+        "post-late": {
+          "create": 234,
+          "query_parse_or_post_parse_evaluate": 864007,
+          "through_request_body": 868248,
+          "full_request_including_drop": 885035
+        },
+        "get-dense": {
+          "create": 230,
+          "query_parse_or_post_parse_evaluate": 1248718,
+          "through_request_body": 1250942,
+          "full_request_including_drop": 1267584
+        },
+        "post-dense": {
+          "create": 234,
+          "query_parse_or_post_parse_evaluate": 1278874,
+          "through_request_body": 1283781,
+          "full_request_including_drop": 1300827
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 9.999999999999998,
+      "after": 16.666666666666664
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 201,
+          "query_parse_or_post_parse_evaluate": 801293,
+          "through_request_body": 803213,
+          "full_request_including_drop": 818898
+        },
+        "post-plain": {
+          "create": 205,
+          "query_parse_or_post_parse_evaluate": 787085,
+          "through_request_body": 791211,
+          "full_request_including_drop": 807031
+        },
+        "get-early": {
+          "create": 200,
+          "query_parse_or_post_parse_evaluate": 811747,
+          "through_request_body": 813756,
+          "full_request_including_drop": 829557
+        },
+        "post-early": {
+          "create": 205,
+          "query_parse_or_post_parse_evaluate": 799866,
+          "through_request_body": 803997,
+          "full_request_including_drop": 819769
+        },
+        "get-late": {
+          "create": 207,
+          "query_parse_or_post_parse_evaluate": 815011,
+          "through_request_body": 816867,
+          "full_request_including_drop": 832493
+        },
+        "post-late": {
+          "create": 198,
+          "query_parse_or_post_parse_evaluate": 781857,
+          "through_request_body": 785902,
+          "full_request_including_drop": 801285
+        },
+        "get-dense": {
+          "create": 190,
+          "query_parse_or_post_parse_evaluate": 1154570,
+          "through_request_body": 1156446,
+          "full_request_including_drop": 1171830
+        },
+        "post-dense": {
+          "create": 200,
+          "query_parse_or_post_parse_evaluate": 1163065,
+          "through_request_body": 1167539,
+          "full_request_including_drop": 1183050
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 220,
+          "query_parse_or_post_parse_evaluate": 930927,
+          "through_request_body": 932559,
+          "full_request_including_drop": 952010
+        },
+        "post-plain": {
+          "create": 216,
+          "query_parse_or_post_parse_evaluate": 930083,
+          "through_request_body": 934058,
+          "full_request_including_drop": 953884
+        },
+        "get-early": {
+          "create": 223,
+          "query_parse_or_post_parse_evaluate": 929940,
+          "through_request_body": 931620,
+          "full_request_including_drop": 951516
+        },
+        "post-early": {
+          "create": 210,
+          "query_parse_or_post_parse_evaluate": 915430,
+          "through_request_body": 919426,
+          "full_request_including_drop": 938857
+        },
+        "get-late": {
+          "create": 211,
+          "query_parse_or_post_parse_evaluate": 927435,
+          "through_request_body": 929095,
+          "full_request_including_drop": 949013
+        },
+        "post-late": {
+          "create": 219,
+          "query_parse_or_post_parse_evaluate": 927807,
+          "through_request_body": 931771,
+          "full_request_including_drop": 951988
+        },
+        "get-dense": {
+          "create": 224,
+          "query_parse_or_post_parse_evaluate": 1206376,
+          "through_request_body": 1208472,
+          "full_request_including_drop": 1228146
+        },
+        "post-dense": {
+          "create": 241,
+          "query_parse_or_post_parse_evaluate": 1165005,
+          "through_request_body": 1169419,
+          "full_request_including_drop": 1189275
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 0.0,
+      "before": 0.0
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 215,
+          "query_parse_or_post_parse_evaluate": 1017638,
+          "through_request_body": 1019565,
+          "full_request_including_drop": 1039590
+        },
+        "post-plain": {
+          "create": 206,
+          "query_parse_or_post_parse_evaluate": 1003952,
+          "through_request_body": 1008372,
+          "full_request_including_drop": 1028478
+        },
+        "get-early": {
+          "create": 225,
+          "query_parse_or_post_parse_evaluate": 964661,
+          "through_request_body": 966744,
+          "full_request_including_drop": 986729
+        },
+        "post-early": {
+          "create": 209,
+          "query_parse_or_post_parse_evaluate": 957183,
+          "through_request_body": 961536,
+          "full_request_including_drop": 981289
+        },
+        "get-late": {
+          "create": 201,
+          "query_parse_or_post_parse_evaluate": 948534,
+          "through_request_body": 950269,
+          "full_request_including_drop": 969958
+        },
+        "post-late": {
+          "create": 200,
+          "query_parse_or_post_parse_evaluate": 949474,
+          "through_request_body": 953705,
+          "full_request_including_drop": 973893
+        },
+        "get-dense": {
+          "create": 203,
+          "query_parse_or_post_parse_evaluate": 1317532,
+          "through_request_body": 1319609,
+          "full_request_including_drop": 1340404
+        },
+        "post-dense": {
+          "create": 219,
+          "query_parse_or_post_parse_evaluate": 1287665,
+          "through_request_body": 1292516,
+          "full_request_including_drop": 1312728
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 232,
+          "query_parse_or_post_parse_evaluate": 799301,
+          "through_request_body": 801291,
+          "full_request_including_drop": 816975
+        },
+        "post-plain": {
+          "create": 211,
+          "query_parse_or_post_parse_evaluate": 786286,
+          "through_request_body": 790611,
+          "full_request_including_drop": 806069
+        },
+        "get-early": {
+          "create": 199,
+          "query_parse_or_post_parse_evaluate": 791603,
+          "through_request_body": 793565,
+          "full_request_including_drop": 809169
+        },
+        "post-early": {
+          "create": 205,
+          "query_parse_or_post_parse_evaluate": 781548,
+          "through_request_body": 785937,
+          "full_request_including_drop": 802203
+        },
+        "get-late": {
+          "create": 223,
+          "query_parse_or_post_parse_evaluate": 795957,
+          "through_request_body": 798083,
+          "full_request_including_drop": 814054
+        },
+        "post-late": {
+          "create": 226,
+          "query_parse_or_post_parse_evaluate": 787802,
+          "through_request_body": 792172,
+          "full_request_including_drop": 807888
+        },
+        "get-dense": {
+          "create": 207,
+          "query_parse_or_post_parse_evaluate": 1182131,
+          "through_request_body": 1184107,
+          "full_request_including_drop": 1199621
+        },
+        "post-dense": {
+          "create": 208,
+          "query_parse_or_post_parse_evaluate": 1170131,
+          "through_request_body": 1174874,
+          "full_request_including_drop": 1190983
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 3.4482758620689613,
+      "after": 7.4074074074074066
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 301,
+          "query_parse_or_post_parse_evaluate": 790702,
+          "through_request_body": 793712,
+          "full_request_including_drop": 811522
+        },
+        "post-plain": {
+          "create": 281,
+          "query_parse_or_post_parse_evaluate": 891919,
+          "through_request_body": 897628,
+          "full_request_including_drop": 915538
+        },
+        "get-early": {
+          "create": 285,
+          "query_parse_or_post_parse_evaluate": 825420,
+          "through_request_body": 828512,
+          "full_request_including_drop": 846850
+        },
+        "post-early": {
+          "create": 290,
+          "query_parse_or_post_parse_evaluate": 881606,
+          "through_request_body": 887502,
+          "full_request_including_drop": 904628
+        },
+        "get-late": {
+          "create": 279,
+          "query_parse_or_post_parse_evaluate": 791498,
+          "through_request_body": 794119,
+          "full_request_including_drop": 811300
+        },
+        "post-late": {
+          "create": 256,
+          "query_parse_or_post_parse_evaluate": 828108,
+          "through_request_body": 833438,
+          "full_request_including_drop": 850713
+        },
+        "get-dense": {
+          "create": 263,
+          "query_parse_or_post_parse_evaluate": 1318264,
+          "through_request_body": 1321166,
+          "full_request_including_drop": 1338777
+        },
+        "post-dense": {
+          "create": 284,
+          "query_parse_or_post_parse_evaluate": 1242560,
+          "through_request_body": 1248716,
+          "full_request_including_drop": 1266574
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 373,
+          "query_parse_or_post_parse_evaluate": 1184005,
+          "through_request_body": 1188013,
+          "full_request_including_drop": 1215349
+        },
+        "post-plain": {
+          "create": 356,
+          "query_parse_or_post_parse_evaluate": 1149702,
+          "through_request_body": 1157023,
+          "full_request_including_drop": 1183700
+        },
+        "get-early": {
+          "create": 344,
+          "query_parse_or_post_parse_evaluate": 1140712,
+          "through_request_body": 1144586,
+          "full_request_including_drop": 1171242
+        },
+        "post-early": {
+          "create": 337,
+          "query_parse_or_post_parse_evaluate": 1199408,
+          "through_request_body": 1206630,
+          "full_request_including_drop": 1234321
+        },
+        "get-late": {
+          "create": 371,
+          "query_parse_or_post_parse_evaluate": 1194287,
+          "through_request_body": 1198690,
+          "full_request_including_drop": 1227264
+        },
+        "post-late": {
+          "create": 375,
+          "query_parse_or_post_parse_evaluate": 1231882,
+          "through_request_body": 1239328,
+          "full_request_including_drop": 1264870
+        },
+        "get-dense": {
+          "create": 348,
+          "query_parse_or_post_parse_evaluate": 1485403,
+          "through_request_body": 1489433,
+          "full_request_including_drop": 1516255
+        },
+        "post-dense": {
+          "create": 358,
+          "query_parse_or_post_parse_evaluate": 1431708,
+          "through_request_body": 1439498,
+          "full_request_including_drop": 1466381
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 11.538461538461542,
+      "before": 43.24324324324324
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 257,
+          "query_parse_or_post_parse_evaluate": 995676,
+          "through_request_body": 998164,
+          "full_request_including_drop": 1020230
+        },
+        "post-plain": {
+          "create": 252,
+          "query_parse_or_post_parse_evaluate": 992601,
+          "through_request_body": 997689,
+          "full_request_including_drop": 1019199
+        },
+        "get-early": {
+          "create": 232,
+          "query_parse_or_post_parse_evaluate": 977828,
+          "through_request_body": 980251,
+          "full_request_including_drop": 1000743
+        },
+        "post-early": {
+          "create": 228,
+          "query_parse_or_post_parse_evaluate": 988954,
+          "through_request_body": 993853,
+          "full_request_including_drop": 1016367
+        },
+        "get-late": {
+          "create": 234,
+          "query_parse_or_post_parse_evaluate": 1015307,
+          "through_request_body": 1017905,
+          "full_request_including_drop": 1040117
+        },
+        "post-late": {
+          "create": 255,
+          "query_parse_or_post_parse_evaluate": 982905,
+          "through_request_body": 987878,
+          "full_request_including_drop": 1009231
+        },
+        "get-dense": {
+          "create": 226,
+          "query_parse_or_post_parse_evaluate": 1282044,
+          "through_request_body": 1284537,
+          "full_request_including_drop": 1307351
+        },
+        "post-dense": {
+          "create": 254,
+          "query_parse_or_post_parse_evaluate": 1286390,
+          "through_request_body": 1292394,
+          "full_request_including_drop": 1314164
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 339,
+          "query_parse_or_post_parse_evaluate": 886443,
+          "through_request_body": 889577,
+          "full_request_including_drop": 907963
+        },
+        "post-plain": {
+          "create": 313,
+          "query_parse_or_post_parse_evaluate": 890880,
+          "through_request_body": 897233,
+          "full_request_including_drop": 946952
+        },
+        "get-early": {
+          "create": 314,
+          "query_parse_or_post_parse_evaluate": 894857,
+          "through_request_body": 898199,
+          "full_request_including_drop": 916541
+        },
+        "post-early": {
+          "create": 310,
+          "query_parse_or_post_parse_evaluate": 941246,
+          "through_request_body": 947896,
+          "full_request_including_drop": 965873
+        },
+        "get-late": {
+          "create": 309,
+          "query_parse_or_post_parse_evaluate": 881096,
+          "through_request_body": 884105,
+          "full_request_including_drop": 902051
+        },
+        "post-late": {
+          "create": 293,
+          "query_parse_or_post_parse_evaluate": 917939,
+          "through_request_body": 924227,
+          "full_request_including_drop": 942974
+        },
+        "get-dense": {
+          "create": 339,
+          "query_parse_or_post_parse_evaluate": 1360433,
+          "through_request_body": 1363929,
+          "full_request_including_drop": 1381735
+        },
+        "post-dense": {
+          "create": 319,
+          "query_parse_or_post_parse_evaluate": 1396715,
+          "through_request_body": 1403875,
+          "full_request_including_drop": 1422513
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 16.666666666666664,
+      "after": 24.13793103448276
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 285,
+          "query_parse_or_post_parse_evaluate": 880489,
+          "through_request_body": 883365,
+          "full_request_including_drop": 904002
+        },
+        "post-plain": {
+          "create": 286,
+          "query_parse_or_post_parse_evaluate": 869282,
+          "through_request_body": 874926,
+          "full_request_including_drop": 892894
+        },
+        "get-early": {
+          "create": 284,
+          "query_parse_or_post_parse_evaluate": 913938,
+          "through_request_body": 917116,
+          "full_request_including_drop": 936154
+        },
+        "post-early": {
+          "create": 297,
+          "query_parse_or_post_parse_evaluate": 925390,
+          "through_request_body": 931512,
+          "full_request_including_drop": 949274
+        },
+        "get-late": {
+          "create": 268,
+          "query_parse_or_post_parse_evaluate": 884234,
+          "through_request_body": 887041,
+          "full_request_including_drop": 905032
+        },
+        "post-late": {
+          "create": 269,
+          "query_parse_or_post_parse_evaluate": 898423,
+          "through_request_body": 903963,
+          "full_request_including_drop": 921520
+        },
+        "get-dense": {
+          "create": 273,
+          "query_parse_or_post_parse_evaluate": 1367183,
+          "through_request_body": 1370124,
+          "full_request_including_drop": 1388441
+        },
+        "post-dense": {
+          "create": 281,
+          "query_parse_or_post_parse_evaluate": 1329019,
+          "through_request_body": 1335084,
+          "full_request_including_drop": 1353640
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 245,
+          "query_parse_or_post_parse_evaluate": 1000635,
+          "through_request_body": 1002905,
+          "full_request_including_drop": 1023804
+        },
+        "post-plain": {
+          "create": 231,
+          "query_parse_or_post_parse_evaluate": 979424,
+          "through_request_body": 984156,
+          "full_request_including_drop": 1005088
+        },
+        "get-early": {
+          "create": 232,
+          "query_parse_or_post_parse_evaluate": 1011743,
+          "through_request_body": 1013942,
+          "full_request_including_drop": 1034557
+        },
+        "post-early": {
+          "create": 224,
+          "query_parse_or_post_parse_evaluate": 969126,
+          "through_request_body": 973796,
+          "full_request_including_drop": 993922
+        },
+        "get-late": {
+          "create": 214,
+          "query_parse_or_post_parse_evaluate": 967825,
+          "through_request_body": 969726,
+          "full_request_including_drop": 990260
+        },
+        "post-late": {
+          "create": 206,
+          "query_parse_or_post_parse_evaluate": 972061,
+          "through_request_body": 976573,
+          "full_request_including_drop": 996911
+        },
+        "get-dense": {
+          "create": 223,
+          "query_parse_or_post_parse_evaluate": 1243281,
+          "through_request_body": 1245512,
+          "full_request_including_drop": 1267028
+        },
+        "post-dense": {
+          "create": 238,
+          "query_parse_or_post_parse_evaluate": 1217777,
+          "through_request_body": 1222863,
+          "full_request_including_drop": 1243883
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 27.586206896551722,
+      "before": 18.75
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 221,
+          "query_parse_or_post_parse_evaluate": 966160,
+          "through_request_body": 968125,
+          "full_request_including_drop": 988088
+        },
+        "post-plain": {
+          "create": 220,
+          "query_parse_or_post_parse_evaluate": 953431,
+          "through_request_body": 957622,
+          "full_request_including_drop": 979539
+        },
+        "get-early": {
+          "create": 220,
+          "query_parse_or_post_parse_evaluate": 971419,
+          "through_request_body": 973309,
+          "full_request_including_drop": 993634
+        },
+        "post-early": {
+          "create": 211,
+          "query_parse_or_post_parse_evaluate": 951949,
+          "through_request_body": 956141,
+          "full_request_including_drop": 977087
+        },
+        "get-late": {
+          "create": 201,
+          "query_parse_or_post_parse_evaluate": 959551,
+          "through_request_body": 961270,
+          "full_request_including_drop": 980904
+        },
+        "post-late": {
+          "create": 201,
+          "query_parse_or_post_parse_evaluate": 962268,
+          "through_request_body": 966390,
+          "full_request_including_drop": 988204
+        },
+        "get-dense": {
+          "create": 209,
+          "query_parse_or_post_parse_evaluate": 1217384,
+          "through_request_body": 1219261,
+          "full_request_including_drop": 1239487
+        },
+        "post-dense": {
+          "create": 207,
+          "query_parse_or_post_parse_evaluate": 1203199,
+          "through_request_body": 1207765,
+          "full_request_including_drop": 1230271
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 309,
+          "query_parse_or_post_parse_evaluate": 917769,
+          "through_request_body": 920887,
+          "full_request_including_drop": 939160
+        },
+        "post-plain": {
+          "create": 290,
+          "query_parse_or_post_parse_evaluate": 860975,
+          "through_request_body": 867079,
+          "full_request_including_drop": 885416
+        },
+        "get-early": {
+          "create": 303,
+          "query_parse_or_post_parse_evaluate": 898629,
+          "through_request_body": 901932,
+          "full_request_including_drop": 920919
+        },
+        "post-early": {
+          "create": 306,
+          "query_parse_or_post_parse_evaluate": 923779,
+          "through_request_body": 930226,
+          "full_request_including_drop": 948670
+        },
+        "get-late": {
+          "create": 305,
+          "query_parse_or_post_parse_evaluate": 903602,
+          "through_request_body": 906615,
+          "full_request_including_drop": 924347
+        },
+        "post-late": {
+          "create": 286,
+          "query_parse_or_post_parse_evaluate": 911750,
+          "through_request_body": 918240,
+          "full_request_including_drop": 936263
+        },
+        "get-dense": {
+          "create": 291,
+          "query_parse_or_post_parse_evaluate": 1267645,
+          "through_request_body": 1270972,
+          "full_request_including_drop": 1289370
+        },
+        "post-dense": {
+          "create": 304,
+          "query_parse_or_post_parse_evaluate": 1299778,
+          "through_request_body": 1306701,
+          "full_request_including_drop": 1325274
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 3.3333333333333326,
+      "after": 28.57142857142857
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 305,
+          "query_parse_or_post_parse_evaluate": 920371,
+          "through_request_body": 923810,
+          "full_request_including_drop": 942705
+        },
+        "post-plain": {
+          "create": 293,
+          "query_parse_or_post_parse_evaluate": 878761,
+          "through_request_body": 885506,
+          "full_request_including_drop": 904647
+        },
+        "get-early": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 904924,
+          "through_request_body": 908665,
+          "full_request_including_drop": 928352
+        },
+        "post-early": {
+          "create": 318,
+          "query_parse_or_post_parse_evaluate": 925993,
+          "through_request_body": 932927,
+          "full_request_including_drop": 951567
+        },
+        "get-late": {
+          "create": 305,
+          "query_parse_or_post_parse_evaluate": 891588,
+          "through_request_body": 894902,
+          "full_request_including_drop": 912515
+        },
+        "post-late": {
+          "create": 272,
+          "query_parse_or_post_parse_evaluate": 827168,
+          "through_request_body": 833896,
+          "full_request_including_drop": 851194
+        },
+        "get-dense": {
+          "create": 269,
+          "query_parse_or_post_parse_evaluate": 1263552,
+          "through_request_body": 1266876,
+          "full_request_including_drop": 1284687
+        },
+        "post-dense": {
+          "create": 281,
+          "query_parse_or_post_parse_evaluate": 1376765,
+          "through_request_body": 1383812,
+          "full_request_including_drop": 1403209
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 301,
+          "query_parse_or_post_parse_evaluate": 1075693,
+          "through_request_body": 1078724,
+          "full_request_including_drop": 1102882
+        },
+        "post-plain": {
+          "create": 306,
+          "query_parse_or_post_parse_evaluate": 1054195,
+          "through_request_body": 1059296,
+          "full_request_including_drop": 1082495
+        },
+        "get-early": {
+          "create": 456,
+          "query_parse_or_post_parse_evaluate": 1052241,
+          "through_request_body": 1055133,
+          "full_request_including_drop": 1079202
+        },
+        "post-early": {
+          "create": 294,
+          "query_parse_or_post_parse_evaluate": 1044880,
+          "through_request_body": 1050054,
+          "full_request_including_drop": 1072200
+        },
+        "get-late": {
+          "create": 263,
+          "query_parse_or_post_parse_evaluate": 1059598,
+          "through_request_body": 1062442,
+          "full_request_including_drop": 1087722
+        },
+        "post-late": {
+          "create": 280,
+          "query_parse_or_post_parse_evaluate": 1035232,
+          "through_request_body": 1040553,
+          "full_request_including_drop": 1062499
+        },
+        "get-dense": {
+          "create": 290,
+          "query_parse_or_post_parse_evaluate": 1314432,
+          "through_request_body": 1317662,
+          "full_request_including_drop": 1340861
+        },
+        "post-dense": {
+          "create": 281,
+          "query_parse_or_post_parse_evaluate": 1326502,
+          "through_request_body": 1332175,
+          "full_request_including_drop": 1356789
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 30.000000000000004,
+      "before": 21.212121212121215
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "get-plain": {
+          "create": 328,
+          "query_parse_or_post_parse_evaluate": 1112203,
+          "through_request_body": 1115257,
+          "full_request_including_drop": 1139368
+        },
+        "post-plain": {
+          "create": 289,
+          "query_parse_or_post_parse_evaluate": 1101346,
+          "through_request_body": 1106605,
+          "full_request_including_drop": 1130238
+        },
+        "get-early": {
+          "create": 278,
+          "query_parse_or_post_parse_evaluate": 1089522,
+          "through_request_body": 1092704,
+          "full_request_including_drop": 1116576
+        },
+        "post-early": {
+          "create": 295,
+          "query_parse_or_post_parse_evaluate": 1092741,
+          "through_request_body": 1098017,
+          "full_request_including_drop": 1122702
+        },
+        "get-late": {
+          "create": 302,
+          "query_parse_or_post_parse_evaluate": 1104380,
+          "through_request_body": 1107372,
+          "full_request_including_drop": 1130555
+        },
+        "post-late": {
+          "create": 315,
+          "query_parse_or_post_parse_evaluate": 1110123,
+          "through_request_body": 1115546,
+          "full_request_including_drop": 1140108
+        },
+        "get-dense": {
+          "create": 299,
+          "query_parse_or_post_parse_evaluate": 1374602,
+          "through_request_body": 1377974,
+          "full_request_including_drop": 1402088
+        },
+        "post-dense": {
+          "create": 316,
+          "query_parse_or_post_parse_evaluate": 1320162,
+          "through_request_body": 1326093,
+          "full_request_including_drop": 1350284
+        }
+      },
+      "after": {
+        "get-plain": {
+          "create": 325,
+          "query_parse_or_post_parse_evaluate": 941473,
+          "through_request_body": 944834,
+          "full_request_including_drop": 963659
+        },
+        "post-plain": {
+          "create": 315,
+          "query_parse_or_post_parse_evaluate": 929775,
+          "through_request_body": 935430,
+          "full_request_including_drop": 954935
+        },
+        "get-early": {
+          "create": 315,
+          "query_parse_or_post_parse_evaluate": 910035,
+          "through_request_body": 913343,
+          "full_request_including_drop": 932097
+        },
+        "post-early": {
+          "create": 295,
+          "query_parse_or_post_parse_evaluate": 923863,
+          "through_request_body": 929570,
+          "full_request_including_drop": 948730
+        },
+        "get-late": {
+          "create": 304,
+          "query_parse_or_post_parse_evaluate": 897157,
+          "through_request_body": 900503,
+          "full_request_including_drop": 919539
+        },
+        "post-late": {
+          "create": 326,
+          "query_parse_or_post_parse_evaluate": 951807,
+          "through_request_body": 957808,
+          "full_request_including_drop": 977594
+        },
+        "get-dense": {
+          "create": 355,
+          "query_parse_or_post_parse_evaluate": 1362469,
+          "through_request_body": 1365943,
+          "full_request_including_drop": 1384512
+        },
+        "post-dense": {
+          "create": 322,
+          "query_parse_or_post_parse_evaluate": 1363344,
+          "through_request_body": 1369754,
+          "full_request_including_drop": 1388551
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 26.470588235294112,
+      "after": 31.034482758620683
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "get-plain": {
+          "create": 344,
+          "query_parse_or_post_parse_evaluate": 925682,
+          "through_request_body": 929816,
+          "full_request_including_drop": 948851
+        },
+        "post-plain": {
+          "create": 347,
+          "query_parse_or_post_parse_evaluate": 891723,
+          "through_request_body": 898012,
+          "full_request_including_drop": 917420
+        },
+        "get-early": {
+          "create": 331,
+          "query_parse_or_post_parse_evaluate": 957557,
+          "through_request_body": 961831,
+          "full_request_including_drop": 982997
+        },
+        "post-early": {
+          "create": 368,
+          "query_parse_or_post_parse_evaluate": 945099,
+          "through_request_body": 951960,
+          "full_request_including_drop": 971673
+        },
+        "get-late": {
+          "create": 352,
+          "query_parse_or_post_parse_evaluate": 906399,
+          "through_request_body": 940569,
+          "full_request_including_drop": 960149
+        },
+        "post-late": {
+          "create": 335,
+          "query_parse_or_post_parse_evaluate": 961359,
+          "through_request_body": 968550,
+          "full_request_including_drop": 988005
+        },
+        "get-dense": {
+          "create": 332,
+          "query_parse_or_post_parse_evaluate": 1387194,
+          "through_request_body": 1391400,
+          "full_request_including_drop": 1411001
+        },
+        "post-dense": {
+          "create": 349,
+          "query_parse_or_post_parse_evaluate": 1381535,
+          "through_request_body": 1389300,
+          "full_request_including_drop": 1409027
+        }
+      },
+      "before": {
+        "get-plain": {
+          "create": 334,
+          "query_parse_or_post_parse_evaluate": 1099087,
+          "through_request_body": 1102801,
+          "full_request_including_drop": 1129744
+        },
+        "post-plain": {
+          "create": 337,
+          "query_parse_or_post_parse_evaluate": 1127898,
+          "through_request_body": 1134101,
+          "full_request_including_drop": 1159808
+        },
+        "get-early": {
+          "create": 362,
+          "query_parse_or_post_parse_evaluate": 1132190,
+          "through_request_body": 1136049,
+          "full_request_including_drop": 1161174
+        },
+        "post-early": {
+          "create": 328,
+          "query_parse_or_post_parse_evaluate": 1095099,
+          "through_request_body": 1101238,
+          "full_request_including_drop": 1125283
+        },
+        "get-late": {
+          "create": 307,
+          "query_parse_or_post_parse_evaluate": 1150952,
+          "through_request_body": 1154370,
+          "full_request_including_drop": 1177433
+        },
+        "post-late": {
+          "create": 301,
+          "query_parse_or_post_parse_evaluate": 1071041,
+          "through_request_body": 1077243,
+          "full_request_including_drop": 1100960
+        },
+        "get-dense": {
+          "create": 308,
+          "query_parse_or_post_parse_evaluate": 1443346,
+          "through_request_body": 1447163,
+          "full_request_including_drop": 1473328
+        },
+        "post-dense": {
+          "create": 340,
+          "query_parse_or_post_parse_evaluate": 1339802,
+          "through_request_body": 1346459,
+          "full_request_including_drop": 1370936
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 38.70967741935484,
+      "before": 35.13513513513513
+    }
+  }
+]

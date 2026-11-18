@@ -1,0 +1,54 @@
+{
+  "resident_sha256": "93ee000894d6a2ce78b9218fb7b703274cf345e75ba5043d476a8fa9ab268ff1",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "fixtures": {
+    "varied": {
+      "fixture": "edge-full.rs",
+      "fixture_sha256": "47269d41befafe98286932e3a274759eb6083b61f96d5104d8f89bd3d0b34ff7",
+      "workers": {
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "f68f7be55c9fadb3c2ef2c8f2612e4bb5a31d32f153399ed65e55948798d3e60",
+        "20db5d8b74fd3ecc926f9375b734fb30e35e43e1": "c1207cbc2b482d387e37d4b2ba56356c9f9981d63a46a55f1e875ffd4ff72975"
+      }
+    },
+    "additional": {
+      "fixture": "additional-full.rs",
+      "fixture_sha256": "0a7cec5c96e9e44d6b3c053ade6b53de4ceb2d681409510037ae8fe4592cacb9",
+      "workers": {
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "174f22cff55851a84b80006485da3ef4ace9165c888f54519ec513529c507922",
+        "20db5d8b74fd3ecc926f9375b734fb30e35e43e1": "cc9a30d115fb73372825dbb06cce45d1e7fdc0d8b4f7dacd80208abbf735fed5"
+      }
+    },
+    "coverage": {
+      "fixture": "coverage-full.rs",
+      "fixture_sha256": "2ab5f0dea9ea16dafdf0ee3f2b2104efe7dd7414927439e4abc557d5f88313b4",
+      "workers": {
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "8c5d744ec178221c8a41900be4377635bdc0ef5e193c0dded9f49ad731720b64",
+        "20db5d8b74fd3ecc926f9375b734fb30e35e43e1": "382c7d9043de03ee4bb8e6fbfa8589ec3f95c97fe1176e87cc328161f07422ca"
+      }
+    },
+    "limits": {
+      "fixture": "limits-full.rs",
+      "fixture_sha256": "b2a2e73c99842bc2ae9cbbe85f7d56f3a70bb2cc70bfcca0349fb23c601494fd",
+      "workers": {
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "2c44731fd21fb39b08c6e8ec545956ec43d09440d76428254f6ab07c03f8bbf9",
+        "20db5d8b74fd3ecc926f9375b734fb30e35e43e1": "b116ae959548c56d51a25a56b91e99e5ba9e93b6e820da48d7dd0abbf7b3345c"
+      }
+    },
+    "large": {
+      "fixture": "large-full.rs",
+      "fixture_sha256": "0fb54a4deb7243150f7875c68a577ff3b8f63d9dcfc68b394e619c0430b69191",
+      "workers": {
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "b42e100618620f414e5d2e8d45e327ee98aecc3324299121bd5d013fd83fc012",
+        "20db5d8b74fd3ecc926f9375b734fb30e35e43e1": "4f555fc0fd016d4ea60604c6a7f3d6483d2b980244339e12d8bde068033c5e0a"
+      }
+    },
+    "full-large": {
+      "fixture": "8192-full.rs",
+      "fixture_sha256": "1a962e80c1e2c50ee945e25d5ecab941d0670ae69a414e8ad9c2240db19e8ddc",
+      "workers": {
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "9fa83f8a9b32684b04cfd3016ca57eed97f4709af9134b53bc055427801806d9",
+        "20db5d8b74fd3ecc926f9375b734fb30e35e43e1": "1533f497ad3d8a575d0836b64bc535d2f6e2c26fca8c3f71bd6ca990de02bcde"
+      }
+    }
+  }
+}

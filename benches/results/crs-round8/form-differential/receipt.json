@@ -1,0 +1,23 @@
+{
+  "fixture_sha256": "3c13829e7d36d3b36d3fcb7bd2a58ab275bdcb19fc074dca0975b58a217c937e",
+  "source": "Canonical lookup key, observed name, and value for every GET and form POST member, length-prefixed in iteration order.",
+  "identical": true,
+  "sides": {
+    "before": {
+      "commit": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+      "rlib": "1346c63caf450d83671855dc15d19e0baace5cdafb20b618f93a9ce9c7ea3a78",
+      "worker": "7dcfed4ad5088b5e6063271018d42e0ffef11f252a4da956e3e27e8fe99b2248",
+      "stdout": "4cb314cae217d21d4af8e7c263bdbca439b7612b4deaa19d0a1482f0f940f5bf",
+      "output_bytes": 2575050,
+      "input_count": "6192 inputs, GET and form POST"
+    },
+    "after": {
+      "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+      "rlib": "a63ff0bb5a53447571955279a1a7571f98ba7c106e4972f7a9e10b254daef454",
+      "worker": "099cba01051d9b8ecc15556e84243bee9a79c18242f8e6c354fa5a53121ac06a",
+      "stdout": "4cb314cae217d21d4af8e7c263bdbca439b7612b4deaa19d0a1482f0f940f5bf",
+      "output_bytes": 2575050,
+      "input_count": "6192 inputs, GET and form POST"
+    }
+  }
+}

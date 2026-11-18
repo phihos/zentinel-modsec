@@ -1,0 +1,834 @@
+[
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 599,
+          "parse_uri": 2959444,
+          "request_headers_phase": 11508,
+          "full_request_including_drop": 3123609
+        },
+        "miss": {
+          "create": 651,
+          "parse_uri": 3540576,
+          "request_headers_phase": 3548,
+          "full_request_including_drop": 3934715
+        },
+        "absent": {
+          "create": 744,
+          "parse_uri": 2524516,
+          "request_headers_phase": 1444,
+          "full_request_including_drop": 2669071
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 450,
+          "parse_uri": 1792537,
+          "request_headers_phase": 6347,
+          "full_request_including_drop": 1925118
+        },
+        "miss": {
+          "create": 472,
+          "parse_uri": 1775741,
+          "request_headers_phase": 2132,
+          "full_request_including_drop": 1888922
+        },
+        "absent": {
+          "create": 527,
+          "parse_uri": 1623980,
+          "request_headers_phase": 950,
+          "full_request_including_drop": 1733475
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 100.0,
+      "after": 70.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 522,
+          "parse_uri": 2097605,
+          "request_headers_phase": 7145,
+          "full_request_including_drop": 2222926
+        },
+        "miss": {
+          "create": 516,
+          "parse_uri": 2079770,
+          "request_headers_phase": 2108,
+          "full_request_including_drop": 2200101
+        },
+        "absent": {
+          "create": 521,
+          "parse_uri": 2177368,
+          "request_headers_phase": 1127,
+          "full_request_including_drop": 2391496
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 387,
+          "parse_uri": 1667104,
+          "request_headers_phase": 4777,
+          "full_request_including_drop": 1765633
+        },
+        "miss": {
+          "create": 386,
+          "parse_uri": 1644057,
+          "request_headers_phase": 1641,
+          "full_request_including_drop": 1744737
+        },
+        "absent": {
+          "create": 391,
+          "parse_uri": 1768462,
+          "request_headers_phase": 885,
+          "full_request_including_drop": 1872523
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 79.3103448275862,
+      "before": 36.8421052631579
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 574,
+          "parse_uri": 2195172,
+          "request_headers_phase": 8622,
+          "full_request_including_drop": 2331145
+        },
+        "miss": {
+          "create": 554,
+          "parse_uri": 2299364,
+          "request_headers_phase": 2542,
+          "full_request_including_drop": 2426447
+        },
+        "absent": {
+          "create": 547,
+          "parse_uri": 2533908,
+          "request_headers_phase": 1407,
+          "full_request_including_drop": 2657192
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 805,
+          "parse_uri": 2401337,
+          "request_headers_phase": 8935,
+          "full_request_including_drop": 2535960
+        },
+        "miss": {
+          "create": 36642,
+          "parse_uri": 2488574,
+          "request_headers_phase": 2501,
+          "full_request_including_drop": 2645074
+        },
+        "absent": {
+          "create": 583,
+          "parse_uri": 2293755,
+          "request_headers_phase": 1255,
+          "full_request_including_drop": 2420691
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 92.5925925925926,
+      "after": 100.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 526,
+          "parse_uri": 2305142,
+          "request_headers_phase": 8969,
+          "full_request_including_drop": 2448631
+        },
+        "miss": {
+          "create": 662,
+          "parse_uri": 2459357,
+          "request_headers_phase": 2797,
+          "full_request_including_drop": 2605303
+        },
+        "absent": {
+          "create": 545,
+          "parse_uri": 2187078,
+          "request_headers_phase": 1205,
+          "full_request_including_drop": 2315729
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 544,
+          "parse_uri": 2674537,
+          "request_headers_phase": 9820,
+          "full_request_including_drop": 2835077
+        },
+        "miss": {
+          "create": 537,
+          "parse_uri": 2605432,
+          "request_headers_phase": 2734,
+          "full_request_including_drop": 2742065
+        },
+        "absent": {
+          "create": 567,
+          "parse_uri": 2477868,
+          "request_headers_phase": 1251,
+          "full_request_including_drop": 2618045
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 100.0,
+      "before": 100.0
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 507,
+          "parse_uri": 2203751,
+          "request_headers_phase": 7273,
+          "full_request_including_drop": 2334256
+        },
+        "miss": {
+          "create": 526,
+          "parse_uri": 2198237,
+          "request_headers_phase": 2281,
+          "full_request_including_drop": 2322195
+        },
+        "absent": {
+          "create": 604,
+          "parse_uri": 2244729,
+          "request_headers_phase": 1167,
+          "full_request_including_drop": 2366723
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 449,
+          "parse_uri": 1713762,
+          "request_headers_phase": 6174,
+          "full_request_including_drop": 1841242
+        },
+        "miss": {
+          "create": 453,
+          "parse_uri": 1709652,
+          "request_headers_phase": 2107,
+          "full_request_including_drop": 1831945
+        },
+        "absent": {
+          "create": 439,
+          "parse_uri": 1764839,
+          "request_headers_phase": 995,
+          "full_request_including_drop": 1885554
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 85.71428571428572,
+      "after": 63.1578947368421
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 542,
+          "parse_uri": 1976986,
+          "request_headers_phase": 6800,
+          "full_request_including_drop": 2114277
+        },
+        "miss": {
+          "create": 540,
+          "parse_uri": 1961131,
+          "request_headers_phase": 2356,
+          "full_request_including_drop": 2094396
+        },
+        "absent": {
+          "create": 542,
+          "parse_uri": 2016264,
+          "request_headers_phase": 1136,
+          "full_request_including_drop": 2145564
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 644,
+          "parse_uri": 2448240,
+          "request_headers_phase": 9176,
+          "full_request_including_drop": 2600627
+        },
+        "miss": {
+          "create": 544,
+          "parse_uri": 2434601,
+          "request_headers_phase": 2513,
+          "full_request_including_drop": 2582250
+        },
+        "absent": {
+          "create": 564,
+          "parse_uri": 2398445,
+          "request_headers_phase": 1278,
+          "full_request_including_drop": 2604236
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 100.0,
+      "before": 100.0
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 563,
+          "parse_uri": 2344855,
+          "request_headers_phase": 8602,
+          "full_request_including_drop": 2484165
+        },
+        "miss": {
+          "create": 628,
+          "parse_uri": 2418707,
+          "request_headers_phase": 2646,
+          "full_request_including_drop": 2552894
+        },
+        "absent": {
+          "create": 597,
+          "parse_uri": 2364355,
+          "request_headers_phase": 1350,
+          "full_request_including_drop": 2496245
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 551,
+          "parse_uri": 1989358,
+          "request_headers_phase": 7610,
+          "full_request_including_drop": 2120609
+        },
+        "miss": {
+          "create": 537,
+          "parse_uri": 2043280,
+          "request_headers_phase": 2307,
+          "full_request_including_drop": 2164147
+        },
+        "absent": {
+          "create": 537,
+          "parse_uri": 2002851,
+          "request_headers_phase": 1126,
+          "full_request_including_drop": 2157749
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 88.88888888888889,
+      "after": 91.66666666666666
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 557,
+          "parse_uri": 2107289,
+          "request_headers_phase": 8041,
+          "full_request_including_drop": 2257829
+        },
+        "miss": {
+          "create": 561,
+          "parse_uri": 2537977,
+          "request_headers_phase": 2772,
+          "full_request_including_drop": 2670786
+        },
+        "absent": {
+          "create": 552,
+          "parse_uri": 2229273,
+          "request_headers_phase": 1204,
+          "full_request_including_drop": 2571351
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 628,
+          "parse_uri": 2683943,
+          "request_headers_phase": 10421,
+          "full_request_including_drop": 2827548
+        },
+        "miss": {
+          "create": 625,
+          "parse_uri": 2466587,
+          "request_headers_phase": 2959,
+          "full_request_including_drop": 2602082
+        },
+        "absent": {
+          "create": 619,
+          "parse_uri": 2608389,
+          "request_headers_phase": 1533,
+          "full_request_including_drop": 2773941
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 92.85714285714286,
+      "before": 100.0
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 610,
+          "parse_uri": 2463949,
+          "request_headers_phase": 7790,
+          "full_request_including_drop": 2606244
+        },
+        "miss": {
+          "create": 611,
+          "parse_uri": 2447582,
+          "request_headers_phase": 2794,
+          "full_request_including_drop": 2610356
+        },
+        "absent": {
+          "create": 608,
+          "parse_uri": 2461479,
+          "request_headers_phase": 1445,
+          "full_request_including_drop": 2598434
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 600,
+          "parse_uri": 2212308,
+          "request_headers_phase": 7735,
+          "full_request_including_drop": 2351589
+        },
+        "miss": {
+          "create": 566,
+          "parse_uri": 2238030,
+          "request_headers_phase": 2669,
+          "full_request_including_drop": 2373636
+        },
+        "absent": {
+          "create": 591,
+          "parse_uri": 2167888,
+          "request_headers_phase": 1345,
+          "full_request_including_drop": 2301355
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 100.0,
+      "after": 100.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 595,
+          "parse_uri": 2162527,
+          "request_headers_phase": 8368,
+          "full_request_including_drop": 2302566
+        },
+        "miss": {
+          "create": 576,
+          "parse_uri": 2110939,
+          "request_headers_phase": 2630,
+          "full_request_including_drop": 2242105
+        },
+        "absent": {
+          "create": 594,
+          "parse_uri": 2045041,
+          "request_headers_phase": 1334,
+          "full_request_including_drop": 2206090
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 582,
+          "parse_uri": 2340664,
+          "request_headers_phase": 7597,
+          "full_request_including_drop": 2485327
+        },
+        "miss": {
+          "create": 610,
+          "parse_uri": 2379531,
+          "request_headers_phase": 2691,
+          "full_request_including_drop": 2516167
+        },
+        "absent": {
+          "create": 586,
+          "parse_uri": 2393456,
+          "request_headers_phase": 1429,
+          "full_request_including_drop": 2533095
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 100.0,
+      "before": 100.0
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 615,
+          "parse_uri": 2488885,
+          "request_headers_phase": 8944,
+          "full_request_including_drop": 2665001
+        },
+        "miss": {
+          "create": 600,
+          "parse_uri": 2615976,
+          "request_headers_phase": 2804,
+          "full_request_including_drop": 2820883
+        },
+        "absent": {
+          "create": 601,
+          "parse_uri": 2603089,
+          "request_headers_phase": 1446,
+          "full_request_including_drop": 2789009
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 601,
+          "parse_uri": 2626983,
+          "request_headers_phase": 9680,
+          "full_request_including_drop": 2769123
+        },
+        "miss": {
+          "create": 631,
+          "parse_uri": 2328723,
+          "request_headers_phase": 3029,
+          "full_request_including_drop": 2463109
+        },
+        "absent": {
+          "create": 595,
+          "parse_uri": 2229370,
+          "request_headers_phase": 1350,
+          "full_request_including_drop": 2362722
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 96.7741935483871,
+      "after": 100.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 597,
+          "parse_uri": 2108697,
+          "request_headers_phase": 9134,
+          "full_request_including_drop": 2244602
+        },
+        "miss": {
+          "create": 591,
+          "parse_uri": 2406609,
+          "request_headers_phase": 2824,
+          "full_request_including_drop": 2534934
+        },
+        "absent": {
+          "create": 628,
+          "parse_uri": 2237879,
+          "request_headers_phase": 1333,
+          "full_request_including_drop": 2370319
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 542,
+          "parse_uri": 2433685,
+          "request_headers_phase": 8072,
+          "full_request_including_drop": 2573156
+        },
+        "miss": {
+          "create": 548,
+          "parse_uri": 2328752,
+          "request_headers_phase": 2697,
+          "full_request_including_drop": 2669963
+        },
+        "absent": {
+          "create": 568,
+          "parse_uri": 2472410,
+          "request_headers_phase": 1396,
+          "full_request_including_drop": 2637559
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 100.0,
+      "before": 89.65517241379311
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 608,
+          "parse_uri": 2866920,
+          "request_headers_phase": 11076,
+          "full_request_including_drop": 3022139
+        },
+        "miss": {
+          "create": 666,
+          "parse_uri": 2800663,
+          "request_headers_phase": 2978,
+          "full_request_including_drop": 2977951
+        },
+        "absent": {
+          "create": 594,
+          "parse_uri": 2936441,
+          "request_headers_phase": 1498,
+          "full_request_including_drop": 3078047
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 598,
+          "parse_uri": 2504094,
+          "request_headers_phase": 9817,
+          "full_request_including_drop": 2661532
+        },
+        "miss": {
+          "create": 609,
+          "parse_uri": 2515045,
+          "request_headers_phase": 2864,
+          "full_request_including_drop": 2698660
+        },
+        "absent": {
+          "create": 593,
+          "parse_uri": 2414020,
+          "request_headers_phase": 1387,
+          "full_request_including_drop": 2558850
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 100.0,
+      "after": 100.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 584,
+          "parse_uri": 2681208,
+          "request_headers_phase": 11183,
+          "full_request_including_drop": 2903920
+        },
+        "miss": {
+          "create": 598,
+          "parse_uri": 2385117,
+          "request_headers_phase": 2982,
+          "full_request_including_drop": 2750680
+        },
+        "absent": {
+          "create": 588,
+          "parse_uri": 2656315,
+          "request_headers_phase": 1397,
+          "full_request_including_drop": 2821829
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 599,
+          "parse_uri": 2686846,
+          "request_headers_phase": 42595,
+          "full_request_including_drop": 2887977
+        },
+        "miss": {
+          "create": 613,
+          "parse_uri": 2666826,
+          "request_headers_phase": 2838,
+          "full_request_including_drop": 2816708
+        },
+        "absent": {
+          "create": 611,
+          "parse_uri": 2932702,
+          "request_headers_phase": 1531,
+          "full_request_including_drop": 3084717
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 100.0,
+      "before": 100.0
+    }
+  },
+  {
+    "order": [
+      "before",
+      "after"
+    ],
+    "ns": {
+      "before": {
+        "hit": {
+          "create": 591,
+          "parse_uri": 2602672,
+          "request_headers_phase": 8498,
+          "full_request_including_drop": 2755267
+        },
+        "miss": {
+          "create": 598,
+          "parse_uri": 2601112,
+          "request_headers_phase": 2831,
+          "full_request_including_drop": 2742934
+        },
+        "absent": {
+          "create": 608,
+          "parse_uri": 2623009,
+          "request_headers_phase": 1455,
+          "full_request_including_drop": 2821457
+        }
+      },
+      "after": {
+        "hit": {
+          "create": 622,
+          "parse_uri": 2419415,
+          "request_headers_phase": 9755,
+          "full_request_including_drop": 2583030
+        },
+        "miss": {
+          "create": 598,
+          "parse_uri": 2449525,
+          "request_headers_phase": 2906,
+          "full_request_including_drop": 2630639
+        },
+        "absent": {
+          "create": 604,
+          "parse_uri": 2848529,
+          "request_headers_phase": 1402,
+          "full_request_including_drop": 3014417
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "before": 100.0,
+      "after": 100.0
+    }
+  },
+  {
+    "order": [
+      "after",
+      "before"
+    ],
+    "ns": {
+      "after": {
+        "hit": {
+          "create": 613,
+          "parse_uri": 2380061,
+          "request_headers_phase": 8921,
+          "full_request_including_drop": 2533345
+        },
+        "miss": {
+          "create": 596,
+          "parse_uri": 2370707,
+          "request_headers_phase": 2905,
+          "full_request_including_drop": 2534019
+        },
+        "absent": {
+          "create": 598,
+          "parse_uri": 2435242,
+          "request_headers_phase": 1292,
+          "full_request_including_drop": 2650179
+        }
+      },
+      "before": {
+        "hit": {
+          "create": 589,
+          "parse_uri": 2385532,
+          "request_headers_phase": 8375,
+          "full_request_including_drop": 2508276
+        },
+        "miss": {
+          "create": 567,
+          "parse_uri": 2311711,
+          "request_headers_phase": 2617,
+          "full_request_including_drop": 2431939
+        },
+        "absent": {
+          "create": 560,
+          "parse_uri": 2444293,
+          "request_headers_phase": 1334,
+          "full_request_including_drop": 2595323
+        }
+      }
+    },
+    "smt_sibling_busy_pct": {
+      "after": 93.75,
+      "before": 100.0
+    }
+  }
+]

@@ -1,0 +1,107 @@
+{
+  "sources": {
+    "before": {
+      "commit": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+      "engine_sha256": "3a130f37b0678f69269d47b42e482b787f0bc704c7271b13397e68aedcc6d086",
+      "driver_sha256": "fc057e34d5861a035d105669c825f450248f0f85928366bd4f3fd0e0a4e214ff",
+      "observations_sha256": "47e2c61430a337704439d0bac4db0dfc5fc602c5a9f9980c69bfd9392ec5001e"
+    },
+    "after": {
+      "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+      "engine_sha256": "a63ff0bb5a53447571955279a1a7571f98ba7c106e4972f7a9e10b254daef454",
+      "driver_sha256": "436e5a2320157ceffd10660bd0bb3250151958f61c5eaf16cb50da9447ff5488",
+      "observations_sha256": "47e2c61430a337704439d0bac4db0dfc5fc602c5a9f9980c69bfd9392ec5001e"
+    }
+  },
+  "fixture_sha256": "960bcab476ae4ef2dc5bd66148cf98644ae7a5fb9a062b70e44443f01b75cd16",
+  "cpu": 12,
+  "smt_sibling": 4,
+  "median_sibling_busy": 96.42857142857143,
+  "max_sibling_busy": 100.0,
+  "pairs": 16,
+  "iterations_per_case": 32,
+  "fields": 8192,
+  "compiled_minimum": 6,
+  "same_observations": true,
+  "raw_sha256": "33eaccb4999580ff7db81d8e419b3a43be4c6a708c0b3f2ad2ac50da08c2c2df",
+  "summary": {
+    "hit": {
+      "create": {
+        "before_us": 0.5795,
+        "after_us": 0.5455,
+        "paired_percent": -4.388713840473601,
+        "faster": 11
+      },
+      "parse_uri": {
+        "before_us": 2469.6565,
+        "after_us": 2229.8475,
+        "paired_percent": -16.87117568954566,
+        "faster": 13
+      },
+      "request_headers_phase": {
+        "before_us": 8.207,
+        "after_us": 7.371,
+        "paired_percent": -5.721266106041339,
+        "faster": 11
+      },
+      "full_request_including_drop": {
+        "before_us": 2651.015,
+        "after_us": 2377.001,
+        "paired_percent": -16.372466934987244,
+        "faster": 13
+      }
+    },
+    "miss": {
+      "create": {
+        "before_us": 0.5745,
+        "after_us": 0.546,
+        "paired_percent": -4.97680635270068,
+        "faster": 10
+      },
+      "parse_uri": {
+        "before_us": 2406.878,
+        "after_us": 2108.835,
+        "paired_percent": -16.50655280525845,
+        "faster": 12
+      },
+      "request_headers_phase": {
+        "before_us": 2.5215,
+        "after_us": 2.4995,
+        "paired_percent": -1.150773102474839,
+        "faster": 9
+      },
+      "full_request_including_drop": {
+        "before_us": 2544.8005,
+        "after_us": 2270.549,
+        "paired_percent": -16.017743075600656,
+        "faster": 12
+      }
+    },
+    "absent": {
+      "create": {
+        "before_us": 0.569,
+        "after_us": 0.5465,
+        "paired_percent": -4.5243752325880955,
+        "faster": 9
+      },
+      "parse_uri": {
+        "before_us": 2424.698,
+        "after_us": 2140.0415,
+        "paired_percent": -14.472468617378015,
+        "faster": 12
+      },
+      "request_headers_phase": {
+        "before_us": 1.197,
+        "after_us": 1.2345,
+        "paired_percent": 2.342127303182584,
+        "faster": 7
+      },
+      "full_request_including_drop": {
+        "before_us": 2573.2285,
+        "after_us": 2327.693,
+        "paired_percent": -12.793121861010054,
+        "faster": 12
+      }
+    }
+  }
+}

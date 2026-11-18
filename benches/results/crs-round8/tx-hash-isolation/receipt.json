@@ -1,0 +1,11 @@
+{
+  "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "additional_test_only": "src/variables/tx.rs",
+  "hash_probes": 3,
+  "independent_transactions": 32,
+  "baseline_source": "aa1300db11a4e0f1e5fe4a676a4875aebeccb63d3237f9d7cdf185b442f713fa",
+  "augmented_source": "34b1de0fea4e6639ed2eea373ef8336068bdb9dd3c324f081352d22900ac10d2",
+  "test_only_source": "942c10def8c07f28d6f58d8b6581c27876b1ee4a1353194738516654a6103c53",
+  "output": "b4bdaea3522eb124dfeb48edd137e6304888d3635a8bb42af044753a54c17e34",
+  "result": "32 separate fresh TX maps had distinct signatures on the same three input keys; each signature was unchanged after phase one applied the eight prepared default assignments."
+}

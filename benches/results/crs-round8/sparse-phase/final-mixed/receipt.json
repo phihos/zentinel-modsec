@@ -1,0 +1,237 @@
+{
+  "sources": {
+    "before": {
+      "commit": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+      "engine_sha256": "1346c63caf450d83671855dc15d19e0baace5cdafb20b618f93a9ce9c7ea3a78",
+      "driver_sha256": "c1825c2f65de0adfb4bc90dafe931080421a0175897d916daa6d7382f4d94419",
+      "observations_sha256": "93c415924a2a6be68761c59fb8571b3a8ca93179119c4a23bee831c8e0cb54bd"
+    },
+    "after": {
+      "commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+      "engine_sha256": "a63ff0bb5a53447571955279a1a7571f98ba7c106e4972f7a9e10b254daef454",
+      "driver_sha256": "bbcfdf8692bbab72c3f6258e6207f02a66844b3b6a0f38b6991e1fd0f8f9c43b",
+      "observations_sha256": "93c415924a2a6be68761c59fb8571b3a8ca93179119c4a23bee831c8e0cb54bd"
+    }
+  },
+  "fixture_sha256": "6b109df4a8afad7556779acff78f335d82dda81443f1b44829cfd6f8a32a9641",
+  "cpu": 12,
+  "smt_sibling": 4,
+  "median_sibling_busy": 100.0,
+  "max_sibling_busy": 100.0,
+  "pairs": 16,
+  "iterations_per_case": 32,
+  "fields": 8192,
+  "compiled_minimum": 6,
+  "same_observations": true,
+  "raw_sha256": "a22b583243779fee5736678a6433200ecafa635357d7caa0fcc8e8c4417d05d8",
+  "summary": {
+    "get-plain": {
+      "create": {
+        "before_us": 0.5385,
+        "after_us": 0.5365,
+        "paired_percent": 0.728514136090952,
+        "faster": 7
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 1779.163,
+        "after_us": 1447.427,
+        "paired_percent": -21.001779836871385,
+        "faster": 15
+      },
+      "through_request_body": {
+        "before_us": 1785.884,
+        "after_us": 1453.9135,
+        "paired_percent": -20.9242611287371,
+        "faster": 15
+      },
+      "full_request_including_drop": {
+        "before_us": 1826.7405,
+        "after_us": 1488.1295,
+        "paired_percent": -20.900446652959747,
+        "faster": 14
+      }
+    },
+    "post-plain": {
+      "create": {
+        "before_us": 0.5285,
+        "after_us": 0.534,
+        "paired_percent": -1.6274864376130183,
+        "faster": 8
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 1779.3495,
+        "after_us": 1407.293,
+        "paired_percent": -20.440314747669923,
+        "faster": 15
+      },
+      "through_request_body": {
+        "before_us": 1789.3285,
+        "after_us": 1417.1275,
+        "paired_percent": -20.483261539389503,
+        "faster": 15
+      },
+      "full_request_including_drop": {
+        "before_us": 1827.8595,
+        "after_us": 1444.8365,
+        "paired_percent": -20.782551220280787,
+        "faster": 15
+      }
+    },
+    "get-early": {
+      "create": {
+        "before_us": 0.528,
+        "after_us": 0.533,
+        "paired_percent": -0.18214936247722968,
+        "faster": 8
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 1804.1415,
+        "after_us": 1365.0235,
+        "paired_percent": -21.98348269352845,
+        "faster": 15
+      },
+      "through_request_body": {
+        "before_us": 1810.036,
+        "after_us": 1371.524,
+        "paired_percent": -21.855570917608205,
+        "faster": 15
+      },
+      "full_request_including_drop": {
+        "before_us": 1849.239,
+        "after_us": 1403.554,
+        "paired_percent": -22.32608551546886,
+        "faster": 15
+      }
+    },
+    "post-early": {
+      "create": {
+        "before_us": 0.533,
+        "after_us": 0.522,
+        "paired_percent": -3.362270814099211,
+        "faster": 10
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 1802.4455,
+        "after_us": 1392.322,
+        "paired_percent": -21.437166838780428,
+        "faster": 15
+      },
+      "through_request_body": {
+        "before_us": 1813.206,
+        "after_us": 1402.609,
+        "paired_percent": -21.285511508194574,
+        "faster": 15
+      },
+      "full_request_including_drop": {
+        "before_us": 1851.963,
+        "after_us": 1431.6555,
+        "paired_percent": -21.55093596705937,
+        "faster": 15
+      }
+    },
+    "get-late": {
+      "create": {
+        "before_us": 0.5275,
+        "after_us": 0.514,
+        "paired_percent": -3.1453816655595155,
+        "faster": 10
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 1825.662,
+        "after_us": 1405.535,
+        "paired_percent": -19.253057424494237,
+        "faster": 15
+      },
+      "through_request_body": {
+        "before_us": 1832.3625,
+        "after_us": 1410.9135,
+        "paired_percent": -19.177906795899634,
+        "faster": 15
+      },
+      "full_request_including_drop": {
+        "before_us": 1871.5625,
+        "after_us": 1437.834,
+        "paired_percent": -19.436013605672777,
+        "faster": 15
+      }
+    },
+    "post-late": {
+      "create": {
+        "before_us": 0.5335,
+        "after_us": 0.517,
+        "paired_percent": -1.9161079080880106,
+        "faster": 10
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 1806.739,
+        "after_us": 1391.7875,
+        "paired_percent": -22.141030628936686,
+        "faster": 16
+      },
+      "through_request_body": {
+        "before_us": 1816.652,
+        "after_us": 1402.4995,
+        "paired_percent": -22.080194609402042,
+        "faster": 16
+      },
+      "full_request_including_drop": {
+        "before_us": 1855.54,
+        "after_us": 1438.24,
+        "paired_percent": -22.253774492132006,
+        "faster": 16
+      }
+    },
+    "get-dense": {
+      "create": {
+        "before_us": 0.5255,
+        "after_us": 0.5155,
+        "paired_percent": -3.726184014585332,
+        "faster": 10
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 2198.3675,
+        "after_us": 2283.5265,
+        "paired_percent": 4.692127959241454,
+        "faster": 6
+      },
+      "through_request_body": {
+        "before_us": 2207.377,
+        "after_us": 2290.433,
+        "paired_percent": 4.681520608005618,
+        "faster": 6
+      },
+      "full_request_including_drop": {
+        "before_us": 2267.9405,
+        "after_us": 2319.412,
+        "paired_percent": 4.040279295848359,
+        "faster": 6
+      }
+    },
+    "post-dense": {
+      "create": {
+        "before_us": 0.532,
+        "after_us": 0.536,
+        "paired_percent": 2.1387708462474952,
+        "faster": 7
+      },
+      "query_parse_or_post_parse_evaluate": {
+        "before_us": 2190.066,
+        "after_us": 2274.776,
+        "paired_percent": 5.895255906777774,
+        "faster": 4
+      },
+      "through_request_body": {
+        "before_us": 2200.3325,
+        "after_us": 2285.877,
+        "paired_percent": 6.659592945488136,
+        "faster": 4
+      },
+      "full_request_including_drop": {
+        "before_us": 2238.162,
+        "after_us": 2313.745,
+        "paired_percent": 5.905187645663068,
+        "faster": 4
+      }
+    }
+  }
+}
