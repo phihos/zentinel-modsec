@@ -174,6 +174,18 @@ impl Operator for RxOperator {
     }
 
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
+        self.execute_rule_bytes(value, true)
+    }
+
+    fn execute_rule_bytes(&self, value: &[u8], capture: bool) -> Result<ByteOperatorResult> {
+        if !capture || self.compiled.captures_len() == 1 {
+            return Ok(self
+                .compiled
+                .find(value)
+                .map_or_else(ByteOperatorResult::no_match, |m| {
+                    ByteOperatorResult::matched(m.as_bytes())
+                }));
+        }
         Ok(if let Some(captures) = self.compiled.captures(value) {
             ByteOperatorResult {
                 matched: true,

@@ -1241,7 +1241,7 @@ impl Transaction {
             } else {
                 rule.operator.as_ref()
             };
-            let result = operator.execute_bytes(value)?;
+            let result = operator.execute_rule_bytes(value, capture)?;
             if result.matched == rule.operator_negated {
                 return Ok(());
             }
