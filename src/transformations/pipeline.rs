@@ -8,44 +8,55 @@ use std::sync::Arc;
 // For built-in normalization pipelines, these flags mark bytes that may
 // change at least one stage. A byte outside every stage's trigger set is
 // copied verbatim by each of them, so even multiMatch has no stage to visit.
-const DECODE: u8 = 1;
-const UPPER: u8 = 2;
-const SPACE: u8 = 4;
-const PUNCT: u8 = 8;
-const BYTE_FLAGS: [u8; 256] = {
+const NON_ASCII: u16 = 1;
+const UPPER: u16 = 1 << 1;
+const SPACE: u16 = 1 << 2;
+const URL: u16 = 1 << 3;
+const ENTITY: u16 = 1 << 4;
+const BACKSLASH: u16 = 1 << 5;
+const NUL: u16 = 1 << 6;
+const SLASH: u16 = 1 << 7;
+const COMMENT: u16 = 1 << 8;
+const SHELL: u16 = 1 << 9;
+const PATH: u16 = 1 << 10;
+
+const BYTE_FLAGS: [u16; 256] = {
     let mut flags = [0; 256];
     let mut i = 0;
     while i < flags.len() {
         let b = i as u8;
-        if !b.is_ascii() || matches!(b, 0 | b'%' | b'+' | b'&' | b'\\') {
-            flags[i] |= DECODE;
-        }
-        if b.is_ascii_uppercase() {
-            flags[i] |= UPPER;
-        }
-        if b.is_ascii_whitespace() || b == 0x0b {
-            flags[i] |= SPACE;
-        }
-        if !b.is_ascii_alphanumeric() {
-            flags[i] |= PUNCT;
-        }
+        flags[i] = match b {
+            0 => NUL,
+            b'%' | b'+' => URL,
+            b'&' => ENTITY,
+            b'\\' => BACKSLASH,
+            b'/' => SLASH,
+            b'-' | b'#' => COMMENT,
+            b'"' | b'\'' | b'^' | b',' | b';' => SHELL,
+            b'A'..=b'Z' => UPPER,
+            b' ' | b'\t'..=b'\r' => SPACE,
+            0x80..=0xff => NON_ASCII,
+            _ => 0,
+        };
         i += 1;
     }
     flags
 };
 
-fn byte_triggers(name: &str) -> Option<u8> {
+fn byte_triggers(name: &str) -> Option<u16> {
     match name {
-        "utf8ToUnicode" | "urlDecode" | "urlDecodeUni" | "htmlEntityDecode" | "jsDecode"
-        | "cssDecode" | "escapeSeqDecode" | "removeNulls" => Some(DECODE),
-        "lowercase" => Some(DECODE | UPPER),
-        "removeWhitespace" | "compressWhitespace" => Some(DECODE | SPACE),
-        // These stages preserve ASCII letters and digits. Punctuation can
-        // affect paths or comment delimiters, and cmdLine also folds case.
-        "normalizePath" | "normalizePathWin" | "replaceComments" | "removeCommentsChar" => {
-            Some(PUNCT)
-        }
-        "cmdLine" => Some(PUNCT | UPPER),
+        "utf8ToUnicode" => Some(NON_ASCII),
+        "urlDecode" | "urlDecodeUni" => Some(URL),
+        "htmlEntityDecode" => Some(ENTITY),
+        "jsDecode" | "cssDecode" | "escapeSeqDecode" => Some(BACKSLASH),
+        "removeNulls" | "replaceNulls" => Some(NUL),
+        "lowercase" => Some(NON_ASCII | UPPER),
+        "removeWhitespace" | "compressWhitespace" => Some(NON_ASCII | SPACE),
+        "normalizePath" => Some(PATH | SLASH),
+        "normalizePathWin" => Some(PATH | SLASH | BACKSLASH),
+        "replaceComments" | "removeComments" => Some(SLASH),
+        "removeCommentsChar" => Some(SLASH | COMMENT),
+        "cmdLine" => Some(NON_ASCII | UPPER | BACKSLASH | SPACE | SHELL),
         _ => None,
     }
 }
@@ -54,7 +65,7 @@ fn byte_triggers(name: &str) -> Option<u8> {
 #[derive(Clone)]
 pub struct TransformationPipeline {
     transformations: Vec<Arc<dyn Transformation>>,
-    byte_triggers: Option<u8>,
+    byte_triggers: Option<u16>,
 }
 
 impl TransformationPipeline {
@@ -230,10 +241,18 @@ impl TransformationPipeline {
         self.transformations.is_empty()
             || input.len() <= 64
                 && self.byte_triggers.is_some_and(|flags| {
-                    input
-                        .iter()
-                        .all(|&byte| BYTE_FLAGS[usize::from(byte)] & flags == 0)
+                    // With no separator, only these complete path components change.
+                    !(flags & PATH != 0 && matches!(input, b"." | b".."))
+                        && input
+                            .iter()
+                            .all(|&byte| BYTE_FLAGS[usize::from(byte)] & flags == 0)
                 })
+    }
+
+    // A path token can contain capitals, hyphens, slashes, and standalone dots.
+    pub(crate) fn leaves_path_tokens_unchanged(&self) -> bool {
+        self.byte_triggers
+            .is_some_and(|flags| flags & (UPPER | COMMENT | SLASH | PATH) == 0)
     }
 
     /// Check if the pipeline is empty.
@@ -293,6 +312,23 @@ mod tests {
     }
 
     #[test]
+    fn only_token_preserving_pipelines_can_skip_a_regex_search() {
+        for (name, preserves) in [
+            ("urlDecode", true),
+            ("removeNulls", true),
+            ("lowercase", false),
+            ("removeCommentsChar", false),
+            ("replaceComments", false),
+            ("normalizePath", false),
+            ("cmdLine", false),
+            ("base64Encode", false),
+        ] {
+            let pipeline = TransformationPipeline::from_names(&[name.into()]).unwrap();
+            assert_eq!(pipeline.leaves_path_tokens_unchanged(), preserves, "{name}");
+        }
+    }
+
+    #[test]
     fn compiled_shortcuts_preserve_output_and_changed_stages() {
         let mut inputs: Vec<Vec<u8>> = (0..=255).map(|byte| vec![b'a', byte, b'b']).collect();
         inputs.extend([
@@ -301,6 +337,9 @@ mod tests {
             br"a\x42".to_vec(),
             b"ab\x00cd".to_vec(),
             b"a/../b".to_vec(),
+            b".".to_vec(),
+            b"..".to_vec(),
+            b"json.items_0.name".to_vec(),
             b"one  two".to_vec(),
             "Straße Σ".as_bytes().to_vec(),
             b"a\xffZ".to_vec(),

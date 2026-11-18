@@ -105,11 +105,14 @@ fn required_byte(hir: &regex_syntax::hir::Hir, depth: usize) -> Option<u8> {
 
 impl MatchRequirements {
     #[inline]
+    fn rejects_short_token(self, value: &[u8]) -> bool {
+        value.len() < self.token && value.len() <= 64 && value.iter().copied().all(token_byte)
+    }
+
+    #[inline]
     fn rules_out(self, value: &[u8]) -> bool {
         value.len() < self.any
-            || value.len() < self.token
-                && value.len() <= 64
-                && value.iter().copied().all(token_byte)
+            || self.rejects_short_token(value)
             || value.len() <= 128
                 && self
                     .required
@@ -297,6 +300,11 @@ impl RxOperator {
             has_subgroups: compiled.regex.group_info().group_len(PatternID::ZERO) > 1,
             compiled,
         })
+    }
+
+    #[inline]
+    pub(crate) fn rejects_short_token(&self, value: &[u8]) -> bool {
+        self.requirements.rejects_short_token(value)
     }
 
     // A negated regex can only fire on an underlying miss, which has no

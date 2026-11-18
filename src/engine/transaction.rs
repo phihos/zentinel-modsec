@@ -103,6 +103,14 @@ struct StaticSearch<'a> {
 
 impl StaticSearch<'_> {
     fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
+        if !self.rule.operator_negated
+            && self.rule.transformations.leaves_path_tokens_unchanged()
+            && self
+                .regex
+                .is_some_and(|regex| regex.rejects_short_token(raw))
+        {
+            return Ok(());
+        }
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
             if let Some(numeric) = self.numeric {
                 let matched = numeric.matches(value);
