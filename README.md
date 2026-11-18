@@ -254,6 +254,10 @@ forms support regex collection keys such as `ARGS:/^token_/` (the runtime
 regex-key behavior follows Coraza 3.8.1). Invalid configure-time targets fail
 loading; malformed runtime controls produce load-time warnings with rule IDs.
 
+`ctl:ruleRemoveByTag=TAG` suppresses subsequent rules bearing the exact,
+case-sensitive tag for this transaction, including later phases. A tagged
+chain starter selects its entire chain. Untagged rules continue to execute.
+
 **Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@beginsWith`,
 `@endsWith`, `@within`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,

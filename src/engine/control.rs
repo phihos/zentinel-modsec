@@ -56,6 +56,8 @@ pub enum CtlDirective {
     RuleEngine(RuleEngineMode),
     /// `ctl:ruleRemoveById=ID` or `=START-END`, or several separated by commas.
     RuleRemoveById(Vec<RuleIdRange>),
+    /// `ctl:ruleRemoveByTag=TAG` (exact, case-sensitive rule tag).
+    RuleRemoveByTag(String),
     /// `ctl:ruleRemoveTargetById=ID;TARGET`
     RuleRemoveTargetById {
         /// ID of the rule the exclusion applies to.
@@ -123,6 +125,34 @@ impl CtlDirective {
                     "ruleRemoveById expects a rule ID or an ID range such as 942100-942999",
                 ),
             },
+
+            "ruleremovebytag" => {
+                // Coraza splits any optional collection suffix before
+                // dispatching ctl actions. It validates a regex key there,
+                // but whole-rule removal always selects by the tag alone.
+                let (tag, suffix) = action.value.split_once(';').unwrap_or((&action.value, ""));
+                if let Some((_, key)) = suffix.split_once(':') {
+                    let key = key.trim();
+                    if let Some(pattern) = key.strip_prefix('/').and_then(|p| p.strip_suffix('/')) {
+                        let escaped = pattern
+                            .as_bytes()
+                            .iter()
+                            .rev()
+                            .take_while(|b| **b == b'\\')
+                            .count()
+                            % 2
+                            == 1;
+                        if !escaped && (pattern.is_empty() || regex::Regex::new(pattern).is_err()) {
+                            return Self::unsupported(
+                                directive,
+                                value,
+                                "ruleRemoveByTag has an invalid ctl collection-key regex",
+                            );
+                        }
+                    }
+                }
+                Self::RuleRemoveByTag(tag.to_owned())
+            }
 
             "ruleremovetargetbyid" => match value.split_once(';') {
                 Some((rule_id, target))
@@ -297,6 +327,7 @@ pub struct TransactionControls {
     engine_mode: Option<RuleEngineMode>,
     response_body_access: Option<bool>,
     removed_rules: Vec<RuleIdRange>,
+    removed_tags: Vec<String>,
     /// `(rule id, parsed target)` pairs from `ctl:ruleRemoveTargetById`.
     ///
     /// The target is parsed once when the directive fires rather than once per
@@ -331,6 +362,11 @@ impl TransactionControls {
         match directive {
             CtlDirective::RuleEngine(mode) => self.engine_mode = Some(mode),
             CtlDirective::RuleRemoveById(mut ranges) => self.removed_rules.append(&mut ranges),
+            CtlDirective::RuleRemoveByTag(tag) => {
+                if !self.removed_tags.contains(&tag) {
+                    self.removed_tags.push(tag);
+                }
+            }
             CtlDirective::RuleRemoveTargetById { rule_id, target } => {
                 // Parse with the same parser used for rule variables so
                 // collection names round-trip: SecLang writes REQUEST_HEADERS
@@ -412,6 +448,12 @@ impl TransactionControls {
             return false;
         };
         self.removed_rules.iter().any(|r| r.contains(id))
+    }
+
+    pub(crate) fn is_tag_removed(&self, actions: &[crate::parser::Action]) -> bool {
+        self.removed_tags
+            .iter()
+            .any(|tag| super::ruleset::has_tag(actions, tag))
     }
 
     /// Whether any target exclusion applies to this rule.

@@ -919,13 +919,6 @@ impl Transaction {
 
         let mut idx = 0;
         while idx < rules.len() {
-            // Handle skip
-            if skip_count > 0 {
-                skip_count -= 1;
-                idx += 1;
-                continue;
-            }
-
             // Handle skipAfter
             if let Some(ref marker) = skip_after {
                 // A marker records the index of the next rule. An adjacent
@@ -948,23 +941,23 @@ impl Transaction {
 
             let rule = &rules[idx];
 
-            // ctl:ruleRemoveById excluded this rule for this transaction. Skip
-            // it as though it were not in the ruleset -- including its chain
-            // links, which cannot fire without their starter.
-            if self.controls.is_rule_removed(rule.id.as_deref()) {
-                if rule.is_chain {
-                    chain_state.reset();
-                    pending_chain_actions = None;
-                    pending_chain_id = None;
-                    pending_chain_data.clear();
-                    idx += 1;
-                    while idx < rules.len() && rules[idx - 1].is_chain {
+            // Coraza applies removals before counting skip:N, at the entry
+            // to a logical rule. A child tag cannot select its starter.
+            // Likewise a removal fired by the starter cannot cancel its own
+            // chain while it is still executing.
+            if !chain_state.in_chain {
+                let removed = self.controls.is_rule_removed(rule.id.as_deref())
+                    || self.controls.is_tag_removed(&rule.actions);
+                if removed || skip_count > 0 {
+                    if !removed {
+                        skip_count -= 1;
+                    }
+                    while idx + 1 < rules.len() && rules[idx].is_chain {
                         idx += 1;
                     }
+                    idx += 1;
                     continue;
                 }
-                idx += 1;
-                continue;
             }
 
             // Handle chain continuation
