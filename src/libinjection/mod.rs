@@ -38,7 +38,7 @@ pub fn detect_xss_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
 
 /// Check for SQL injection using the selected backend.
 pub fn is_sqli(input: &str) -> bool {
-    detect_sqli(input).is_injection
+    selected::is_sqli_bytes(input.as_bytes())
 }
 
 /// Return the selected SQLi backend's detection fingerprint.
@@ -48,7 +48,7 @@ pub fn sqli_fingerprint(input: &str) -> Option<String> {
 
 /// Check for XSS using the selected backend.
 pub fn is_xss(input: &str) -> bool {
-    detect_xss(input).is_injection
+    selected::is_xss_bytes(input.as_bytes())
 }
 
 /// Result of injection detection.
