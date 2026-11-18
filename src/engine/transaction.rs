@@ -40,6 +40,7 @@ pub struct Transaction {
     response: ResponseData,
     /// TX collection (mutable variables).
     tx: TxCollection,
+    numeric_tx_indices: [usize; super::ruleset::NUMERIC_TX_SLOTS],
     /// Current phase.
     phase: Phase,
     /// Intervention (if any).
@@ -233,6 +234,7 @@ impl Transaction {
             request: RequestData::new(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
+            numeric_tx_indices: [usize::MAX; super::ruleset::NUMERIC_TX_SLOTS],
             phase: Phase::RequestHeaders,
             intervention: None,
             default_status,
@@ -1404,7 +1406,13 @@ impl Transaction {
             let crate::variables::MemberSelector::Key(key) = &selection.member else {
                 unreachable!("compiled literal TX key")
             };
-            let value = match (rule.variables[0].count_mode, self.tx.canonical_value(key)) {
+            let live = match dispatch.numeric_tx_slot {
+                Some(slot) => self
+                    .tx
+                    .indexed_value(key, &mut self.numeric_tx_indices[usize::from(slot)]),
+                None => self.tx.canonical_value(key),
+            };
+            let value = match (rule.variables[0].count_mode, live) {
                 (true, Some(_)) => b"1".as_slice(),
                 (true, None) => b"0".as_slice(),
                 (false, Some(value)) => value,

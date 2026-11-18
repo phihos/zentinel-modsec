@@ -54,6 +54,19 @@ impl TxCollection {
         self.data.get(key).map(ByteValue::as_bytes)
     }
 
+    /// A position from an earlier lookup is usable only while it still names
+    /// this key. Deletes can shift entries and callers can replace the collection.
+    pub(crate) fn indexed_value(&self, key: &[u8], index: &mut usize) -> Option<&[u8]> {
+        if let Some((stored, value)) = self.data.get_index(*index) {
+            if stored.as_bytes() == key {
+                return Some(value.as_bytes());
+            }
+        }
+        let (found, _, value) = self.data.get_full(key)?;
+        *index = found;
+        Some(value.as_bytes())
+    }
+
     pub(crate) fn first_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {
         self.lookup(key).map(ByteValue::as_bytes)
     }

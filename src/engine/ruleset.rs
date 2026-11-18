@@ -107,6 +107,9 @@ impl Default for Rules {
     }
 }
 
+/// Per-transaction positions reserved for frequent numeric TX lookups.
+pub(super) const NUMERIC_TX_SLOTS: usize = 4;
+
 pub(super) struct CompiledSetVar {
     pub action_index: usize,
     /// Literal TX keys can be folded once, when configuration updates are final.
@@ -124,6 +127,7 @@ pub(super) struct RuleDispatch {
     pub numeric: Option<crate::operators::NumericComparison>,
     /// A static comparison of one literal TX member or its count, without transforms or exclusions.
     pub single_tx_numeric: bool,
+    pub numeric_tx_slot: Option<u8>,
     pub dynamic: bool,
     pub capture: bool,
     pub multi_match: bool,
@@ -221,6 +225,37 @@ impl RuleDispatch {
         }
         dispatch.setvars = setvars.into_boxed_slice();
         dispatch
+    }
+
+    fn numeric_tx_key(&self) -> Option<&[u8]> {
+        if self.single_tx_numeric {
+            if let crate::variables::MemberSelector::Key(key) = &self.selections[0].member {
+                return Some(key);
+            }
+        }
+        None
+    }
+
+    // Rank keys per phase so one-off guards cannot evict the positions used
+    // by repeated comparisons. The transaction verifies a position on each hit.
+    fn assign_numeric_tx_slots(dispatch: &mut [Self]) {
+        let mut counts = HashMap::<&[u8], usize>::new();
+        for key in dispatch.iter().filter_map(Self::numeric_tx_key) {
+            *counts.entry(key).or_default() += 1;
+        }
+        let mut repeated: Vec<_> = counts.into_iter().filter(|(_, count)| *count > 1).collect();
+        repeated.sort_unstable_by(|(a, n), (b, m)| m.cmp(n).then_with(|| a.cmp(b)));
+        let keys: Vec<_> = repeated
+            .into_iter()
+            .take(NUMERIC_TX_SLOTS)
+            .map(|(key, _)| key.to_owned())
+            .collect();
+        for rule in dispatch {
+            rule.numeric_tx_slot = rule
+                .numeric_tx_key()
+                .and_then(|key| keys.iter().position(|entry| key == entry))
+                .map(|index| index as u8);
+        }
     }
 
     pub(super) fn disruptive<'a>(&self, rule: &'a CompiledRule) -> Option<&'a DisruptiveAction> {
@@ -509,6 +544,9 @@ impl CompiledRuleset {
                 })
                 .collect()
         });
+        for phase in &mut ruleset.dispatch {
+            RuleDispatch::assign_numeric_tx_slots(phase);
+        }
         ruleset.body_config.validate()?;
         if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
             ruleset.body_config.request_limit_action =

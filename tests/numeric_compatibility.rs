@@ -204,3 +204,32 @@ SecRule TX:code "@eq 4" "id:9,phase:1,pass,TRANSFORMmsg:'retained'""#;
     }
     assert_eq!(observed[0], observed[1]);
 }
+
+#[test]
+fn repeated_numeric_tx_reads_follow_replacements_and_shifted_positions() {
+    use zentinel_modsec::variables::{MutableCollection, TxCollection};
+    let engine = ModSecurity::from_string(
+        r#"SecAction "id:1,phase:1,pass,setvar:tx.first=6,setvar:tx.score=1,setvar:tx.other=2"
+SecRule TX:SCORE "@eq 1" "id:2,phase:1,pass,setvar:!tx.first"
+SecRule TX:SCORE "@eq 1" "id:3,phase:1,pass,setvar:tx.score=5"
+SecRule TX:OTHER "@eq 2" "id:4,phase:1,pass"
+SecRule TX:SCORE "@eq 5" "id:5,phase:1,pass,setvar:!tx.score"
+SecRule &TX:SCORE "@eq 0" "id:6,phase:1,pass,setvar:tx.score=9"
+SecRule TX:SCORE "@eq 9" "id:7,phase:1,pass"
+SecRule TX:SCORE "@eq 3" "id:8,phase:2,pass,capture"
+SecRule TX:SCORE "@eq 9" "id:9,phase:2,pass""#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "3", "4", "5", "6", "7"]);
+    let mut replacement = TxCollection::new();
+    replacement.set("other".into(), "9".into());
+    replacement.set("extra".into(), "9".into());
+    replacement.set("score".into(), "3".into());
+    *tx.tx_mut() = replacement;
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules().last().unwrap(), "8");
+    assert_eq!(tx.matched_data().last().unwrap().value_bytes, b"3");
+}
