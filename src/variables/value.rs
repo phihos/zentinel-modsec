@@ -19,12 +19,15 @@ pub struct ByteValue {
 enum Storage {
     Short(ShortText),
     Text(String),
-    Binary(Arc<BinaryValue>),
+    Shared(Arc<SharedValue>),
 }
 
 // Leave room for the length and enum tag. Four machine words cover most
 // qualified TX names without growing the collection buckets.
 const INLINE_CAPACITY: usize = 4 * std::mem::size_of::<usize>() - 2;
+// Keep ordinary owned strings movable. A match can retain a large header or
+// body field in several snapshots, where copying its buffer costs more.
+const SHARED_TEXT_MIN: usize = 1024;
 
 #[derive(Clone)]
 struct ShortText {
@@ -56,11 +59,43 @@ impl fmt::Debug for Storage {
         match self {
             Self::Short(text) => f.debug_tuple("Text").field(&text.as_str()).finish(),
             Self::Text(text) => f.debug_tuple("Text").field(text).finish(),
-            Self::Binary(value) => f
-                .debug_struct("Binary")
-                .field("bytes", &value.bytes)
-                .field("display", &value.display_text())
-                .finish(),
+            Self::Shared(value) => match value.as_ref() {
+                SharedValue::Text(text) => f.debug_tuple("Text").field(text).finish(),
+                SharedValue::Binary(value) => f
+                    .debug_struct("Binary")
+                    .field("bytes", &value.bytes)
+                    .field("display", &value.display_text())
+                    .finish(),
+            },
+        }
+    }
+}
+
+// Large text and binary matches can occur in several transaction snapshots.
+enum SharedValue {
+    Text(String),
+    Binary(BinaryValue),
+}
+
+impl SharedValue {
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Text(text) => text.as_bytes(),
+            Self::Binary(value) => &value.bytes,
+        }
+    }
+
+    fn display_text(&self) -> &str {
+        match self {
+            Self::Text(text) => text,
+            Self::Binary(value) => value.display_text(),
+        }
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Self::Text(text) => text.into_bytes(),
+            Self::Binary(value) => value.bytes,
         }
     }
 }
@@ -130,10 +165,10 @@ impl ByteValue {
 
     fn binary(bytes: Vec<u8>) -> Self {
         Self {
-            storage: Storage::Binary(Arc::new(BinaryValue {
+            storage: Storage::Shared(Arc::new(SharedValue::Binary(BinaryValue {
                 bytes,
                 display: OnceLock::new(),
-            })),
+            }))),
         }
     }
 
@@ -142,7 +177,7 @@ impl ByteValue {
         match &self.storage {
             Storage::Short(text) => text.as_bytes(),
             Storage::Text(value) => value.as_bytes(),
-            Storage::Binary(value) => &value.bytes,
+            Storage::Shared(value) => value.as_bytes(),
         }
     }
 
@@ -158,7 +193,7 @@ impl ByteValue {
         match &self.storage {
             Storage::Short(text) => text.as_str(),
             Storage::Text(value) => value,
-            Storage::Binary(value) => value.display_text(),
+            Storage::Shared(value) => value.display_text(),
         }
     }
 
@@ -167,15 +202,16 @@ impl ByteValue {
         match self.storage {
             Storage::Short(text) => (text.as_str().to_owned(), text.as_bytes().to_vec()),
             Storage::Text(text) => (text.clone(), text.into_bytes()),
-            Storage::Binary(value) => match Arc::try_unwrap(value) {
-                Ok(value) => {
+            Storage::Shared(value) => match Arc::try_unwrap(value) {
+                Ok(SharedValue::Text(text)) => (text.clone(), text.into_bytes()),
+                Ok(SharedValue::Binary(value)) => {
                     let display = value
                         .display
                         .into_inner()
                         .unwrap_or_else(|| BinaryValue::escaped(&value.bytes));
                     (display, value.bytes)
                 }
-                Err(value) => (value.display_text().to_owned(), value.bytes.clone()),
+                Err(value) => (value.display_text().to_owned(), value.as_bytes().to_vec()),
             },
         }
     }
@@ -185,9 +221,8 @@ impl ByteValue {
         match self.storage {
             Storage::Short(text) => text.as_bytes().to_vec(),
             Storage::Text(value) => value.into_bytes(),
-            Storage::Binary(value) => {
-                Arc::try_unwrap(value).map_or_else(|value| value.bytes.clone(), |value| value.bytes)
-            }
+            Storage::Shared(value) => Arc::try_unwrap(value)
+                .map_or_else(|value| value.as_bytes().to_vec(), SharedValue::into_bytes),
         }
     }
 }
@@ -221,6 +256,8 @@ impl From<String> for ByteValue {
     fn from(value: String) -> Self {
         let storage = if value.len() <= INLINE_CAPACITY {
             Storage::Short(ShortText::new(&value))
+        } else if value.len() >= SHARED_TEXT_MIN {
+            Storage::Shared(Arc::new(SharedValue::Text(value)))
         } else {
             Storage::Text(value)
         };
@@ -299,8 +336,16 @@ mod tests {
     use indexmap::IndexMap;
 
     #[test]
-    fn short_text_boundaries_preserve_borrowed_and_owned_representations() {
-        for size in [2, INLINE_CAPACITY - 1, INLINE_CAPACITY, INLINE_CAPACITY + 1] {
+    fn text_storage_boundaries_preserve_borrowed_and_owned_representations() {
+        for size in [
+            2,
+            INLINE_CAPACITY - 1,
+            INLINE_CAPACITY,
+            INLINE_CAPACITY + 1,
+            SHARED_TEXT_MIN - 1,
+            SHARED_TEXT_MIN,
+            SHARED_TEXT_MIN + 1,
+        ] {
             let text = format!("{}é", "x".repeat(size - 2));
             for value in [
                 ByteValue::from(text.clone()),
@@ -311,6 +356,10 @@ mod tests {
                 assert_eq!(value.as_utf8().unwrap(), text);
                 assert_eq!(value.display_text(), text);
                 assert_eq!(value.clone().into_bytes(), text.as_bytes());
+                assert_eq!(
+                    value.clone().into_display_and_bytes(),
+                    (text.clone(), text.as_bytes().to_vec())
+                );
                 assert_eq!(
                     value.into_display_and_bytes(),
                     (text.clone(), text.clone().into_bytes())
