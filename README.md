@@ -256,12 +256,11 @@ regex-key behavior follows Coraza 3.8.1). Invalid configure-time targets fail
 loading; malformed runtime controls produce load-time warnings with rule IDs.
 
 **Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@beginsWith`,
-`@endsWith`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
+`@endsWith`, `@within`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
 `@unconditionalMatch`, `@noMatch`. `@containsWord` and `@strmatch` are
-approximated by `@contains`. `@within` uses whitespace-token equality instead
-of substring containment. The `@pmf` and `@ipMatchF` aliases interpret their
+approximated by `@contains`. The `@pmf` and `@ipMatchF` aliases interpret their
 arguments as inline phrases/addresses; use `@pmFromFile` and `@ipMatchFromFile`
 for files. These approximations produce load-time warnings with rule IDs.
 
