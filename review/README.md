@@ -27,3 +27,5 @@ The first row measures the phase-rule borrowing patch. The second row includes e
 
 - Phase-rule borrowing. [Run summary](measurements/phase-borrow.json) · [Raw samples](measurements/phase-borrow-samples.tar.gz) · [Benchmarked source](https://github.com/phihos/zentinel-modsec/tree/measure/borrow-phase-rules)
 - Whole snapshot. [Run summary](measurements/snapshot.json) · [Raw samples](measurements/snapshot-samples.tar.gz) · [Benchmarked source](https://github.com/phihos/zentinel-modsec/tree/measure/full-crs-snapshot)
+
+All seven upstream PR heads passed formatting, strict Clippy, all-target tests, doctests and the separate release-mode conformance test on the CI-pinned CRS checkout. [Local CI results by PR and commit](local-ci.json)

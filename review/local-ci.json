@@ -1,0 +1,468 @@
+{
+  "all_remote_heads_verified": true,
+  "cargo": "cargo 1.96.1 (356927216 2026-06-26)",
+  "checked_at": "2026-11-18T15:06:02+00:00",
+  "clippy": "clippy 0.1.96 (31fca3adb2 2026-06-26)",
+  "commands": {
+    "all-targets": [
+      "cargo",
+      "test",
+      "--all-targets"
+    ],
+    "clippy": [
+      "cargo",
+      "clippy",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "docs": [
+      "cargo",
+      "test",
+      "--doc"
+    ],
+    "fmt": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--check"
+    ],
+    "native-crs": [
+      "cargo",
+      "test",
+      "--release",
+      "--test",
+      "crs_conformance",
+      "--",
+      "--nocapture"
+    ]
+  },
+  "crs_commit": "30cb436b261a9f5ec32a5a0677e17f3cfa1a8739",
+  "crs_setup_sha256": "5f241292433f709679192c8476f50c2658a098bb74eca3ba9fd1aabf39a92446",
+  "environment": {
+    "SKIP_CRS_CONFORMANCE": "1 only for all-targets; unset for all other commands",
+    "dependency_resolution": "offline from the local registry; Cargo.lock hashes are recorded per PR",
+    "targets": "separate Cargo target directory per exact commit"
+  },
+  "pull_requests": {
+    "69": {
+      "cargo_lock_sha256": "9f674f5419da39788b637dc9480eb2eb11e9ed0057262a5b8f69b3f203f216b8",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 10.591,
+          "exit": 0,
+          "log": "local-ci-logs/69-all-targets.log",
+          "log_sha256": "22f1f3703e4fabb71c7f032f536de5ad2f07e52b7f910ae066a579279e4e1077",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 364
+          }
+        },
+        "clippy": {
+          "elapsed_s": 3.084,
+          "exit": 0,
+          "log": "local-ci-logs/69-clippy.log",
+          "log_sha256": "a97e1022a9746f9194364480397e0cd73179a63c365471b4c0d332d0d16e358a"
+        },
+        "docs": {
+          "elapsed_s": 0.747,
+          "exit": 0,
+          "log": "local-ci-logs/69-docs.log",
+          "log_sha256": "52a6dee37a4aa8ff1ad4fada13c6865b6dd10cf888bda5c75768ddc4f5bf76d2",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.291,
+          "exit": 0,
+          "log": "local-ci-logs/69-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4900,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "elapsed_s": 16.505,
+          "exit": 0,
+          "log": "local-ci-logs/69-native-crs.log",
+          "log_sha256": "e882c74fb1bb89db98b75398cf7290f395fa351026a3f1399eb79bba251bd96c",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+      "number": 69,
+      "tree": "d2da681a1471c7b37d831e814566a6beda53ecaa",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/69"
+    },
+    "70": {
+      "cargo_lock_sha256": "3ce589e637f4db82064449381cf9ca9077d8ae0946d1cc2b1534db4cc2c2c486",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 18.637,
+          "exit": 0,
+          "log": "local-ci-logs/70-all-targets.log",
+          "log_sha256": "9d9e63d63eed3e68e8060fcdcd83a12e74047b3e4201cda70b99b8f9d0579cc2",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 365
+          }
+        },
+        "clippy": {
+          "elapsed_s": 3.433,
+          "exit": 0,
+          "log": "local-ci-logs/70-clippy.log",
+          "log_sha256": "a1758a876f0a6f326896f28a8d49ce96320f47100f43b7d7ae28eec0faa4f20f"
+        },
+        "docs": {
+          "elapsed_s": 0.191,
+          "exit": 0,
+          "log": "local-ci-logs/70-docs.log",
+          "log_sha256": "3669b9a748c4ba0aaa7152d9653609e632e92bd5508f61270d36f7b2ad1d0665",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.215,
+          "exit": 0,
+          "log": "local-ci-logs/70-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4944,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "exit": 0,
+          "log": "local-ci-logs/70-native-crs.log",
+          "log_sha256": "d9f2e7994471639885f6fca167682ac8e7f8a7cc50ee21d58f4d4b2bf7508478",
+          "reused": true,
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "2dcf51c785a0f8b4181f4b0e200fdac8ed6450b2",
+      "number": 70,
+      "tree": "18f90da05b5e1ec5b5632f5687ec6c6ebc7804b3",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/70"
+    },
+    "71": {
+      "cargo_lock_sha256": "3ce589e637f4db82064449381cf9ca9077d8ae0946d1cc2b1534db4cc2c2c486",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 18.33,
+          "exit": 0,
+          "log": "local-ci-logs/71-all-targets.log",
+          "log_sha256": "e8da770d073d0fb108e04ca4c733ff8b7685741856b035dbcc5ef6a0463a1234",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 365
+          }
+        },
+        "clippy": {
+          "elapsed_s": 3.424,
+          "exit": 0,
+          "log": "local-ci-logs/71-clippy.log",
+          "log_sha256": "32da6580600c717460008c88c961d3471c3e70a9d08c200b96f7e9813719b1cd"
+        },
+        "docs": {
+          "elapsed_s": 0.301,
+          "exit": 0,
+          "log": "local-ci-logs/71-docs.log",
+          "log_sha256": "847c0fa918dfef72e89595866b72eb475f35425c8cf547635624fd185c2ad638",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.198,
+          "exit": 0,
+          "log": "local-ci-logs/71-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4901,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "exit": 0,
+          "log": "local-ci-logs/71-native-crs.log",
+          "log_sha256": "d3f4cf38da28ca8dbb157a05e81b5382d89ad6175f4dd1989951fe87740a1032",
+          "reused": true,
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "ec98555b1eb152c8e0b97473e71a1deec6450d12",
+      "number": 71,
+      "tree": "46aebd8eb63455f347bd7b06471629a4632e1fbc",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/71"
+    },
+    "72": {
+      "cargo_lock_sha256": "3ce589e637f4db82064449381cf9ca9077d8ae0946d1cc2b1534db4cc2c2c486",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 15.499,
+          "exit": 0,
+          "log": "local-ci-logs/72-all-targets.log",
+          "log_sha256": "5311ecf2c8489bfd6c942bef7786624247730541f0aea06bbb37a5ae813d2c94",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 365
+          }
+        },
+        "clippy": {
+          "elapsed_s": 2.574,
+          "exit": 0,
+          "log": "local-ci-logs/72-clippy.log",
+          "log_sha256": "2a4a0ef16d84a3393c37fb9ced88fcd104bdde3ebcff283a39f74e3af81150fc"
+        },
+        "docs": {
+          "elapsed_s": 0.345,
+          "exit": 0,
+          "log": "local-ci-logs/72-docs.log",
+          "log_sha256": "9f8e23f630136d6235b9cdf04a24f713685699b5cfda28347c3d5791fd8ba8a2",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.24,
+          "exit": 0,
+          "log": "local-ci-logs/72-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4900,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "exit": 0,
+          "log": "local-ci-logs/72-native-crs.log",
+          "log_sha256": "11bdc306589ff90804e9b926d09cad4ac71686b269529894cf96695281b4f36d",
+          "reused": true,
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "3cbb4942d23b13966e38fb85a8b7843a7d586094",
+      "number": 72,
+      "tree": "abf5c01cb519966687f2041d76409c9eb991662d",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/72"
+    },
+    "73": {
+      "cargo_lock_sha256": "3ce589e637f4db82064449381cf9ca9077d8ae0946d1cc2b1534db4cc2c2c486",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 15.546,
+          "exit": 0,
+          "log": "local-ci-logs/73-all-targets.log",
+          "log_sha256": "748a7ec2665946be42663a77c15945e823915239eea050f8a0e0fa2c8d866ffe",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 366
+          }
+        },
+        "clippy": {
+          "elapsed_s": 2.557,
+          "exit": 0,
+          "log": "local-ci-logs/73-clippy.log",
+          "log_sha256": "2bd62d0553b08a95f14b864ebc2991d8b44681fdab50e7f3bb6c0be6f2352d7d"
+        },
+        "docs": {
+          "elapsed_s": 0.316,
+          "exit": 0,
+          "log": "local-ci-logs/73-docs.log",
+          "log_sha256": "0ff6134f2915b1adb4e542ceaf41afa5791122e41cd47a797f15e512a177c2e6",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.251,
+          "exit": 0,
+          "log": "local-ci-logs/73-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4900,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "exit": 0,
+          "log": "local-ci-logs/73-native-crs.log",
+          "log_sha256": "d56cc9d34dbc38bc9e22b6432605f22b7d458570b3a7362f35f9c2e163da1120",
+          "reused": true,
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "26f1890565e781b766547b7e55d5c19695b18359",
+      "number": 73,
+      "tree": "0e762a2e1fa95f78f4214a368ae36d86f151d852",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/73"
+    },
+    "74": {
+      "cargo_lock_sha256": "3ce589e637f4db82064449381cf9ca9077d8ae0946d1cc2b1534db4cc2c2c486",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 12.399,
+          "exit": 0,
+          "log": "local-ci-logs/74-all-targets.log",
+          "log_sha256": "904edc96b494bf50bef1cb9dd83ddce743cac25c30f930665bc7b668035d74d5",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 365
+          }
+        },
+        "clippy": {
+          "elapsed_s": 4.039,
+          "exit": 0,
+          "log": "local-ci-logs/74-clippy.log",
+          "log_sha256": "c231dd5bb8d428d2a4d13934ecc8dc90ca682e3c44862a8f762c39f369107487"
+        },
+        "docs": {
+          "elapsed_s": 0.173,
+          "exit": 0,
+          "log": "local-ci-logs/74-docs.log",
+          "log_sha256": "3669b9a748c4ba0aaa7152d9653609e632e92bd5508f61270d36f7b2ad1d0665",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.244,
+          "exit": 0,
+          "log": "local-ci-logs/74-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4900,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "elapsed_s": 14.463,
+          "exit": 0,
+          "log": "local-ci-logs/74-native-crs.log",
+          "log_sha256": "68af44f51dee813a744b79393113118c7802dc58be262ebe982378a629765779",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "7a44a324d72f4952c0416e4c0fd00e556d909c9a",
+      "number": 74,
+      "tree": "cf8f48b82bd8f98d09f5f8714a45664056e09031",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/74"
+    },
+    "75": {
+      "cargo_lock_sha256": "3ce589e637f4db82064449381cf9ca9077d8ae0946d1cc2b1534db4cc2c2c486",
+      "checks": {
+        "all-targets": {
+          "elapsed_s": 12.525,
+          "exit": 0,
+          "log": "local-ci-logs/75-all-targets.log",
+          "log_sha256": "124b55b0c9a0afe548b9e8f2f7d6ff7b94e4f14be092ac5925b80d6273b7c437",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 365
+          }
+        },
+        "clippy": {
+          "elapsed_s": 2.082,
+          "exit": 0,
+          "log": "local-ci-logs/75-clippy.log",
+          "log_sha256": "3387e1c48b54a369e20296f63dfa6cd91d4a068d798dd6ac31c55c7285088031"
+        },
+        "docs": {
+          "elapsed_s": 0.176,
+          "exit": 0,
+          "log": "local-ci-logs/75-docs.log",
+          "log_sha256": "3669b9a748c4ba0aaa7152d9653609e632e92bd5508f61270d36f7b2ad1d0665",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 1,
+            "passed": 0
+          }
+        },
+        "fmt": {
+          "elapsed_s": 0.248,
+          "exit": 0,
+          "log": "local-ci-logs/75-fmt.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "native-crs": {
+          "corpus": {
+            "passing": 4900,
+            "runnable": 5184,
+            "skipped": 41
+          },
+          "elapsed_s": 9.198,
+          "exit": 0,
+          "log": "local-ci-logs/75-native-crs.log",
+          "log_sha256": "c8ebb002531e0b17ba46fd6e0235fa71c92abaa4a8ac4b4b89a2d29dc4704fd3",
+          "test_totals": {
+            "failed": 0,
+            "ignored": 0,
+            "passed": 2
+          }
+        }
+      },
+      "head": "97bab54dbfe3a54c2970e14170054bcef3434da8",
+      "number": 75,
+      "tree": "e8ea493e6109f203cd4d559484677e0ba45c68d5",
+      "url": "https://github.com/zentinelproxy/zentinel-modsec/pull/75"
+    }
+  },
+  "repository": "zentinelproxy/zentinel-modsec",
+  "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "scope": "Local execution of the five Cargo commands in the pull requests\u2019 upstream CI workflow on Linux. Hosted GitHub Actions approval is separate.",
+  "success": true,
+  "workflow_blob": "9e6dfc7bced638304b588f9c3932c7a01e0aca40"
+}
