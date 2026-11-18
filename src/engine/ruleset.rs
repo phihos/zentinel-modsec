@@ -160,8 +160,24 @@ impl RuleDispatch {
     ) -> Self {
         let dynamic =
             rule.operator_spec.argument.contains("%{") && !rule.operator_spec.name.uses_data_file();
+        let minimum = if !dynamic
+            && !rule.operator_negated
+            && rule.transformations.preserves_alphanumeric_width_bounds()
+        {
+            let [word, path] = rule.operator.short_token_minimums();
+            [
+                word,
+                if rule.transformations.preserves_token_width_bounds() {
+                    path
+                } else {
+                    0
+                },
+            ]
+        } else {
+            [0; 2]
+        };
         let mut dispatch = Self {
-            targets: super::target_indices::TargetIndices::compile(&rule.variables),
+            targets: super::target_indices::TargetIndices::compile(&rule.variables, minimum),
             selections: rule
                 .variables
                 .iter()
@@ -271,6 +287,7 @@ pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
     dispatch: [Vec<RuleDispatch>; 5],
+    pub(super) summarize_arguments: [bool; 5],
     pub(super) tx_defaults: Option<Box<super::initialization::TxDefaults>>,
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
@@ -298,6 +315,7 @@ impl CompiledRuleset {
             rules: Rules::new(),
             dispatch: Default::default(),
             tx_defaults: None,
+            summarize_arguments: [false; 5],
             selectors: Default::default(),
             controls: Default::default(),
             engine_mode: RuleEngineMode::default(),
@@ -549,6 +567,12 @@ impl CompiledRuleset {
         for phase in &mut ruleset.dispatch {
             RuleDispatch::assign_numeric_tx_slots(phase);
         }
+        ruleset.summarize_arguments = Phase::ALL.map(|phase| {
+            ruleset
+                .dispatch_for_phase(phase)
+                .iter()
+                .any(|rule| rule.targets.prunes_arguments())
+        });
         ruleset.tx_defaults = super::initialization::TxDefaults::compile(
             ruleset.rules_for_phase(Phase::RequestHeaders),
             ruleset.dispatch_for_phase(Phase::RequestHeaders),

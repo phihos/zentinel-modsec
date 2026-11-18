@@ -169,6 +169,24 @@ impl HashMapCollection {
         self.data.is_empty()
     }
 
+    /// Visit every original name and value within a shared member budget.
+    pub(crate) fn visit_bounded(
+        &self,
+        remaining: &mut usize,
+        mut visit: impl FnMut(&[u8], &[u8]),
+    ) -> bool {
+        for (key, members) in &self.data {
+            if members.len() > *remaining {
+                return false;
+            }
+            *remaining -= members.len();
+            for (index, value) in members.iter().enumerate() {
+                visit(members.name(key, index).as_bytes(), value.as_bytes());
+            }
+        }
+        true
+    }
+
     /// Visit one indexed bucket or all buckets. The callback sees the lookup
     /// key, observed name, and original value without allocating a result list.
     pub(crate) fn visit(&self, literal: Option<&[u8]>, f: impl FnMut(&[u8], &[u8], &[u8])) {

@@ -43,6 +43,8 @@ const BYTE_FLAGS: [u16; 256] = {
     flags
 };
 
+// On ASCII path tokens, every listed stage except PATH preserves the alphabet
+// and cannot increase the byte count. This also holds for alphanumeric input.
 fn byte_triggers(name: &str) -> Option<u16> {
     match name {
         "utf8ToUnicode" => Some(NON_ASCII),
@@ -249,10 +251,15 @@ impl TransformationPipeline {
                 })
     }
 
-    // A path token can contain capitals, hyphens, slashes, and standalone dots.
-    pub(crate) fn leaves_path_tokens_unchanged(&self) -> bool {
-        self.byte_triggers
-            .is_some_and(|flags| flags & (UPPER | COMMENT | SLASH | PATH) == 0)
+    pub(crate) fn preserves_alphanumeric_width_bounds(&self) -> bool {
+        self.is_empty() || self.byte_triggers.is_some()
+    }
+
+    // Case folding and removing comment markers can change individual bytes,
+    // while preserving both alphabets used by the regex minimum-width check.
+    // Path normalization can turn a single slash into two.
+    pub(crate) fn preserves_token_width_bounds(&self) -> bool {
+        self.is_empty() || self.byte_triggers.is_some_and(|flags| flags & PATH == 0)
     }
 
     /// Check if the pipeline is empty.
@@ -316,15 +323,15 @@ mod tests {
         for (name, preserves) in [
             ("urlDecode", true),
             ("removeNulls", true),
-            ("lowercase", false),
-            ("removeCommentsChar", false),
-            ("replaceComments", false),
+            ("lowercase", true),
+            ("removeCommentsChar", true),
+            ("replaceComments", true),
             ("normalizePath", false),
-            ("cmdLine", false),
+            ("cmdLine", true),
             ("base64Encode", false),
         ] {
             let pipeline = TransformationPipeline::from_names(&[name.into()]).unwrap();
-            assert_eq!(pipeline.leaves_path_tokens_unchanged(), preserves, "{name}");
+            assert_eq!(pipeline.preserves_token_width_bounds(), preserves, "{name}");
         }
     }
 
