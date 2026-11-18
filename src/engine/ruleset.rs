@@ -122,6 +122,8 @@ pub(super) struct CompiledSetVar {
 #[derive(Default)]
 pub(super) struct RuleDispatch {
     pub targets: super::target_indices::TargetIndices,
+    /// First logical rule for which a miss on this target plan proves nothing.
+    pub after_empty_targets: usize,
     pub selections: Box<[crate::variables::TargetSelection]>,
     /// Immutable numeric predicates match the full input without capture groups.
     pub numeric: Option<crate::operators::NumericComparison>,
@@ -649,6 +651,26 @@ impl CompiledRuleset {
             }
             sources
         });
+        for phase in Phase::ALL {
+            let rules = ruleset.rules.for_phase(phase);
+            let dispatch = &mut ruleset.dispatch[phase.index()];
+            let mut next = rules.len();
+            for index in (0..rules.len()).rev() {
+                if !rules[index].is_chain {
+                    next = index + 1;
+                }
+                dispatch[index].after_empty_targets = match rules.get(next) {
+                    Some(rule)
+                        if !rule.variables.is_empty()
+                            && rule.variables.len() <= super::target_indices::PREFIX
+                            && dispatch[index].targets == dispatch[next].targets =>
+                    {
+                        dispatch[next].after_empty_targets
+                    }
+                    _ => next,
+                };
+            }
+        }
         ruleset.tx_defaults = super::initialization::TxDefaults::compile(
             ruleset.rules_for_phase(Phase::RequestHeaders),
             ruleset.dispatch_for_phase(Phase::RequestHeaders),
