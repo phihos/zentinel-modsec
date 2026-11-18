@@ -9,6 +9,18 @@ const XML: u8 = 8;
 pub(super) const HEADER_SLOTS: usize = 2;
 pub(super) const PREFIX: usize = u16::BITS as usize;
 
+const FILES: u64 = 1 << 63;
+const FILE_NAMES: u64 = 1 << 62;
+const PART_HEADERS: u64 = 1 << 61;
+const HEADER_BITS: u64 = PART_HEADERS - 1;
+
+// Collisions retain an ordinary indexed lookup. Only disjoint bit sets prove absence.
+fn header_bit(key: &[u8]) -> u64 {
+    let first = usize::from(key.first().copied().unwrap_or(0));
+    let last = usize::from(key.last().copied().unwrap_or(0));
+    1 << (first * 17 + last + key.len()) % 61
+}
+
 // Maximum length for each alphabet. A non-member or a long input disables
 // that bound for the whole group so every original candidate remains visible.
 #[derive(Clone, Copy, Default)]
@@ -49,11 +61,13 @@ impl Widths {
 pub(super) struct WidthSources {
     pub arguments: bool,
     pub filename: bool,
+    pub optional_targets: bool,
 }
 
 #[derive(Clone, Copy)]
 pub(super) struct RequestCollections {
     present: u8,
+    optional: u64,
     widths: [Widths; 3],
     headers: [Option<Widths>; HEADER_SLOTS],
 }
@@ -82,8 +96,22 @@ impl RequestCollections {
                 widths[..2].fill(Widths::UNKNOWN);
             }
         }
+        let mut optional = u64::MAX;
+        if sources.optional_targets {
+            let keys = request.headers.canonical_keys();
+            let headers = if keys.len() <= 32 {
+                keys.fold(0, |mask, key| mask | header_bit(key))
+            } else {
+                HEADER_BITS
+            };
+            optional = headers
+                | (u64::from(!request.files.is_empty()) * FILES)
+                | (u64::from(!request.files_names.is_empty()) * FILE_NAMES)
+                | (u64::from(!request.multipart_part_headers.is_empty()) * PART_HEADERS);
+        }
         Self {
             present,
+            optional,
             widths,
             headers: [Some(Widths::UNKNOWN); HEADER_SLOTS],
         }
@@ -126,6 +154,8 @@ impl RequestCollections {
 pub(super) struct TargetIndices {
     present: [u16; 16],
     bounded_targets: [u16; 3],
+    optional_targets: u16,
+    optional_keys: u64,
     pub(super) header_targets: [u16; HEADER_SLOTS],
     minimum: [u8; 2],
 }
@@ -148,6 +178,18 @@ impl TargetIndices {
                     _ => {}
                 }
             }
+            if !spec.count_mode {
+                let key = match spec.name {
+                    VariableName::Files => FILES,
+                    VariableName::FilesNames => FILE_NAMES,
+                    VariableName::MultipartPartHeaders => PART_HEADERS,
+                    _ => 0,
+                };
+                if key != 0 {
+                    masks.optional_targets |= 1 << index;
+                    masks.optional_keys |= key;
+                }
+            }
             for (available, mask) in masks.present.iter_mut().enumerate() {
                 if RequestCollections::includes(available as u8, spec) {
                     *mask |= 1 << index;
@@ -157,14 +199,23 @@ impl TargetIndices {
         masks
     }
 
+    pub fn add_optional_header(&mut self, index: usize, key: &[u8]) {
+        self.optional_keys |= header_bit(key);
+        self.optional_targets |= 1 << index;
+    }
+
     pub fn add_width_sources(&self, sources: &mut WidthSources) {
         sources.arguments |= self.bounded_targets[0] != 0 || self.bounded_targets[1] != 0;
         sources.filename |= self.bounded_targets[2] != 0;
+        sources.optional_targets |= self.optional_targets != 0;
     }
 
     #[inline]
     fn selected(&self, available: RequestCollections) -> u16 {
         let mut mask = self.present[usize::from(available.present)];
+        if available.optional & self.optional_keys == 0 {
+            mask &= !self.optional_targets;
+        }
         if available.widths[0].below(self.minimum) {
             mask &= !self.bounded_targets[0];
         }
@@ -228,6 +279,7 @@ mod tests {
     fn empty_snapshot(present: u8) -> RequestCollections {
         RequestCollections {
             present,
+            optional: u64::MAX,
             widths: [Widths::UNKNOWN; 3],
             headers: [Some(Widths::UNKNOWN); HEADER_SLOTS],
         }
@@ -276,6 +328,7 @@ mod tests {
                     WidthSources {
                         arguments: true,
                         filename: false,
+                        optional_targets: false,
                     },
                 ))
                 .indices(&targets)
@@ -300,7 +353,8 @@ mod tests {
                 &request,
                 WidthSources {
                     arguments: true,
-                    filename: false
+                    filename: false,
+                    optional_targets: false
                 }
             ))
             .may_match(1));
@@ -310,7 +364,8 @@ mod tests {
                 &request,
                 WidthSources {
                     arguments: true,
-                    filename: false
+                    filename: false,
+                    optional_targets: false
                 }
             ))
             .may_match(1));
@@ -329,6 +384,40 @@ mod tests {
             active.indices(&specs).collect::<Vec<_>>(),
             [3, PREFIX, PREFIX + 1]
         );
+    }
+
+    #[test]
+    fn optional_presence_only_prunes_when_all_named_sources_are_absent() {
+        let specs = [
+            "REQUEST_HEADERS:alpha",
+            "FILES",
+            "FILES_NAMES",
+            "MULTIPART_PART_HEADERS",
+            "&FILES",
+        ]
+        .map(|text| crate::parser::parse_single_variable(text).unwrap());
+        let mut plan = TargetIndices::compile(&specs, [0; 2]);
+        plan.add_optional_header(0, b"alpha");
+        let active = |request: &RequestData| {
+            let mut sources = WidthSources::default();
+            plan.add_width_sources(&mut sources);
+            plan.select(RequestCollections::new(request, sources))
+                .indices(&specs)
+                .collect::<Vec<_>>()
+        };
+        let mut request = RequestData::default();
+        assert_eq!(active(&request), [4]);
+        request.add_header("AmIdA", "collision");
+        assert_eq!(header_bit(b"alpha"), header_bit(b"amida"));
+        assert_eq!(active(&request), [0, 1, 2, 3, 4]);
+        let mut request = RequestData::default();
+        request.files_names.add_bytes("file", "upload");
+        assert_eq!(active(&request), [0, 1, 2, 3, 4]);
+        let mut request = RequestData::default();
+        for n in 0..33 {
+            request.add_header(&format!("x-{n}"), "v");
+        }
+        assert_eq!(active(&request), [0, 1, 2, 3, 4]);
     }
 
     #[test]

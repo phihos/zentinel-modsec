@@ -169,6 +169,10 @@ impl HashMapCollection {
         self.data.is_empty()
     }
 
+    pub(crate) fn canonical_keys(&self) -> impl ExactSizeIterator<Item = &[u8]> {
+        self.data.keys().map(ByteValue::as_bytes)
+    }
+
     /// Borrow the values under an already folded collection key.
     pub(crate) fn canonical_values(&self, key: &[u8]) -> Option<&[ByteValue]> {
         self.data.get(key).map(|members| &**members)
