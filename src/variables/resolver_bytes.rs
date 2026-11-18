@@ -129,7 +129,9 @@ impl<'a> VariableResolver<'a> {
                 false,
                 None,
             ),
-            Tx => collection(self.tx.members(), "TX", false, None),
+            Tx => self.tx.visit(&selection.member, |key, value| {
+                emit("TX", Some(key), Some(key), value)
+            }),
             Xml => match XmlTarget::from_selection(spec.selection.as_ref()) {
                 Some(XmlTarget::Elements) => collection(&request.xml, "XML", false, Some(b"/*")),
                 Some(XmlTarget::Attributes) => {

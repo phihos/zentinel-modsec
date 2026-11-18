@@ -1,6 +1,6 @@
 //! Lossless runtime bytes with a separate, escaped text presentation.
 
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
@@ -22,9 +22,9 @@ enum Storage {
     Binary(Arc<BinaryValue>),
 }
 
-// Leave room for the length and enum tag. Five machine words cover most
+// Leave room for the length and enum tag. Four machine words cover most
 // qualified TX names without growing the collection buckets.
-const INLINE_CAPACITY: usize = 5 * std::mem::size_of::<usize>() - 2;
+const INLINE_CAPACITY: usize = 4 * std::mem::size_of::<usize>() - 2;
 
 #[derive(Clone)]
 struct ShortText {
@@ -85,6 +85,13 @@ impl BinaryValue {
 }
 
 impl ByteValue {
+    pub(crate) fn decimal(value: i64) -> Self {
+        match value {
+            0..=9 => Self::from(&[b'0' + value as u8][..]),
+            _ => Self::from(value.to_string()),
+        }
+    }
+
     fn binary(bytes: Vec<u8>) -> Self {
         Self {
             storage: Storage::Binary(Arc::new(BinaryValue {
@@ -206,6 +213,15 @@ impl From<&[u8]> for ByteValue {
             };
         }
         Self::from(value.to_vec())
+    }
+}
+
+impl From<Cow<'_, [u8]>> for ByteValue {
+    fn from(value: Cow<'_, [u8]>) -> Self {
+        match value {
+            Cow::Borrowed(bytes) => bytes.into(),
+            Cow::Owned(bytes) => bytes.into(),
+        }
     }
 }
 

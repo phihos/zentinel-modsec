@@ -20,8 +20,7 @@ pub use request::RequestData;
 pub use resolver::VariableResolver;
 pub use response::ResponseData;
 pub(crate) use selectors::{
-    compile_selector, count_name, regex_exclusion, MemberSelector, SelectorPrograms,
-    TargetSelection,
+    compile_selector, regex_exclusion, MemberSelector, SelectorPrograms, TargetSelection,
 };
 pub use tx::TxCollection;
 pub(crate) use value::qualified_name;

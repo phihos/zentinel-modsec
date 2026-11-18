@@ -1188,6 +1188,13 @@ impl Transaction {
         } else {
             self.controls.tag_target_removal(tag_actions, spec)
         };
+        let match_name = |prefix: &str, member: Option<&[u8]>| {
+            selection
+                .match_name
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(|| crate::variables::qualified_name(prefix, member))
+        };
         let mut error = None;
         let mut count = 0usize;
         if by_tag != TagTargetRemoval::All {
@@ -1209,18 +1216,16 @@ impl Transaction {
                     match search.first_match(value) {
                         Ok(None) => (),
                         Ok(Some(stage)) => {
-                            target.first =
-                                Some((crate::variables::qualified_name(prefix, member), stage));
+                            target.first = Some((match_name(prefix, member), stage));
                         }
                         Err(e) => error = Some(e),
                     }
                 } else {
                     // A match can change selection controls or mutate the collection.
                     // Snapshot remaining members before running the first match's actions.
-                    target.remaining.push((
-                        crate::variables::qualified_name(prefix, member),
-                        value.to_vec(),
-                    ));
+                    target
+                        .remaining
+                        .push((match_name(prefix, member), value.to_vec()));
                 }
             });
         }
@@ -1228,6 +1233,10 @@ impl Transaction {
             return Err(error);
         }
         if spec.count_mode {
+            let name = selection
+                .match_name
+                .as_deref()
+                .expect("compiled count target name");
             // Presence checks on a named header or TX variable normally produce 0 or 1.
             let value: Cow<'_, [u8]> = match count {
                 0 => Cow::Borrowed(b"0"),
@@ -1237,11 +1246,9 @@ impl Transaction {
             if let Some(search) = search {
                 target.first = search
                     .first_match(&value)?
-                    .map(|stage| (crate::variables::count_name(spec), stage));
+                    .map(|stage| (name.clone(), stage));
             } else {
-                target
-                    .remaining
-                    .push((crate::variables::count_name(spec), value.into_owned()));
+                target.remaining.push((name.clone(), value.into_owned()));
             }
         }
         Ok(())
@@ -1508,9 +1515,7 @@ impl Transaction {
     /// closed here.
     fn store_captures(&mut self, whole: Option<ByteValue>, groups: Vec<Vec<u8>>) {
         const SLOTS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-        for slot in SLOTS {
-            self.tx.delete_bytes(slot.as_bytes());
-        }
+        self.tx.clear_capture_slots();
         if let Some(whole) = whole {
             self.tx.set_bytes(SLOTS[0], whole);
         }
@@ -1533,8 +1538,8 @@ impl Transaction {
                 record.map(|_| SetVarChange::Set(value.clone()))
             }
             SetVarValue::Int(n) => {
-                let value = n.to_string();
-                let change = record.map(|_| SetVarChange::Set(value.clone()));
+                let value = ByteValue::decimal(*n);
+                let change = record.map(|_| SetVarChange::Set(value.display_text().to_owned()));
                 self.tx.set_bytes(name.as_ref(), value);
                 change
             }
@@ -1543,10 +1548,10 @@ impl Transaction {
                 let operand = self.expand_operator_macros_bytes(operand);
                 match kind {
                     SetVarKind::Set => {
-                        let operand = operand.into_owned();
-                        let change = record.map(|_| match std::str::from_utf8(&operand) {
+                        let operand = ByteValue::from(operand);
+                        let change = record.map(|_| match operand.as_utf8() {
                             Ok(text) => SetVarChange::Set(text.to_owned()),
-                            Err(_) => SetVarChange::SetBytes(operand.clone()),
+                            Err(_) => SetVarChange::SetBytes(operand.as_bytes().to_vec()),
                         });
                         self.tx.set_bytes(name.as_ref(), operand);
                         change
