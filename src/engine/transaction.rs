@@ -972,6 +972,16 @@ impl Transaction {
         let mut skip_after: Option<usize> = None;
 
         let mut idx = 0;
+        if phase == Phase::RequestHeaders
+            && self.tx.is_empty()
+            && !self.record_setvar_effects
+            && !self.record_rule_messages
+        {
+            if let Some(defaults) = &ruleset.tx_defaults {
+                self.apply_tx_defaults(&ruleset, defaults);
+                idx = defaults.end;
+            }
+        }
         while idx < rules.len() {
             // Handle skipAfter
             if let Some(next) = skip_after.take() {
@@ -1173,6 +1183,56 @@ impl Transaction {
         }
 
         Ok(())
+    }
+
+    fn apply_tx_defaults(
+        &mut self,
+        ruleset: &CompiledRuleset,
+        defaults: &super::initialization::TxDefaults,
+    ) {
+        let phase = Phase::RequestHeaders;
+        let dispatch = ruleset.dispatch_for_phase(phase);
+        self.tx.reserve(defaults.assignments.len());
+        let assignment =
+            |(rule, action): (u8, u8)| &dispatch[usize::from(rule)].setvars[usize::from(action)];
+        for op in &defaults.assignments {
+            self.tx.set_canonical(
+                assignment(op.key).key.as_ref().unwrap().clone(),
+                assignment(op.value).value.as_ref().unwrap().clone(),
+            );
+        }
+        for &index in &defaults.ids {
+            let index = usize::from(index);
+            self.matched_rules
+                .push(ruleset, RuleLocation { phase, index });
+        }
+        let count_value = |(index, n): (u8, u8)| {
+            let name = dispatch[usize::from(index)].selections[0]
+                .match_name
+                .as_deref()
+                .unwrap();
+            (name.clone(), ByteValue::decimal(i64::from(n)))
+        };
+        self.matched_data.extend(
+            ruleset,
+            defaults.counts.iter().map(|&entry| {
+                let (variable, value) = count_value(entry);
+                (
+                    RuleLocation {
+                        phase,
+                        index: usize::from(entry.0),
+                    },
+                    RawMatch {
+                        variable,
+                        portion: Some(value.clone()),
+                        value,
+                    },
+                )
+            }),
+        );
+        self.matched_vars.clear();
+        self.matched_vars
+            .extend(defaults.last_count.map(count_value));
     }
 
     /// A target's values are snapshotted together. The next target is

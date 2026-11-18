@@ -4,6 +4,7 @@ pub mod body;
 pub mod chain;
 pub mod control;
 mod diagnostics;
+mod initialization;
 pub mod intervention;
 mod match_log;
 pub mod phase;

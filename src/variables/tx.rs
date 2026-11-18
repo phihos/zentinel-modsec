@@ -45,6 +45,14 @@ impl TxCollection {
         }
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    pub(crate) fn reserve(&mut self, size: usize) {
+        self.data.reserve(size)
+    }
+
     fn lookup(&self, key: &[u8]) -> Option<&ByteValue> {
         self.data.get(folded_key(key).as_ref())
     }
