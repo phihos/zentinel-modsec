@@ -197,3 +197,23 @@ SecRule RESPONSE_BODY "@streq unrelated" "id:14,phase:4,pass,multiMatch,t:none"
         }
     }
 }
+
+#[test]
+fn matching_pass_rules_do_not_copy_unused_audit_metadata() {
+    let base = "SecAction \"id:1,phase:2,pass,setvar:tx.label=normal";
+    let small = ModSecurity::from_string(&format!("{base}\"")).unwrap();
+    let tags = (0..20)
+        .map(|i| format!(",tag:'category-{i}'"))
+        .collect::<String>();
+    let large = ModSecurity::from_string(&format!(
+        "{base}{tags},msg:'audit message',logdata:'extra info',ver:'1.2'\""
+    ))
+    .unwrap();
+    request_allocations(&small);
+    request_allocations(&large);
+    let (baseline, matches) = request_allocations(&small);
+    let (with_metadata, extra_matches) = request_allocations(&large);
+    assert_eq!(matches, ["1"]);
+    assert_eq!(extra_matches, matches);
+    assert_eq!(with_metadata, baseline);
+}

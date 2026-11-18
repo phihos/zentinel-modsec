@@ -254,6 +254,17 @@ fn execute_data(action: &DataAction, result: &mut ActionResult, _matched_value: 
     }
 }
 
+/// Materialize audit metadata only for an intervention that retains it.
+pub(crate) fn rule_metadata(actions: &[Action]) -> RuleMetadata {
+    let mut metadata = RuleMetadata::default();
+    for action in actions {
+        if let Action::Metadata(m) = action {
+            execute_metadata(m, &mut metadata);
+        }
+    }
+    metadata
+}
+
 /// Execute a metadata action.
 fn execute_metadata(action: &MetadataAction, metadata: &mut RuleMetadata) {
     match action {
