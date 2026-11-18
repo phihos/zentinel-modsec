@@ -48,6 +48,36 @@ fn file_scopes_anchors_and_mutual_references_survive_source_removal() {
     let rules = ModSecurity::from_file(config.to_str().unwrap()).unwrap();
     fs::remove_dir_all(dir.path().join("nested")).unwrap();
     fs::remove_file(dir.path().join("entry.json")).unwrap();
+    assert_alternating_tags(&rules);
+}
+
+#[test]
+fn companion_documents_inherit_the_configured_draft_for_legacy_ids() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    let config = write_policy(root);
+    fs::write(
+        root.join("entry.json"),
+        r##"{"$schema":"http://json-schema.org/draft-04/schema#","$ref":"nested/a.json"}"##,
+    )
+    .unwrap();
+    fs::write(
+        root.join("nested/a.json"),
+        r#"{"id":"scopes/a-id.json","type":"object","required":["tag"],
+            "properties":{"tag":{"enum":["A"]},"next":{"$ref":"b.json"}}}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("nested/scopes/b.json"),
+        r#"{"type":"object","required":["tag"],
+            "properties":{"tag":{"enum":["B"]},"next":{"$ref":"../a.json"}}}"#,
+    )
+    .unwrap();
+    let rules = ModSecurity::from_file(config.to_str().unwrap()).unwrap();
+    assert_alternating_tags(&rules);
+}
+
+fn assert_alternating_tags(rules: &ModSecurity) {
     for depth in [1, 2, 3, 4, 192] {
         for valid in [true, false] {
             let mut tx = rules.new_transaction();

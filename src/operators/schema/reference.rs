@@ -20,6 +20,7 @@ pub(super) struct DynamicScope {
 
 #[derive(Default)]
 pub(super) struct LocalRefs<'a> {
+    default_draft: Draft,
     resources: Vec<Resource<'a>>,
     names: HashMap<String, usize>,
     // Each name has a stable slot and a count of distinct declarations.
@@ -31,7 +32,10 @@ pub(super) struct LocalRefs<'a> {
 
 impl<'a> LocalRefs<'a> {
     pub(super) fn new(root: &'a Value, base: &Url) -> Option<Self> {
-        let mut refs = Self::default();
+        let mut refs = Self {
+            default_draft: Draft::default().detect(root),
+            ..Self::default()
+        };
         refs.add_document(root, base)?;
         Some(refs)
     }
@@ -39,7 +43,7 @@ impl<'a> LocalRefs<'a> {
     /// Add one already loaded document. Discard the index if this fails.
     pub(super) fn add_document(&mut self, root: &'a Value, base: &Url) -> Option<()> {
         let retrieval = uri::from_str(base.as_str()).ok()?;
-        let mut pending = vec![(root, None::<usize>, Draft::default())];
+        let mut pending = vec![(root, None::<usize>, self.default_draft)];
         while let Some((node, parent, inherited_draft)) = pending.pop() {
             let draft = inherited_draft.detect(node);
             if draft == Draft::Unknown || !(node.is_object() || node.is_boolean()) {
