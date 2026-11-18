@@ -1,0 +1,166 @@
+{
+  "default": {
+    "commit": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+    "tree": "05e148970987c1b8d002bba3ab82681915dfe526",
+    "backend": "default",
+    "native_crs": "30cb436b261a9f5ec32a5a0677e17f3cfa1a8739",
+    "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+    "blocking_config_sha256": "1281449331b7e49872943ba675af791473310236f39318aba1ba5daedc2121ed",
+    "commands": {
+      "native": {
+        "argv": [
+          "cargo",
+          "test",
+          "--release",
+          "--locked",
+          "--offline",
+          "--test",
+          "crs_conformance",
+          "--test",
+          "setvar_effects",
+          "--message-format=json-render-diagnostics",
+          "--",
+          "--nocapture"
+        ],
+        "exit": 0
+      },
+      "audit-build": {
+        "argv": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "-L",
+          "dependency=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-default/release/deps",
+          "--extern",
+          "zentinel_modsec=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-default/release/deps/libzentinel_modsec-b4a878ddf43a653a.rlib",
+          "/home/phil/Quellcode/zentinel-eval/results/latency-499db21/qualification/mixed-3594fa0/mixed.rs",
+          "-o",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/default/audit"
+        ],
+        "exit": 0
+      },
+      "audit-records": {
+        "argv": [
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/default/audit",
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-blocking-matrix/bench-zentinel-v2.conf",
+          "evidence"
+        ],
+        "exit": 0
+      },
+      "blocking-build": {
+        "argv": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "-L",
+          "dependency=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-default/release/deps",
+          "--extern",
+          "zentinel_modsec=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-default/release/deps/libzentinel_modsec-b4a878ddf43a653a.rlib",
+          "--extern",
+          "serde_json=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-default/release/deps/libserde_json-44fcef2d158a1470.rlib",
+          "/home/phil/Quellcode/zentinel-eval/results/latency-499db21/qualification/blocking-3594fa0-default/adapter/src/main.rs",
+          "-o",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/default/blocking"
+        ],
+        "exit": 0
+      },
+      "blocking-traces": {
+        "argv": [
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/default/blocking",
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-blocking-matrix/bench-zentinel-v2.conf",
+          "/home/phil/Quellcode/zentinel-eval/results/latency-499db21/qualification/blocking-3594fa0-default/cases.json"
+        ],
+        "exit": 0
+      }
+    },
+    "native_report": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b",
+    "engine_library": "3a948d77b0e4a6b0b6441eea3bd8598bc315d75fc68ca568dae1245f40c33085",
+    "audit_cases": 24,
+    "audit_sha256": "1623edf088618a9c440c2ccf6bacb10c6c91833d56cfa74c0dcc1d1a4234b6cd",
+    "blocking_cases": 22,
+    "blocking_sha256": "10e6af9118209b77317d85f9067d1774033c15762d2f4ae47d4f9b885570e355"
+  },
+  "ffi": {
+    "commit": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+    "tree": "05e148970987c1b8d002bba3ab82681915dfe526",
+    "backend": "ffi",
+    "native_crs": "30cb436b261a9f5ec32a5a0677e17f3cfa1a8739",
+    "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+    "blocking_config_sha256": "1281449331b7e49872943ba675af791473310236f39318aba1ba5daedc2121ed",
+    "commands": {
+      "native": {
+        "argv": [
+          "cargo",
+          "test",
+          "--release",
+          "--locked",
+          "--offline",
+          "--features",
+          "libinjection-ffi",
+          "--test",
+          "crs_conformance",
+          "--test",
+          "setvar_effects",
+          "--message-format=json-render-diagnostics",
+          "--",
+          "--nocapture"
+        ],
+        "exit": 0
+      },
+      "audit-build": {
+        "argv": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "-L",
+          "dependency=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-ffi/release/deps",
+          "--extern",
+          "zentinel_modsec=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-ffi/release/deps/libzentinel_modsec-e1b718bfad153fbe.rlib",
+          "/home/phil/Quellcode/zentinel-eval/results/latency-499db21/qualification/mixed-3594fa0-ffi/mixed.rs",
+          "-o",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/ffi/audit"
+        ],
+        "exit": 0
+      },
+      "audit-records": {
+        "argv": [
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/ffi/audit",
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-blocking-matrix/bench-zentinel-v2.conf",
+          "evidence"
+        ],
+        "exit": 0
+      },
+      "blocking-build": {
+        "argv": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "-L",
+          "dependency=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-ffi/release/deps",
+          "--extern",
+          "zentinel_modsec=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-ffi/release/deps/libzentinel_modsec-e1b718bfad153fbe.rlib",
+          "--extern",
+          "serde_json=/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/target-ffi/release/deps/libserde_json-44fcef2d158a1470.rlib",
+          "/home/phil/Quellcode/zentinel-eval/results/latency-499db21/qualification/blocking-3594fa0-ffi/adapter/src/main.rs",
+          "-o",
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/ffi/blocking"
+        ],
+        "exit": 0
+      },
+      "blocking-traces": {
+        "argv": [
+          "/home/phil/Quellcode/zentinel-eval/results/perf-post-grouped/verification/2d323921fc2c/ffi/blocking",
+          "/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-blocking-matrix/bench-zentinel-v2.conf",
+          "/home/phil/Quellcode/zentinel-eval/results/latency-499db21/qualification/blocking-3594fa0-ffi/cases.json"
+        ],
+        "exit": 0
+      }
+    },
+    "native_report": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b",
+    "engine_library": "da074771ad179cd723923f73755cde56b6e8e2264773ead1bc3163d4f6700c32",
+    "audit_cases": 24,
+    "audit_sha256": "1623edf088618a9c440c2ccf6bacb10c6c91833d56cfa74c0dcc1d1a4234b6cd",
+    "blocking_cases": 22,
+    "blocking_sha256": "10e6af9118209b77317d85f9067d1774033c15762d2f4ae47d4f9b885570e355"
+  }
+}

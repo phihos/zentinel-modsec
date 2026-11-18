@@ -1,0 +1,20 @@
+{
+  "commit": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+  "fixture": "512814e39674e8c07ed8adda90f37c55812d0fcef9a941d5615ee2f74253f078",
+  "checks": {
+    "default": {
+      "rlib": "3a948d77b0e4a6b0b6441eea3bd8598bc315d75fc68ca568dae1245f40c33085",
+      "binary": "ebb66b36272362d03d4019b7606202cb48e8ab296bbe7805e14559545c26bc28",
+      "exit": 0,
+      "stdout": "five phases x 301 matching rules, early and late views exact\n",
+      "stderr": ""
+    },
+    "ffi": {
+      "rlib": "da074771ad179cd723923f73755cde56b6e8e2264773ead1bc3163d4f6700c32",
+      "binary": "9657a973a683b741ac91022483c670c48c021baac210c7a451f47b0ade96c32b",
+      "exit": 0,
+      "stdout": "five phases x 301 matching rules, early and late views exact\n",
+      "stderr": ""
+    }
+  }
+}

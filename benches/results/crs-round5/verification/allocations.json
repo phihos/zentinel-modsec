@@ -1,0 +1,159 @@
+{
+  "baseline": "25f1d65f38b505c1b22b7874c8ef723e4c038f98",
+  "candidate": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+  "method": "#69 inspect calls matched_rules() and matched_data() after indicated phases, with the original automatic recording settings; three batches of 128 transactions after 30 warmups. System allocator counts including realloc.",
+  "workloads": {
+    "unread": {
+      "before": {
+        "binary_sha256": "e19fe1c1ef8bdd77ef1abc69355c0960f9388be34d4d6f1d8c14652d9c1586de",
+        "fixture_sha256": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+        "stats": {
+          "get": {
+            "allocations": 136.0,
+            "bytes": 26644.0
+          },
+          "form": {
+            "allocations": 197.0,
+            "bytes": 30290.0
+          },
+          "json": {
+            "allocations": 223.0,
+            "bytes": 29882.0
+          }
+        }
+      },
+      "after": {
+        "binary_sha256": "5ddb8db7892e9321e1ec26afe88a1fb08577f37a9a86a779243c5f326970dbbf",
+        "fixture_sha256": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+        "stats": {
+          "get": {
+            "allocations": 133.0,
+            "bytes": 24543.0
+          },
+          "form": {
+            "allocations": 191.0,
+            "bytes": 28135.0
+          },
+          "json": {
+            "allocations": 217.0,
+            "bytes": 27759.0
+          }
+        }
+      }
+    },
+    "phase1": {
+      "before": {
+        "binary_sha256": "e9195262c92574ebda39c69e599c64a610920a2f2ec46c675a7ce6e7c72b05dd",
+        "fixture_sha256": "7d231a6c07eedbac7ff95e0cc3ec096b6ac01985bc06bea7c39782ca6897f521",
+        "stats": {
+          "get": {
+            "allocations": 616.0,
+            "bytes": 37990.0
+          },
+          "form": {
+            "allocations": 672.0,
+            "bytes": 38518.0
+          },
+          "json": {
+            "allocations": 711.0,
+            "bytes": 41290.0
+          }
+        }
+      },
+      "after": {
+        "binary_sha256": "12ab531d7f546610996066644237296a4ef6ed04c8408adf47da9ecb3c3109c0",
+        "fixture_sha256": "7d231a6c07eedbac7ff95e0cc3ec096b6ac01985bc06bea7c39782ca6897f521",
+        "stats": {
+          "get": {
+            "allocations": 613.0,
+            "bytes": 36913.0
+          },
+          "form": {
+            "allocations": 666.0,
+            "bytes": 37387.0
+          },
+          "json": {
+            "allocations": 705.0,
+            "bytes": 40191.0
+          }
+        }
+      }
+    },
+    "logging": {
+      "before": {
+        "binary_sha256": "651d942a8af9136eea683c5deda3032fe550bf58c612cab18c7350460f960a50",
+        "fixture_sha256": "47aa0b506fb5e7e3f1145cd51e3e88d1a9f0cd28a2193411cdf08e08e0c2e152",
+        "stats": {
+          "get": {
+            "allocations": 617.0,
+            "bytes": 42462.0
+          },
+          "form": {
+            "allocations": 674.0,
+            "bytes": 45870.0
+          },
+          "json": {
+            "allocations": 712.0,
+            "bytes": 45954.0
+          }
+        }
+      },
+      "after": {
+        "binary_sha256": "f792ae9f07dd2033c89b55a7815a3f318f00089d3dd7f2c8cf25bbe9fb3b38aa",
+        "fixture_sha256": "47aa0b506fb5e7e3f1145cd51e3e88d1a9f0cd28a2193411cdf08e08e0c2e152",
+        "stats": {
+          "get": {
+            "allocations": 614.0,
+            "bytes": 40361.0
+          },
+          "form": {
+            "allocations": 668.0,
+            "bytes": 43715.0
+          },
+          "json": {
+            "allocations": 706.0,
+            "bytes": 43831.0
+          }
+        }
+      }
+    },
+    "both": {
+      "before": {
+        "binary_sha256": "0b764abb4877a49591aef03512cdf33654e02d45675ef5d5fa2582f602b7ece9",
+        "fixture_sha256": "0ba2ec2e5efe736e9f1199885eb74cbf277ce394da303f604a351b28309e1c56",
+        "stats": {
+          "get": {
+            "allocations": 616.0,
+            "bytes": 37990.0
+          },
+          "form": {
+            "allocations": 672.0,
+            "bytes": 38518.0
+          },
+          "json": {
+            "allocations": 711.0,
+            "bytes": 41290.0
+          }
+        }
+      },
+      "after": {
+        "binary_sha256": "972b99a001034e7b4656dd0eb3dc97e01856cee872cc6efd473327ceddc9a3ff",
+        "fixture_sha256": "0ba2ec2e5efe736e9f1199885eb74cbf277ce394da303f604a351b28309e1c56",
+        "stats": {
+          "get": {
+            "allocations": 613.0,
+            "bytes": 36913.0
+          },
+          "form": {
+            "allocations": 666.0,
+            "bytes": 37387.0
+          },
+          "json": {
+            "allocations": 705.0,
+            "bytes": 40191.0
+          }
+        }
+      }
+    }
+  }
+}

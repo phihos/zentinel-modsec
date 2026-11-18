@@ -1,0 +1,49 @@
+{
+  "commit": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+  "tree": "05e148970987c1b8d002bba3ab82681915dfe526",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "deea7db679a62dab41edfa615692bcee07610d430d95eb6b211ec86a7a6c27fb",
+      "oracle": "sweep.rs",
+      "oracle_sha256": "b55b46da744c47347f11ff3a4711a0b86b8f596069cb8519ce93c552cd47ecab",
+      "combined_sha256": "a10440947f33319d254ebc87150775efb3e620f7eea2216ce5fa5755bf590b20"
+    },
+    "src/operators/pattern.rs": {
+      "production_sha256": "64d3b11936585856035410f0a31850f348fce2dbbb922dbc98a3c6e35679e7e0",
+      "oracle": "differential.rs",
+      "oracle_sha256": "107e08ed958eaf41dfe9266f2edc77e529c538daff571f5473917ac778d39434",
+      "combined_sha256": "d090f9b35315d87209d95d00f940ce1588a0f5034b46227d871ef3e7a52da6ca"
+    },
+    "src/engine/ruleset.rs": {
+      "production_sha256": "fc90780781ca4d7dc3ba198e3f77686d40d28bf2ad5d99ad2159f5c1b233cb95",
+      "oracle": "access.ruleset.rs",
+      "oracle_sha256": "43b310c45db48fdea3653284bc361dc4d6c3b2b0ce2cc6c2602c3e7103e2a8bd",
+      "combined_sha256": "2ea384ffdbbf950a59808c04ff56668d7632d7db1e901bbf5a59b74b25fec9fb"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "b1036b35bde276acee96b40ba6b0c90c75277abb1ac6be4d030a3a9e7febb6f9",
+  "results": [
+    "early rejection actual target pruning counts [arguments,filename,headers] [1519704, 214860, 151243]",
+    "early rejection eligible rules 291, early rejections crosschecked 1270158, summarized width rejections 1290049, final bytes changed 114823",
+    "CRS rules 698, distinct static RX 291, inputs 68880, comparisons 20044080, prefilter rejections 17102704, matching portions 201818, subgroups 5793, mismatches 0",
+    "live shapes 35, including individual stages 46, inputs 67858, checked final values and ownership 3121468, checked multiMatch stage visits 3461022, mismatches 0",
+    "test result: ok. 208 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.80s"
+  ]
+}
