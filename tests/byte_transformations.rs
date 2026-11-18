@@ -80,3 +80,30 @@ fn custom_text_only_transformations_reject_binary_input() {
         .to_string()
         .contains("binary input"));
 }
+
+#[test]
+fn compress_whitespace_preserves_unicode_boundaries_and_latin1_separators() {
+    let transform = create_transformation("compressWhitespace").unwrap();
+    let text = "Å\u{85}\u{a0}你\u{2003}à";
+    assert_eq!(transform.transform(text), "Å 你\u{2003}à");
+    assert_eq!(
+        transform.transform_bytes(text.as_bytes()).unwrap().as_ref(),
+        "Å 你\u{2003}à".as_bytes(),
+    );
+    for (input, expected) in [
+        (
+            &b"a\xff\xc2\x85\xa0\t\xc2\xa0\xffb"[..],
+            &b"a\xff \xffb"[..],
+        ),
+        (&b"\x85\xe0\xa0"[..], &b"\x85\xe0 "[..]),
+    ] {
+        assert_eq!(transform.transform_bytes(input).unwrap().as_ref(), expected);
+    }
+    for input in ["two words", "Åà你\u{2003}書"] {
+        assert!(matches!(transform.transform(input), Cow::Borrowed(_)));
+        assert!(matches!(
+            transform.transform_bytes(input.as_bytes()).unwrap(),
+            Cow::Borrowed(_)
+        ));
+    }
+}
