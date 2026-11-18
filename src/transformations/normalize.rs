@@ -575,7 +575,7 @@ pub struct EscapeSeqDecode;
 
 impl Transformation for EscapeSeqDecode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(super::bytes::escape_decode_stage(input, false, false))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {

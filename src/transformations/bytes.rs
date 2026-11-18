@@ -203,28 +203,88 @@ fn escape_decode(input: &[u8], css: bool, javascript: bool) -> Vec<u8> {
     out
 }
 
+/// The common unencoded case borrows the input without allocating a buffer.
+pub(super) fn url_decode_stage(input: &[u8], unicode: bool) -> Cow<'_, [u8]> {
+    if memchr::memchr2(b'%', b'+', input).is_none() {
+        return Cow::Borrowed(input);
+    }
+    decoded_output(input, url_decode(input, unicode, true))
+}
+
+pub(super) fn escape_decode_stage(input: &[u8], css: bool, javascript: bool) -> Cow<'_, [u8]> {
+    if memchr::memchr(b'\\', input).is_none() {
+        return Cow::Borrowed(input);
+    }
+    decoded_output(input, escape_decode(input, css, javascript))
+}
+
+pub(super) fn html_entity_stage(input: &[u8]) -> Cow<'_, [u8]> {
+    if memchr::memchr(b'&', input).is_none() {
+        return Cow::Borrowed(input);
+    }
+    let mut out = Vec::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        if input[i] == b'&' {
+            let mut end = i + 1;
+            while end < input.len() && end < i + 64 && input[end].is_ascii_alphanumeric() {
+                end += 1;
+            }
+            if i + 1 < input.len() && input[i + 1] == b'#' {
+                end = i + 2;
+                while end < input.len()
+                    && end < i + 64
+                    && (input[end].is_ascii_hexdigit() || matches!(input[end], b'x' | b'X'))
+                {
+                    end += 1;
+                }
+            }
+            if end < input.len() && input[end] == b';' {
+                end += 1;
+            }
+            if let Ok(entity) = std::str::from_utf8(&input[i..end]) {
+                let decoded = html_escape::decode_html_entities(entity);
+                if decoded.as_ref() != entity {
+                    out.extend_from_slice(decoded.as_bytes());
+                    i = end;
+                    continue;
+                }
+            }
+        }
+        out.push(input[i]);
+        i += 1;
+    }
+    decoded_output(input, out)
+}
+
+fn decoded_output(input: &[u8], output: Vec<u8>) -> Cow<'_, [u8]> {
+    if output == input {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(output)
+    }
+}
+
 pub(super) fn apply<'a>(
     transformation: &dyn Transformation,
     input: &'a [u8],
 ) -> Result<Cow<'a, [u8]>> {
     use base64::Engine;
-    let name = transformation.name().to_ascii_lowercase();
-    let out = match name.as_str() {
+    let name = transformation.name();
+    let out = match name {
         "none" => return Ok(Cow::Borrowed(input)),
         "length" => input.len().to_string().into_bytes(),
-        "urldecode" => url_decode(input, false, true),
-        "urldecodeuni" => url_decode(input, true, true),
-        "hexdecode" => match ::hex::decode(input) {
+        "hexDecode" => match ::hex::decode(input) {
             Ok(value) => value,
             Err(_) => return Ok(Cow::Borrowed(input)),
         },
-        "base64decode" => base64_decode(input, false),
-        "base64decodeext" => base64_decode(input, true),
-        "base64encode" => base64::engine::general_purpose::STANDARD
+        "base64Decode" => base64_decode(input, false),
+        "base64DecodeExt" => base64_decode(input, true),
+        "base64Encode" => base64::engine::general_purpose::STANDARD
             .encode(input)
             .into_bytes(),
-        "hexencode" => ::hex::encode(input).into_bytes(),
-        "urlencode" => percent_encoding::percent_encode(input, percent_encoding::NON_ALPHANUMERIC)
+        "hexEncode" => ::hex::encode(input).into_bytes(),
+        "urlEncode" => percent_encoding::percent_encode(input, percent_encoding::NON_ALPHANUMERIC)
             .to_string()
             .into_bytes(),
         "md5" => {
@@ -239,10 +299,7 @@ pub(super) fn apply<'a>(
             use sha2::Digest;
             sha2::Sha256::digest(input).to_vec()
         }
-        "jsdecode" => escape_decode(input, false, true),
-        "escapeseqdecode" => escape_decode(input, false, false),
-        "cssdecode" => escape_decode(input, true, false),
-        "sqlhexdecode" => {
+        "sqlHexDecode" => {
             let mut out = Vec::with_capacity(input.len());
             let mut i = 0;
             while i < input.len() {
@@ -266,43 +323,6 @@ pub(super) fn apply<'a>(
             }
             out
         }
-        // HTML decoding operates on each ASCII entity and copies every other
-        // byte unchanged, including malformed UTF-8 outside the entity.
-        "htmlentitydecode" => {
-            let mut out = Vec::with_capacity(input.len());
-            let mut i = 0;
-            while i < input.len() {
-                if input[i] == b'&' {
-                    let mut end = i + 1;
-                    while end < input.len() && end < i + 64 && input[end].is_ascii_alphanumeric() {
-                        end += 1;
-                    }
-                    if i + 1 < input.len() && input[i + 1] == b'#' {
-                        end = i + 2;
-                        while end < input.len()
-                            && end < i + 64
-                            && (input[end].is_ascii_hexdigit() || matches!(input[end], b'x' | b'X'))
-                        {
-                            end += 1;
-                        }
-                    }
-                    if end < input.len() && input[end] == b';' {
-                        end += 1;
-                    }
-                    if let Ok(entity) = std::str::from_utf8(&input[i..end]) {
-                        let decoded = html_escape::decode_html_entities(entity);
-                        if decoded.as_ref() != entity {
-                            out.extend_from_slice(decoded.as_bytes());
-                            i = end;
-                            continue;
-                        }
-                    }
-                }
-                out.push(input[i]);
-                i += 1;
-            }
-            out
-        }
         _ => {
             // Existing Unicode-aware text semantics remain available for valid
             // text where the transform cannot create arbitrary output bytes.
@@ -312,31 +332,31 @@ pub(super) fn apply<'a>(
                     Cow::Owned(value) => Cow::Owned(value.into_bytes()),
                 });
             }
-            match name.as_str() {
+            match name {
                 "lowercase" => input.iter().map(u8::to_ascii_lowercase).collect(),
                 "uppercase" => input.iter().map(u8::to_ascii_uppercase).collect(),
-                "removenulls" => input.iter().copied().filter(|&b| b != 0).collect(),
-                "replacenulls" => input
+                "removeNulls" => input.iter().copied().filter(|&b| b != 0).collect(),
+                "replaceNulls" => input
                     .iter()
                     .map(|&b| if b == 0 { b' ' } else { b })
                     .collect(),
-                "removewhitespace" => input.iter().copied().filter(|&b| !space(b)).collect(),
-                "trim" | "trimleft" | "trimright" => {
+                "removeWhitespace" => input.iter().copied().filter(|&b| !space(b)).collect(),
+                "trim" | "trimLeft" | "trimRight" => {
                     let mut start = 0;
                     let mut end = input.len();
-                    if name != "trimright" {
+                    if name != "trimRight" {
                         while start < end && space(input[start]) {
                             start += 1;
                         }
                     }
-                    if name != "trimleft" {
+                    if name != "trimLeft" {
                         while end > start && space(input[end - 1]) {
                             end -= 1;
                         }
                     }
                     input[start..end].to_vec()
                 }
-                "compresswhitespace" => {
+                "compressWhitespace" => {
                     let mut out = Vec::new();
                     let mut last = false;
                     for &b in input {
@@ -352,7 +372,7 @@ pub(super) fn apply<'a>(
                     }
                     out
                 }
-                "cmdline" => {
+                "cmdLine" => {
                     let mut out = Vec::with_capacity(input.len());
                     let mut pending = false;
                     for &b in input {
@@ -385,7 +405,7 @@ pub(super) fn apply<'a>(
                     }
                     out
                 }
-                "normalizepath" | "normalizepathwin" => {
+                "normalizePath" | "normalizePathWin" => {
                     let normalized: Vec<u8> = input
                         .iter()
                         .map(|&b| if b == b'\\' { b'/' } else { b })
@@ -410,7 +430,7 @@ pub(super) fn apply<'a>(
                     }
                     out
                 }
-                "removecomments" | "replacecomments" => {
+                "removeComments" | "replaceComments" => {
                     let mut out = Vec::new();
                     let mut i = 0;
                     while i < input.len() {
@@ -421,7 +441,7 @@ pub(super) fn apply<'a>(
                             }
                             if i < input.len() {
                                 i += 2;
-                                if name == "replacecomments" {
+                                if name == "replaceComments" {
                                     out.push(b' ');
                                 }
                             }
@@ -432,7 +452,7 @@ pub(super) fn apply<'a>(
                     }
                     out
                 }
-                "removecommentschar" => {
+                "removeCommentsChar" => {
                     let mut out = input.to_vec();
                     for marker in [&b"/*"[..], &b"*/"[..], &b"--"[..], &b"#"[..]] {
                         let mut next = Vec::new();
@@ -449,7 +469,7 @@ pub(super) fn apply<'a>(
                     }
                     out
                 }
-                "utf8tounicode" => {
+                "utf8ToUnicode" => {
                     let mut out = Vec::new();
                     let mut remaining = input;
                     while !remaining.is_empty() {
