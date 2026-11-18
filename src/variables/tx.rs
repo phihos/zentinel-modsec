@@ -1,7 +1,7 @@
 //! TX (transaction) collection.
 
 use super::collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
-use super::ByteValue;
+use super::{folded_key, ByteValue};
 use regex::Regex;
 use std::borrow::Cow;
 
@@ -21,10 +21,11 @@ pub struct TxCollection {
 /// Lowercase a key only when it actually contains uppercase, so the common path
 /// (CRS writes and reads lowercase) does not allocate.
 fn normalize(key: &str) -> Cow<'_, str> {
-    if key.bytes().any(|b| b.is_ascii_uppercase()) {
-        Cow::Owned(key.to_ascii_lowercase())
-    } else {
-        Cow::Borrowed(key)
+    match folded_key(key.as_bytes()) {
+        Cow::Borrowed(_) => Cow::Borrowed(key),
+        Cow::Owned(bytes) => {
+            Cow::Owned(String::from_utf8(bytes).expect("lowercased text is UTF-8"))
+        }
     }
 }
 
@@ -41,13 +42,15 @@ impl TxCollection {
     /// Store original value bytes under a case-insensitive original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
         let key = key.into();
-        self.data
-            .set_bytes(key.as_bytes().to_ascii_lowercase(), value);
+        match folded_key(key.as_bytes()) {
+            Cow::Borrowed(_) => self.data.set_bytes(key, value),
+            Cow::Owned(folded) => self.data.set_bytes(folded, value),
+        }
     }
 
     /// Delete a case-insensitive original byte key.
     pub fn delete_bytes(&mut self, key: &[u8]) {
-        self.data.delete_bytes(&key.to_ascii_lowercase());
+        self.data.delete_bytes(&folded_key(key));
     }
 
     /// Increment a numeric byte value with signed 64-bit wrapping, matching
@@ -119,11 +122,7 @@ impl ByteCollection for TxCollection {
         self.data.all_bytes()
     }
     fn get_bytes(&self, key: &[u8]) -> Option<Vec<&[u8]>> {
-        if key.iter().any(u8::is_ascii_uppercase) {
-            self.data.get_bytes(&key.to_ascii_lowercase())
-        } else {
-            self.data.get_bytes(key)
-        }
+        self.data.get_bytes(&folded_key(key))
     }
     fn get_regex_bytes(&self, pattern: &regex::bytes::Regex) -> Vec<(&[u8], &[u8])> {
         self.data.get_regex_bytes(pattern)

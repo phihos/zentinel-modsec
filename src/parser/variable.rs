@@ -402,8 +402,39 @@ impl VariableName {
     }
 }
 
-/// Perfect hash map for O(1) variable name lookup.
-static VARIABLE_MAP: phf::Map<&'static str, VariableName> = phf_map! {
+// The parser and match-data reporting use the same SecLang spellings.
+macro_rules! variable_names {
+    ($($label:literal => VariableName::$variant:ident),* $(,)?) => {
+        static VARIABLE_MAP: phf::Map<&'static str, VariableName> = phf_map! {
+            $($label => VariableName::$variant),*
+        };
+        impl VariableName {
+            pub(crate) fn seclang_name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $label,)*
+                    // Variants accessible through the typed API only.
+                    Self::InboundAnomalyScore => "INBOUND_ANOMALY_SCORE",
+                    Self::OutboundAnomalyScore => "OUTBOUND_ANOMALY_SCORE",
+                    Self::MultipartBoundaryQuoted => "MULTIPART_BOUNDARY_QUOTED",
+                    Self::MultipartBoundaryWhitespace => "MULTIPART_BOUNDARY_WHITESPACE",
+                    Self::MultipartDataAfter => "MULTIPART_DATA_AFTER",
+                    Self::MultipartDataBefore => "MULTIPART_DATA_BEFORE",
+                    Self::MultipartFileLimitExceeded => "MULTIPART_FILE_LIMIT_EXCEEDED",
+                    Self::MultipartHeaderFolding => "MULTIPART_HEADER_FOLDING",
+                    Self::MultipartInvalidHeaderFolding => "MULTIPART_INVALID_HEADER_FOLDING",
+                    Self::MultipartInvalidPart => "MULTIPART_INVALID_PART",
+                    Self::MultipartLfLine => "MULTIPART_LF_LINE",
+                    Self::MultipartMissingSemicolon => "MULTIPART_MISSING_SEMICOLON",
+                    Self::MultipartStrictError => "MULTIPART_STRICT_ERROR",
+                    Self::MultipartUnmatchedBoundary => "MULTIPART_UNMATCHED_BOUNDARY",
+                    Self::WebserverErrorLog => "WEBSERVER_ERROR_LOG",
+                }
+            }
+        }
+    };
+}
+
+variable_names! {
     "ARGS" => VariableName::Args,
     "ARGS_GET" => VariableName::ArgsGet,
     "ARGS_POST" => VariableName::ArgsPost,
@@ -488,7 +519,7 @@ static VARIABLE_MAP: phf::Map<&'static str, VariableName> = phf_map! {
     "MULTIPART_FILENAME_LANGUAGE" => VariableName::MultipartFilenameLanguage,
     "MULTIPART_DUPLICATE_PART_HEADER" => VariableName::MultipartDuplicatePartHeader,
     "MULTIPART_INVALID_QUOTING" => VariableName::MultipartInvalidQuoting,
-};
+}
 
 impl VariableName {
     /// Parse a variable name from a string (O(1) lookup).

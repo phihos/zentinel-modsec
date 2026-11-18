@@ -1,8 +1,6 @@
 //! Lossless resolution used by transaction evaluation.
 use super::*;
-use crate::variables::{
-    folded_key, ByteCollection, ByteValue, HashMapCollection, SelectorPrograms,
-};
+use crate::variables::{folded_key, ByteValue, HashMapCollection, SelectorPrograms};
 
 pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
     let Some(key) = member.filter(|k| !k.is_empty()) else {

@@ -1,8 +1,26 @@
 //! Byte selector programs owned by a live ruleset.
-use crate::parser::VariableName;
+use super::{folded_key, qualified_name, ByteValue};
+use crate::parser::{Selection, VariableName, VariableSpec};
 use regex::bytes::{Regex, RegexBuilder};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
+
+/// Count variables retain the selector as their match key, including regex
+/// delimiters. The reference preserves argument selector case and folds the
+/// selector of other collections.
+pub(crate) fn count_name(spec: &VariableSpec) -> ByteValue {
+    let prefix = spec.name.seclang_name();
+    let key = match &spec.selection {
+        Some(Selection::Key(key)) => std::borrow::Cow::Borrowed(key.as_bytes()),
+        Some(Selection::Regex(pattern)) => format!("/{pattern}/").into_bytes().into(),
+        None => return prefix.into(),
+    };
+    if ignore_case(spec.name) {
+        qualified_name(prefix, Some(&folded_key(&key)))
+    } else {
+        qualified_name(prefix, Some(&key))
+    }
+}
 
 pub(crate) fn regex_exclusion(target: &str) -> Option<(VariableName, &str)> {
     let (kind, selection) = target.split_once(':')?;

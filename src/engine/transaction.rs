@@ -1187,7 +1187,7 @@ impl Transaction {
         let by_id = self.controls.has_target_removals(logical_id);
         let by_tag = self.controls.has_tag_target_removals(tag_actions);
         let mut values = Vec::new();
-        let mut count = 0;
+        let mut count = 0usize;
         resolver.visit_values(spec, |prefix, member, value| {
             if (by_id && self.controls.removed_member(logical_id, spec, member))
                 || (by_tag && self.controls.removed_tag_member(tag_actions, spec, member))
@@ -1205,7 +1205,7 @@ impl Transaction {
         });
         if spec.count_mode {
             values.push((
-                ByteValue::from(format!("&{:?}", spec.name)),
+                crate::variables::count_name(spec),
                 ByteValue::from(count.to_string()),
             ));
         }
