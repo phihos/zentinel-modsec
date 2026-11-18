@@ -4,6 +4,7 @@
 
 mod collection;
 mod json;
+mod multipart;
 mod request;
 mod resolver;
 mod response;

@@ -256,6 +256,15 @@ it match. These operators produce load-time warnings with rule IDs.
 `replaceComments`, `cmdLine`, `md5`, `sha1`, `sha256`, `length`, `none`.
 The three parity transformations are placeholders and warn with affected IDs.
 
+Multipart fields, names and filenames retain their original bytes. The parser
+honors quoted parameters and extended filenames, preserves repeated parts, and
+reports malformed framing/header/parameter states through
+`MULTIPART_STRICT_ERROR`. Quoted-printable transfer encoding is decoded before
+inspection; other transfer encodings stay raw, as in Coraza's NextPart API. `FILES_SIZES` is keyed by filename;
+`FILES_COMBINED_SIZE` counts all multipart payload bytes (files and fields),
+excluding MIME framing, matching Coraza. Intentional `ProcessPartial` prefixes
+suppress only the EOF strict error, while other malformed states remain visible.
+
 **Body processors:** URL-encoded forms, multipart (including
 `MULTIPART_PART_HEADERS`), JSON, XML and explicit RAW. Missing or unknown body
 types remain unprocessed unless `ctl:forceRequestBodyVariable=On` selects the
@@ -281,7 +290,7 @@ this deliberately retains stronger hidden-content reporting than Coraza's
 permissive parser. Bounds on depth and extracted values also report errors.
 General XPath is unsupported and produces load-time warnings with rule IDs.
 
-Unsupported variables, including `UNIQUE_ID` and `FILES_COMBINED_SIZE`, are
+Unsupported variables, including `UNIQUE_ID`, are
 reported at load even when a rule also selects implemented variables. Invalid
 selector/exclusion regexes and unsupported macro sources also warn with IDs.
 Only TX writes are implemented; non-TX `setvar` collection names are ignored
@@ -305,7 +314,7 @@ naming the rule IDs that must, or must not, appear in the log for a request.
 | | |
 |---|---|
 | Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **5,075 of 5,184 runnable cases (97.9%)** (`MIN_PASSING`) |
+| Passing | **5,093 of 5,184 runnable cases (98.2%)** (`MIN_PASSING`) |
 
 ```bash
 mkdir -p test-rules
