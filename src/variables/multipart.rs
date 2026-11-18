@@ -2,7 +2,6 @@
 use super::collection::HashMapCollection;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Default)]
 pub(super) struct Multipart {
     pub fields: HashMapCollection,
     pub files: HashMapCollection,
@@ -19,6 +18,28 @@ pub(super) struct Multipart {
     pub invalid_quoting: bool,
     pub error: Option<String>,
     pub has_boundary: bool,
+}
+
+impl Default for Multipart {
+    fn default() -> Self {
+        Self {
+            fields: HashMapCollection::named(),
+            files: HashMapCollection::named(),
+            file_names: HashMapCollection::named(),
+            file_sizes: HashMapCollection::named(),
+            headers: HashMapCollection::named(),
+            names: HashMapCollection::named(),
+            filenames: HashMapCollection::named(),
+            charsets: HashMapCollection::named(),
+            languages: HashMapCollection::named(),
+            combined_size: Default::default(),
+            strict: Default::default(),
+            duplicate: Default::default(),
+            invalid_quoting: Default::default(),
+            error: Default::default(),
+            has_boundary: Default::default(),
+        }
+    }
 }
 
 #[derive(Clone)]
