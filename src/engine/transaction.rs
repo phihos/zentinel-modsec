@@ -96,6 +96,7 @@ struct ResolvedTarget {
 
 struct StaticSearch<'a> {
     rule: &'a CompiledRule,
+    within: Option<&'a [u8]>,
     numeric: Option<crate::operators::NumericComparison>,
     regex: Option<&'a crate::operators::RxOperator>,
     capture: bool,
@@ -113,8 +114,14 @@ impl StaticSearch<'_> {
             return Ok(());
         }
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
-            if let Some(numeric) = self.numeric {
-                let matched = numeric.matches(value);
+            let whole_input = self
+                .numeric
+                .map(|numeric| numeric.matches(value))
+                .or_else(|| {
+                    self.within
+                        .map(|haystack| crate::operators::WithinOperator::matches(haystack, value))
+                });
+            if let Some(matched) = whole_input {
                 return Ok(
                     (matched != self.rule.operator_negated).then(|| ByteOperatorResult {
                         matched,
@@ -1316,7 +1323,8 @@ impl Transaction {
         let capture = dispatch.capture;
         let multi_match = dispatch.multi_match;
 
-        let search = (!dynamic).then(|| StaticSearch {
+        let search = StaticSearch {
+            within: None,
             numeric: dispatch.numeric,
             regex: if rule.operator_spec.name == crate::parser::OperatorName::Rx {
                 rule.operator.compiled_regex()
@@ -1326,7 +1334,7 @@ impl Transaction {
             rule,
             capture,
             multi_match,
-        });
+        };
         let mut evaluate = |tx: &mut Self,
                             name: Option<&ByteValue>,
                             value: &[u8],
@@ -1371,7 +1379,10 @@ impl Transaction {
             let need_portion = capture || (first && name.is_some());
             // A positive static comparison reuses the input; a negated one
             // has no matched portion. Other operators report their own bytes.
-            let mut portion = if dispatch.numeric.is_some() && result.matched {
+            let mut portion = if result.matched
+                && (dispatch.numeric.is_some()
+                    || (snapshot.is_some() && dispatch.within_tx_key.is_some()))
+            {
                 need_portion.then(|| {
                     matched_value
                         .clone()
@@ -1486,6 +1497,14 @@ impl Transaction {
             let spec = &rule.variables[index];
             let selection = &dispatch.selections[index];
             let mut target = ResolvedTarget::default();
+            // Read the TX operand for this target. After the first match, actions
+            // may change it and subsequent evaluations use the dynamic binder.
+            let within = dispatch
+                .within_tx_key
+                .as_deref()
+                .map(|key| self.tx.canonical_value(key).unwrap_or_default());
+            let search =
+                (!dynamic || within.is_some()).then_some(StaticSearch { within, ..search });
             self.resolve_rule_target(
                 spec,
                 selection,
