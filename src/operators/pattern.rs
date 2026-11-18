@@ -407,6 +407,8 @@ impl Operator for RxOperator {
 /// Phrase match operator (@pm).
 pub struct PmOperator {
     program: Arc<AhoCorasick>,
+    min_len: usize,
+    min_alphanumeric: usize,
 }
 
 /// Exact parsed phrases, including order and case, identify the program.
@@ -461,8 +463,21 @@ impl PmOperator {
             });
         }
 
+        Self::compile(patterns)
+    }
+
+    fn compile(patterns: Vec<Vec<u8>>) -> Result<Self> {
+        let min_alphanumeric = patterns
+            .iter()
+            .filter(|p| p.iter().all(u8::is_ascii_alphanumeric))
+            .map(Vec::len)
+            .min()
+            .unwrap_or(usize::MAX);
+        let program = PHRASE_CACHE.get(patterns)?;
         Ok(Self {
-            program: PHRASE_CACHE.get(patterns)?,
+            min_len: program.min_pattern_len(),
+            min_alphanumeric,
+            program,
         })
     }
 
@@ -492,9 +507,7 @@ impl PmOperator {
             .map(|line| line.as_bytes().to_vec())
             .collect();
         // An empty data file is a valid list with no matching phrases.
-        Ok(Self {
-            program: PHRASE_CACHE.get(patterns)?,
-        })
+        Self::compile(patterns)
     }
 }
 
@@ -504,6 +517,13 @@ impl Operator for PmOperator {
     }
 
     fn execute_rule_bytes(&self, value: &[u8], capture: bool) -> Result<ByteOperatorResult> {
+        if value.len() < self.min_len
+            || (value.len() < self.min_alphanumeric
+                && value.len() <= 64
+                && value.iter().all(u8::is_ascii_alphanumeric))
+        {
+            return Ok(ByteOperatorResult::no_match());
+        }
         let Some(first) = self.program.find(value) else {
             return Ok(ByteOperatorResult::no_match());
         };
@@ -542,6 +562,25 @@ impl Operator for PmOperator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phrase_widths_respect_case_folding_and_binary_phrases() {
+        let op =
+            PmOperator::from_patterns([b"/a".as_slice(), b"Hello", b"\xff!"].into_iter()).unwrap();
+        assert_eq!((op.min_len, op.min_alphanumeric), (2, 5));
+        for (value, expected) in [
+            (b"a".as_slice(), None),
+            (b"halo", None),
+            (b"/A", Some(b"/A".as_slice())),
+            (b"hELLo", Some(b"hELLo".as_slice())),
+            (b"\xff!", Some(b"\xff!".as_slice())),
+        ] {
+            assert_eq!(
+                op.execute_bytes(value).unwrap().matched_value.as_deref(),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn test_rx_simple() {
