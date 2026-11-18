@@ -50,6 +50,28 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Read a directive whose full argument is one literal, including unquoted spaces.
+    pub(super) fn remaining_argument(&mut self) -> String {
+        self.skip_whitespace();
+        let mut text = String::new();
+        while let Some(ch) = self.peek() {
+            if ch == '\n' || ch == '\r' {
+                break;
+            }
+            if ch == '\\' && self.input.clone().nth(1) == Some('\n') {
+                self.advance();
+                self.advance();
+                continue;
+            }
+            text.push(self.advance().unwrap());
+        }
+        let text = text.trim();
+        text.strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(text)
+            .to_owned()
+    }
+
     /// Peek at the next character without consuming it.
     pub fn peek(&mut self) -> Option<char> {
         self.input.peek().copied()

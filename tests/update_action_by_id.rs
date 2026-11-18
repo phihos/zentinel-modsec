@@ -59,11 +59,11 @@ fn updates_respect_declaration_order_and_removals() {
     for bad in [
         format!("{update}\n{RULE}"),
         format!("{RULE}\nSecRuleRemoveById 10-12\n{update}"),
-        format!("SecRuleRemoveById 11\n{RULE}\n{update}"),
         format!("{RULE}\n{RULE}\n{update}"),
     ] {
         assert!(ModSecurity::from_string(&bad).is_err(), "{bad}");
     }
+    assert!(ModSecurity::from_string(&format!("SecRuleRemoveById 11\n{RULE}\n{update}")).is_ok());
     let engine =
         ModSecurity::from_string(&format!("{RULE}\n{update}\nSecRuleRemoveById 11")).unwrap();
     let mut tx = engine.new_transaction();

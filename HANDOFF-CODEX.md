@@ -572,8 +572,8 @@ been tested. Upstream submission/release is not authorized by the completed work
 Known feature gaps remain visible through warnings/errors: `SecRuleUpdateActionById`,
 in-memory body spooling/no-files limits, configurable JSON depth, general XPath,
 persistent collections/audit storage, `UNIQUE_ID`, and the documented `@within`
-approximation. Tag **target** exclusions are implemented; do not confuse them
-with unsupported `ctl:ruleRemoveByTag`. Custom XML DTD/entities remain literal
+approximation. Static tag/message removals apply to preceding logical rules. Transaction-local
+`ctl:ruleRemoveByTag` and tag target exclusions are also implemented. Custom XML DTD/entities remain literal
 with an error; no external entity resolution was added. C libinjection and the
 pinned Go port differ on two XML/XInclude inputs, so universal semantic identity
 is not claimed.
