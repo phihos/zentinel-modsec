@@ -1,12 +1,13 @@
 //! Transaction processing for ModSecurity.
 
+mod actions;
 mod body;
 
 use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
 
 use super::body::{BodyState, RequestSpool};
-use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
+use super::control::{TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
 use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
 use super::phase::Phase;
@@ -15,10 +16,7 @@ use super::target_indices::{ActiveTargets, RequestCollections};
 use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
-use crate::parser::{
-    Action, DataAction, DisruptiveAction, MetadataAction, SetVarSpec, SetVarValue, VariableName,
-    VariableSpec,
-};
+use crate::parser::{Action, DisruptiveAction, MetadataAction, VariableName, VariableSpec};
 use crate::variables::{
     ByteCollection, ByteValue, ConnectorMetadata, RequestData, ResponseData, TxCollection,
     VariableResolver,
@@ -992,47 +990,10 @@ impl Transaction {
                         }
                     }
                 } else {
-                    tx.store_captures(portion, result.captures);
+                    tx.tx.replace_captures(portion, result.captures);
                 }
             }
-            // SecLang runs all setvars before the controls for each
-            // matching value. The parsed operations belong to the ruleset.
-            for prepared in &dispatch.setvars {
-                let Action::Data(DataAction::SetVar(op)) = &rule.actions[prepared.action_index]
-                else {
-                    unreachable!("compiled setvar action index");
-                };
-                tx.apply_setvar(op, prepared, logical_id);
-            }
-            for action in &rule.actions[dispatch.controls_from..] {
-                let Action::Control(ctl) = action else {
-                    continue;
-                };
-                let directive = tx
-                    .ruleset
-                    .controls
-                    .get(ctl)
-                    .expect("compiled control action")
-                    .clone();
-                if !matches!(directive, CtlDirective::Unsupported { .. }) {
-                    if matches!(directive, CtlDirective::RequestBodyLimit(_) if tx.phase > Phase::RequestHeaders)
-                        || matches!(directive, CtlDirective::ResponseBodyLimit(_) if tx.phase > Phase::ResponseHeaders)
-                    {
-                        continue;
-                    }
-                    if directive == CtlDirective::ResponseBodyProcessorJson {
-                        if tx.phase > Phase::ResponseHeaders {
-                            continue;
-                        }
-                        tx.response.json.get_or_insert_with(Default::default);
-                    }
-                    if let CtlDirective::RequestBodyProcessor(ref processor) = directive {
-                        tx.request.body_processor = processor.clone();
-                    }
-                    tx.controls
-                        .apply_compiled(directive, Some(&tx.ruleset.selectors));
-                }
-            }
+            tx.apply_match_actions(rule, dispatch, logical_id);
             if first && standalone && tx.record_rule_messages {
                 outcome.first_message = tx.expand_rule_message(&rule.actions);
             }
@@ -1183,111 +1144,6 @@ impl Transaction {
 
         self.variable_resolver()
             .macro_value(variable, key, name.as_bytes())
-    }
-
-    /// Publish the captures of a `capture` rule as `TX:0`..`TX:9`.
-    ///
-    /// `whole` is the text the operator matched (TX:0); `groups` are the regex
-    /// groups, in order (TX:1...). Slots the match did not fill are removed so
-    /// a stale value from an earlier rule cannot be read.
-    ///
-    /// Clearing all ten slots first is deliberate, and differs from
-    /// libmodsecurity v3: there each capture is stored on its own and nothing
-    /// is removed (`operators/rx.cc:104-113`), so a higher slot written by an
-    /// earlier rule survives a match that did not fill it. A rule that reads
-    /// `%{tx.3}` after a match with two groups then sees the old value. No
-    /// ruleset should depend on a leftover like that, so the stale read is
-    /// closed here.
-    fn store_captures(&mut self, whole: Option<ByteValue>, groups: Vec<Vec<u8>>) {
-        const SLOTS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-        self.tx.clear_capture_slots();
-        if let Some(whole) = whole {
-            self.tx.set_bytes(SLOTS[0], whole);
-        }
-        for (&slot, group) in SLOTS[1..].iter().zip(groups) {
-            self.tx.set_bytes(slot, group);
-        }
-    }
-
-    /// Apply a setvar operation.
-    fn apply_setvar(
-        &mut self,
-        op: &SetVarSpec,
-        prepared: &super::ruleset::CompiledSetVar,
-        rule_id: Option<&str>,
-    ) {
-        let record = rule_id.filter(|_| self.record_setvar_effects);
-        let (key, audit_key) = match &prepared.key {
-            Some(key) => (key.clone(), record.map(|_| op.key.clone())),
-            None => {
-                let expanded = self.expand_macros_bytes(&op.key);
-                let key = ByteValue::from(crate::variables::folded_key(&expanded));
-                (
-                    key,
-                    record.map(|_| ByteValue::from(expanded).display_text().to_owned()),
-                )
-            }
-        };
-        use crate::parser::SetVarOperand;
-        let change = match &op.value {
-            SetVarValue::Delete => {
-                self.tx.delete_canonical(key.as_bytes());
-                Some(SetVarChange::Delete)
-            }
-            SetVarValue::Unresolved => return,
-            value => {
-                let expanded = match value {
-                    SetVarValue::Macro(raw) => Some(self.expand_macros_bytes(raw)),
-                    _ => None,
-                };
-                let operation = match (value, expanded.as_deref()) {
-                    (_, Some(bytes)) => SetVarOperand::parse(bytes),
-                    (SetVarValue::Increment(n), _) => SetVarOperand::Add(*n),
-                    (SetVarValue::Decrement(n), _) => SetVarOperand::Subtract(*n),
-                    _ => SetVarOperand::Text,
-                };
-                match operation {
-                    SetVarOperand::Unresolved => return,
-                    SetVarOperand::Text => {
-                        let value = if let Some(bytes) = expanded {
-                            ByteValue::from(bytes)
-                        } else {
-                            prepared
-                                .value
-                                .as_ref()
-                                .expect("compiled literal assignment")
-                                .clone()
-                        };
-                        let change = record.map(|_| match value.as_utf8() {
-                            Ok(text) => SetVarChange::Set(text.to_owned()),
-                            Err(_) => SetVarChange::SetBytes(value.as_bytes().to_vec()),
-                        });
-                        self.tx.set_canonical(key, value);
-                        change
-                    }
-                    SetVarOperand::Add(n) | SetVarOperand::Subtract(n) => {
-                        let subtract = matches!(operation, SetVarOperand::Subtract(_));
-                        let delta = if subtract { n.wrapping_neg() } else { n };
-                        if !self.tx.increment_canonical(key, delta, false) {
-                            return;
-                        }
-                        Some(if subtract {
-                            SetVarChange::Decrement(n)
-                        } else {
-                            SetVarChange::Increment(n)
-                        })
-                    }
-                }
-            }
-        };
-        if let (Some(rule_id), Some(key), Some(op_change)) = (record, audit_key, change) {
-            self.setvar_effects.push(SetVarEffect {
-                rule_id: rule_id.into(),
-                collection: op.collection.to_ascii_lowercase(),
-                key,
-                op: op_change,
-            });
-        }
     }
 }
 

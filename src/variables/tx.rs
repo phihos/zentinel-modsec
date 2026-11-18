@@ -167,9 +167,20 @@ impl TxCollection {
         }
     }
 
-    pub(crate) fn clear_capture_slots(&mut self) {
+    /// Replace TX:0..TX:9 with the whole match and its first nine groups.
+    /// Clear previously occupied slots even when the new match has fewer groups.
+    pub(crate) fn replace_captures(&mut self, whole: Option<ByteValue>, groups: Vec<Vec<u8>>) {
         for slot in 0..std::mem::take(&mut self.capture_limit) {
             self.data.shift_remove(&[b'0' + slot][..]);
+        }
+        if let Some(whole) = whole {
+            self.set_bytes("0", whole);
+        }
+        for (&slot, group) in ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            .iter()
+            .zip(groups)
+        {
+            self.set_bytes(slot, group);
         }
     }
 
