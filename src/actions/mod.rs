@@ -225,6 +225,7 @@ fn execute_data(action: &DataAction, result: &mut ActionResult, _matched_value: 
                 SetVarValue::Int(v) => SetVarOperation::Set(v.to_string()),
                 SetVarValue::Increment(v) => SetVarOperation::Increment(*v),
                 SetVarValue::Decrement(v) => SetVarOperation::Decrement(*v),
+                SetVarValue::Unresolved => return,
                 SetVarValue::Delete => SetVarOperation::Delete,
                 SetVarValue::Macro(s) => SetVarOperation::Macro(s.clone()),
             };

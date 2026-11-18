@@ -124,22 +124,36 @@ impl TxCollection {
     /// Increment a numeric byte value with signed 64-bit wrapping, matching
     /// Coraza on 64-bit targets. A nonnumeric value starts at zero.
     pub fn increment_bytes(&mut self, key: &[u8], amount: i64) {
-        self.increment_canonical(ByteValue::from(folded_key(key)), amount);
+        self.increment_canonical(ByteValue::from(folded_key(key)), amount, true);
     }
 
-    pub(crate) fn increment_canonical(&mut self, key: ByteValue, amount: i64) {
+    pub(crate) fn increment_canonical(
+        &mut self,
+        key: ByteValue,
+        amount: i64,
+        reset_invalid: bool,
+    ) -> bool {
         self.observe_capture_key(key.as_bytes());
-        self.data
-            .entry(key)
-            .and_modify(|value| {
-                let current = value
-                    .as_utf8()
-                    .ok()
-                    .and_then(|v| v.parse::<i64>().ok())
-                    .unwrap_or(0);
-                *value = ByteValue::decimal(current.wrapping_add(amount));
-            })
-            .or_insert_with(|| ByteValue::decimal(amount));
+        match self.data.entry(key) {
+            indexmap::map::Entry::Occupied(mut entry) => {
+                let value = entry.get();
+                let current = if value.as_bytes().is_empty() {
+                    Some(0)
+                } else {
+                    value.as_utf8().ok().and_then(|s| s.parse::<i64>().ok())
+                };
+                if current.is_none() && !reset_invalid {
+                    return false;
+                }
+                entry.insert(ByteValue::decimal(
+                    current.unwrap_or(0).wrapping_add(amount),
+                ));
+            }
+            indexmap::map::Entry::Vacant(entry) => {
+                entry.insert(ByteValue::decimal(amount));
+            }
+        }
+        true
     }
 
     fn observe_capture_key(&mut self, key: &[u8]) {

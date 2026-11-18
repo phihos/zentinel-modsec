@@ -28,6 +28,7 @@ pub use action::{
     parse_actions, Action, ControlAction, DataAction, DisruptiveAction, FlowAction, LoggingAction,
     MetadataAction, SetVarSpec, SetVarValue,
 };
+pub(crate) use action::{validate_setvar_target, SetVarOperand};
 pub use directive::{
     BodyLimitAction, Directive, RuleEngineMode, RuleIdSelector, SecAction, SecMarker, SecRule,
     UpdateTargetById, UpdateTargetByTag,

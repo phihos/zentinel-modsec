@@ -135,6 +135,12 @@ fn literal_copy_source(
     }
     assignments
         .get(folded_key(key.as_bytes()).as_ref())
+        .filter(|value| {
+            matches!(
+                crate::parser::SetVarOperand::parse(value.as_bytes()),
+                crate::parser::SetVarOperand::Text
+            )
+        })
         .cloned()
 }
 

@@ -141,6 +141,8 @@ pub enum SetVarValue {
     Increment(i64),
     /// Decrement by amount.
     Decrement(i64),
+    /// A signed operand referring to a missing TX value leaves the destination unchanged.
+    Unresolved,
     /// Delete variable.
     Delete,
     /// Raw right-hand side containing `%{...}` macros, resolved at apply time.
@@ -563,9 +565,14 @@ fn parse_setvar(input: &str) -> Result<SetVarSpec> {
     // CRS writes setvar specs in quoted form, e.g. setvar:'tx.score=+5'.
     let input = unquote(input);
 
-    // Check for delete (!var)
-    if let Some(var) = input.strip_prefix('!') {
-        let (collection, key) = parse_var_name(var)?;
+    let (delete, input) = input
+        .strip_prefix('!')
+        .map_or((false, input), |rest| (true, rest));
+    let (var, value_str) = input
+        .split_once('=')
+        .map_or((input, None), |(var, value)| (var, Some(value)));
+    let (collection, key) = parse_var_name(var)?;
+    if delete {
         return Ok(SetVarSpec {
             collection,
             key,
@@ -573,35 +580,24 @@ fn parse_setvar(input: &str) -> Result<SetVarSpec> {
         });
     }
 
-    // Split on = for assignment
-    let (var, value_str) = if let Some(pos) = input.find('=') {
-        (&input[..pos], Some(&input[pos + 1..]))
-    } else {
-        (input, None)
-    };
-
-    let (collection, key) = parse_var_name(var)?;
-
-    let value = if let Some(val) = value_str {
-        if val.contains("%{") {
-            // Contains a macro (e.g. +%{tx.critical_anomaly_score}); defer the
-            // sign/value interpretation until the macro is expanded at apply time.
-            SetVarValue::Macro(val.to_string())
-        } else if let Some(rest) = val.strip_prefix('+') {
-            // Increment
-            let amount: i64 = rest.parse().unwrap_or(1);
-            SetVarValue::Increment(amount)
-        } else if let Some(rest) = val.strip_prefix('-') {
-            // Decrement
-            let amount: i64 = rest.parse().unwrap_or(1);
-            SetVarValue::Decrement(amount)
-        } else if let Ok(n) = val.parse::<i64>() {
-            SetVarValue::Int(n)
-        } else {
-            SetVarValue::String(val.to_string())
+    let val = value_str.filter(|value| !value.is_empty()).ok_or_else(|| {
+        Error::InvalidActionArgument {
+            action: "setvar".into(),
+            message: "expected a value after TX.member=".into(),
         }
+    })?;
+    let value = if val.contains("%{") {
+        SetVarValue::Macro(val.to_string())
     } else {
-        SetVarValue::String("1".to_string())
+        match SetVarOperand::parse(val.as_bytes()) {
+            SetVarOperand::Add(n) => SetVarValue::Increment(n),
+            SetVarOperand::Subtract(n) => SetVarValue::Decrement(n),
+            SetVarOperand::Unresolved => SetVarValue::Unresolved,
+            SetVarOperand::Text => match val.parse::<i64>() {
+                Ok(n) if val.len() == 1 || !val.starts_with('0') => SetVarValue::Int(n),
+                _ => SetVarValue::String(val.to_owned()),
+            },
+        }
     };
 
     Ok(SetVarSpec {
@@ -613,11 +609,52 @@ fn parse_setvar(input: &str) -> Result<SetVarSpec> {
 
 /// Parse a variable name into collection and key.
 fn parse_var_name(input: &str) -> Result<(String, String)> {
-    if let Some(pos) = input.find('.') {
-        Ok((input[..pos].to_lowercase(), input[pos + 1..].to_string()))
+    let (collection, key) = input.split_once('.').unwrap_or(("", input));
+    validate_setvar_target(collection, key)?;
+    Ok(("tx".into(), key.to_owned()))
+}
+
+pub(crate) fn validate_setvar_target(collection: &str, key: &str) -> Result<()> {
+    if collection.eq_ignore_ascii_case("tx") && !key.trim().is_empty() {
+        Ok(())
     } else {
-        // Default to tx collection
-        Ok(("tx".to_string(), input.to_string()))
+        Err(Error::InvalidActionArgument {
+            action: "setvar".into(),
+            message: "expected TX followed by a nonempty member name".into(),
+        })
+    }
+}
+
+/// Coraza classifies the entire value after macro expansion.
+pub(crate) enum SetVarOperand {
+    Text,
+    Add(i64),
+    Subtract(i64),
+    Unresolved,
+}
+
+impl SetVarOperand {
+    pub(crate) fn parse(value: &[u8]) -> Self {
+        let [sign @ (b'+' | b'-'), rest @ ..] = value else {
+            return Self::Text;
+        };
+        let n = if rest.is_empty() {
+            0
+        } else if let Some(n) = std::str::from_utf8(rest)
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+        {
+            n
+        } else if rest.starts_with(b"tx.") {
+            return Self::Unresolved;
+        } else {
+            return Self::Text;
+        };
+        if *sign == b'+' {
+            Self::Add(n)
+        } else {
+            Self::Subtract(n)
+        }
     }
 }
 

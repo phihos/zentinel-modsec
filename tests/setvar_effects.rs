@@ -61,7 +61,7 @@ SecAction "id:2,phase:1,pass,setvar:'tx.%{ARGS.binary}=ok'""#;
     assert_eq!(
         tx.setvar_effects(),
         [
-            effect("1", "MiXeD", SetVarChange::Set("12".into())),
+            effect("1", "MiXeD", SetVarChange::Set("00012".into())),
             effect("1", "mIXed", SetVarChange::Increment(3)),
             effect("2", r"X\xff", SetVarChange::Set("ok".into())),
         ]
