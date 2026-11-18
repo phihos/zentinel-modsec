@@ -1226,10 +1226,21 @@ impl Transaction {
         });
         let mut target = resolved?;
         if spec.count_mode {
-            target.remaining.push((
-                crate::variables::count_name(spec),
-                count.to_string().into_bytes(),
-            ));
+            // Presence checks on a named header or TX variable normally produce 0 or 1.
+            let value: Cow<'_, [u8]> = match count {
+                0 => Cow::Borrowed(b"0"),
+                1 => Cow::Borrowed(b"1"),
+                _ => Cow::Owned(count.to_string().into_bytes()),
+            };
+            if let Some(search) = search {
+                target.first = search
+                    .first_match(&value)?
+                    .map(|stage| (crate::variables::count_name(spec), stage));
+            } else {
+                target
+                    .remaining
+                    .push((crate::variables::count_name(spec), value.into_owned()));
+            }
         }
         Ok(target)
     }

@@ -303,3 +303,31 @@ fn verdict_only_detectors_skip_owned_fingerprints() {
         assert!(ALLOCATIONS.get() > verdict_allocations);
     }
 }
+
+#[test]
+fn static_count_misses_do_not_copy_the_selector_name() {
+    let measure = |key: &str| {
+        let engine = ModSecurity::from_string(&format!(
+            r#"SecRule &REQUEST_HEADERS:{key} "@streq 2" "id:123,phase:1,pass,capture,multiMatch,t:none,t:lowercase""#
+        )).unwrap();
+        let run = || {
+            let mut tx = engine.new_transaction();
+            tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+            tx.add_request_header(key, "first").unwrap();
+            REQUESTED_BYTES.set(0);
+            TRACKING.set(true);
+            tx.process_request_headers().unwrap();
+            TRACKING.set(false);
+            assert!(tx.matched_rules().is_empty());
+            REQUESTED_BYTES.get()
+        };
+        run();
+        run()
+    };
+    let short = measure("x-report");
+    let long = measure(&"x".repeat(4096));
+    assert!(
+        long <= short + 64,
+        "count target name was copied on a miss: {short} -> {long}"
+    );
+}
