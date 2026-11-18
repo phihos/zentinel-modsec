@@ -48,10 +48,31 @@ impl RawMatch {
 pub(super) trait MatchRecord {
     type View;
     fn publish(self, ruleset: &CompiledRuleset) -> Self::View;
+    fn phase_defaults(ruleset: &CompiledRuleset) -> impl ExactSizeIterator<Item = Self> + '_;
 }
 
 impl MatchRecord for (RuleLocation, RawMatch) {
     type View = MatchedData;
+
+    fn phase_defaults(ruleset: &CompiledRuleset) -> impl ExactSizeIterator<Item = Self> + '_ {
+        let phase = Phase::RequestHeaders;
+        let dispatch = ruleset.dispatch_for_phase(phase);
+        let defaults = ruleset.tx_defaults.as_ref().unwrap();
+        defaults.counts.iter().map(move |&entry| {
+            let (variable, value) = super::initialization::TxDefaults::count_value(dispatch, entry);
+            (
+                RuleLocation {
+                    phase,
+                    index: usize::from(entry.0),
+                },
+                RawMatch {
+                    variable,
+                    portion: Some(value.clone()),
+                    value,
+                },
+            )
+        })
+    }
 
     fn publish(self, ruleset: &CompiledRuleset) -> Self::View {
         self.1.publish(self.0.id(ruleset))
@@ -60,6 +81,19 @@ impl MatchRecord for (RuleLocation, RawMatch) {
 
 impl MatchRecord for RuleLocation {
     type View = String;
+
+    fn phase_defaults(ruleset: &CompiledRuleset) -> impl ExactSizeIterator<Item = Self> + '_ {
+        ruleset
+            .tx_defaults
+            .as_ref()
+            .unwrap()
+            .ids
+            .iter()
+            .map(|&index| RuleLocation {
+                phase: Phase::RequestHeaders,
+                index: usize::from(index),
+            })
+    }
 
     fn publish(self, ruleset: &CompiledRuleset) -> String {
         self.id(ruleset)
@@ -78,6 +112,17 @@ pub(super) enum MatchedRules {
 }
 
 impl MatchedRules {
+    pub fn from_defaults(ids: &[u8]) -> Self {
+        match ids {
+            [] => Self::Empty,
+            [index] => Self::One(RuleLocation {
+                phase: Phase::RequestHeaders,
+                index: usize::from(*index),
+            }),
+            _ => Self::Many(MatchLog::with_default_prefix(true)),
+        }
+    }
+
     pub fn push(&mut self, ruleset: &CompiledRuleset, next: RuleLocation) {
         match self {
             Self::Empty => *self = Self::One(next),
@@ -103,6 +148,7 @@ pub(super) struct MatchLog<T: MatchRecord> {
     // Recording always has exclusive transaction access and uses get_mut().
     // The first reader takes the raw buffer, leaving only the published form.
     raw: Mutex<Vec<T>>,
+    default_prefix: bool,
     published: OnceLock<Vec<T::View>>,
 }
 
@@ -110,12 +156,20 @@ impl<T: MatchRecord> Default for MatchLog<T> {
     fn default() -> Self {
         Self {
             raw: Default::default(),
+            default_prefix: false,
             published: Default::default(),
         }
     }
 }
 
 impl<T: MatchRecord> MatchLog<T> {
+    pub fn with_default_prefix(default_prefix: bool) -> Self {
+        Self {
+            default_prefix,
+            ..Self::default()
+        }
+    }
+
     pub fn extend(&mut self, ruleset: &CompiledRuleset, matches: impl IntoIterator<Item = T>) {
         if let Some(view) = self.published.get_mut() {
             view.extend(matches.into_iter().map(|item| item.publish(ruleset)));
@@ -127,13 +181,21 @@ impl<T: MatchRecord> MatchLog<T> {
     pub fn as_slice(&self, ruleset: &CompiledRuleset, phase: Phase) -> &[T::View] {
         self.published.get_or_init(|| {
             let raw = std::mem::take(&mut *self.raw.lock().unwrap());
-            // Reading between phases leaves room for later matches.
+            let prefix = self.default_prefix.then(|| T::phase_defaults(ruleset));
+            let len = raw.len() + prefix.as_ref().map_or(0, ExactSizeIterator::len);
+            // An early reader may append matches in subsequent phases. Include
+            // the replayed prefix when reserving room for that growth.
             let capacity = if phase == Phase::Logging {
-                raw.len()
+                len
+            } else if self.default_prefix {
+                len.next_power_of_two().max(4)
             } else {
                 raw.capacity()
             };
             let mut published = Vec::with_capacity(capacity);
+            if let Some(prefix) = prefix {
+                published.extend(prefix.map(|item| item.publish(ruleset)));
+            }
             published.extend(raw.into_iter().map(|item| item.publish(ruleset)));
             published
         })
