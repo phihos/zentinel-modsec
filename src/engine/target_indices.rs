@@ -21,39 +21,51 @@ fn header_bit(key: &[u8]) -> u64 {
     1 << (first * 17 + last + key.len()) % 61
 }
 
-// Maximum length for each alphabet. A non-member or a long input disables
-// that bound for the whole group so every original candidate remains visible.
+// For a bounded group, remember its longest field and narrowest shared alphabet.
 #[derive(Clone, Copy, Default)]
 struct Widths {
-    word: u8,
-    path: u8,
+    longest: u8,
+    alphabet: Alphabet,
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+enum Alphabet {
+    #[default]
+    Word,
+    Dotted,
+    Path,
 }
 
 impl Widths {
     const UNKNOWN: Self = Self {
-        word: u8::MAX,
-        path: u8::MAX,
+        longest: u8::MAX,
+        alphabet: Alphabet::Word,
     };
 
     fn include(&mut self, input: &[u8]) {
         if input.len() > 64 {
             *self = Self::UNKNOWN;
-        } else if self.path != u8::MAX {
-            let len = input.len() as u8;
-            if self.word != u8::MAX && input.iter().all(u8::is_ascii_alphanumeric) {
-                self.word = self.word.max(len);
-                self.path = self.path.max(len);
-            } else if input.iter().copied().all(crate::operators::token_byte) {
-                self.word = u8::MAX;
-                self.path = self.path.max(len);
-            } else {
-                *self = Self::UNKNOWN;
+        } else if self.longest != u8::MAX {
+            if self.alphabet != Alphabet::Word || !input.iter().all(u8::is_ascii_alphanumeric) {
+                if self.alphabet != Alphabet::Path
+                    && input
+                        .iter()
+                        .all(|b| b.is_ascii_alphanumeric() || *b == b'.')
+                {
+                    self.alphabet = Alphabet::Dotted;
+                } else if input.iter().copied().all(crate::operators::token_byte) {
+                    self.alphabet = Alphabet::Path;
+                } else {
+                    *self = Self::UNKNOWN;
+                    return;
+                }
             }
+            self.longest = self.longest.max(input.len() as u8);
         }
     }
 
-    fn below(self, minimum: [u8; 2]) -> bool {
-        self.word < minimum[0] || self.path < minimum[1]
+    fn below(self, minimum: [u8; 3]) -> bool {
+        self.longest < minimum[self.alphabet as usize]
     }
 }
 
@@ -157,17 +169,20 @@ pub(super) struct TargetIndices {
     optional_targets: u16,
     optional_keys: u64,
     pub(super) header_targets: [u16; HEADER_SLOTS],
-    minimum: [u8; 2],
+    minimum: [u8; 3],
 }
 
 impl TargetIndices {
-    pub fn compile(targets: &[VariableSpec], minimum: [u8; 2]) -> Self {
+    pub fn compile(targets: &[VariableSpec], [word, dotted, path]: [u8; 3]) -> Self {
+        // A bound for a broader alphabet also applies to either narrower one.
+        let dotted = dotted.max(path);
+        let minimum = [word.max(dotted), dotted, path];
         let mut masks = Self {
             minimum,
             ..Self::default()
         };
         for (index, spec) in targets.iter().take(PREFIX).enumerate() {
-            if minimum != [0; 2] && !spec.count_mode {
+            if minimum != [0; 3] && !spec.count_mode {
                 use VariableName::*;
                 match spec.name {
                     Args | ArgsGet | ArgsPost => masks.bounded_targets[0] |= 1 << index,
@@ -300,7 +315,7 @@ mod tests {
                 .map(|name| crate::parser::parse_single_variable(name).unwrap())
                 .collect();
             assert_eq!(
-                TargetIndices::compile(&targets, [0; 2])
+                TargetIndices::compile(&targets, [0; 3])
                     .select(empty_snapshot(state),)
                     .may_match(targets.len()),
                 may_match
@@ -308,7 +323,7 @@ mod tests {
         }
         let mut targets = vec![crate::parser::parse_single_variable("ARGS").unwrap(); PREFIX];
         targets.push(crate::parser::parse_single_variable("REQUEST_URI").unwrap());
-        assert!(TargetIndices::compile(&targets, [0; 2])
+        assert!(TargetIndices::compile(&targets, [0; 3])
             .select(empty_snapshot(0),)
             .may_match(targets.len()));
     }
@@ -334,16 +349,16 @@ mod tests {
                 .indices(&targets)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(active([5, 0]), [1, 2, 3]);
-        assert_eq!(active([5, 12]), [2, 3]);
-        assert_eq!(active([4, 0]), [0, 1, 2, 3, 4]);
+        assert_eq!(active([5, 0, 0]), [1, 2, 3]);
+        assert_eq!(active([5, 0, 12]), [2, 3]);
+        assert_eq!(active([4, 0, 0]), [0, 1, 2, 3, 4]);
     }
 
     #[test]
     fn argument_budget_is_shared_across_duplicate_query_and_body_members() {
         let mut request = RequestData::default();
         let target = crate::parser::parse_single_variable("ARGS").unwrap();
-        let plan = TargetIndices::compile(&[target], [65, 65]);
+        let plan = TargetIndices::compile(&[target], [65; 3]);
         for _ in 0..31 {
             request.args_get.add_bytes("same", "tiny");
         }
@@ -375,7 +390,7 @@ mod tests {
     fn selected_prefix_and_uncompiled_tail_keep_original_order() {
         let mut specs = vec![crate::parser::parse_single_variable("ARGS").unwrap(); PREFIX + 2];
         specs[3] = crate::parser::parse_single_variable("TX:late").unwrap();
-        let plan = TargetIndices::compile(&specs, [65; 2]);
+        let plan = TargetIndices::compile(&specs, [65; 3]);
         let mut snapshot = empty_snapshot(GET);
         snapshot.widths[0] = Widths::default();
         let active = plan.select(snapshot);
@@ -396,7 +411,7 @@ mod tests {
             "&FILES",
         ]
         .map(|text| crate::parser::parse_single_variable(text).unwrap());
-        let mut plan = TargetIndices::compile(&specs, [0; 2]);
+        let mut plan = TargetIndices::compile(&specs, [0; 3]);
         plan.add_optional_header(0, b"alpha");
         let active = |request: &RequestData| {
             let mut sources = WidthSources::default();
@@ -439,7 +454,7 @@ mod tests {
             .take(24)
             .map(|name| crate::parser::parse_single_variable(name).unwrap())
             .collect();
-        let plan = TargetIndices::compile(&targets, [0; 2]);
+        let plan = TargetIndices::compile(&targets, [0; 3]);
         for state in 0..16 {
             let expected: Vec<_> = (0..targets.len())
                 .filter(|i| match i % names.len() {

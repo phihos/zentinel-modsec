@@ -127,6 +127,11 @@ pub trait Operator: Send + Sync {
             .map_or([0; 2], |rx| rx.token_minimums())
     }
 
+    /// Minimum width for alphanumeric or dotted values, capped at 65.
+    fn dotted_token_minimum(&self) -> u8 {
+        self.compiled_regex().map_or(0, |rx| rx.dotted_minimum())
+    }
+
     /// Expose a compiled regex when it completely describes this operator's
     /// byte matching and capture behavior, including empty and binary matches.
     fn compiled_regex(&self) -> Option<&super::RxOperator> {
