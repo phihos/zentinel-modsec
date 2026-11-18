@@ -258,6 +258,21 @@ threshold. Larger request prefixes move to a private temporary file. A selected
 body processor reads the retained prefix into memory in phase 2. The threshold
 defaults to the request limit and must be positive and no larger than that limit.
 The standard Coraza build also leaves `SecRequestBodyNoFilesLimit` unenforced.
+
+
+`ctl:requestBodyLimit=N` selects a transaction's inspection threshold through
+phase 1. `ctl:responseBodyLimit=N` can run through phase 3. The last setting in
+time applies. Zero suppresses acquisition without a denial or data-error flag.
+Negative or unparseable limits produce an unsupported-control diagnostic.
+A positive threshold uses the configured `Reject` or `ProcessPartial` action
+at the exact byte limit. The configured storage ceiling still applies when a
+control raises the threshold. A write needing a larger buffer returns an error.
+
+Process headers before writing body bytes when rules change limits. Header
+processing reconciles a previously buffered prefix with the final threshold.
+If an increase requires bytes already discarded during provisional writes,
+the header callback returns an error and body inspection cannot resume.
+
 `SecRuleUpdateActionById 112 "deny,status:409"` changes an earlier standalone
 rule or the starter of a `SecRule` chain. Standalone `SecAction` rules are
 also supported. Supply one positive ID and a comma-separated list of

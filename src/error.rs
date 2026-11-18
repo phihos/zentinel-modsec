@@ -150,6 +150,15 @@ pub enum Error {
         message: String,
     },
 
+    /// A transaction threshold permitted a write beyond the configured storage limit.
+    #[error("cannot buffer {direction} body beyond the configured storage limit of {limit} bytes")]
+    BodyStorageLimit {
+        /// Request or response direction.
+        direction: &'static str,
+        /// Configured maximum bytes that can be retained.
+        limit: usize,
+    },
+
     /// An inspection buffer could not reserve its bounded prefix.
     #[error("failed to reserve body inspection buffer: {source}")]
     BodyBufferAllocation {

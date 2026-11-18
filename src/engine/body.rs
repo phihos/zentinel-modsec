@@ -157,4 +157,6 @@ pub(crate) struct BodyState {
     pub limit_reached: bool,
     /// Previous complete-chunk length to restore if a deferred limit rejects.
     pub pending_reject_length: Option<usize>,
+    /// The caller offered bytes after the provisional prefix was full.
+    pub pending_discarded: bool,
 }

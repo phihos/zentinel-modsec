@@ -739,6 +739,16 @@ impl Transaction {
         Ok(())
     }
 
+    fn body_limits(&self, request: bool) -> (usize, usize) {
+        let config = self.ruleset.body_config();
+        let (local, storage) = if request {
+            (self.controls.request_body_limit, config.request_limit)
+        } else {
+            (self.controls.response_body_limit, config.response_limit)
+        };
+        (local.unwrap_or(storage), storage)
+    }
+
     fn body_limit_action(&self, request: bool) -> BodyLimitAction {
         // DetectionOnly must remain non-disruptive even when enabled by ctl.
         if self.engine_mode() == RuleEngineMode::DetectionOnly {
@@ -776,19 +786,22 @@ impl Transaction {
         if processed && !limit_reached && !data.is_empty() {
             return Err(crate::Error::BodyAlreadyProcessed { direction });
         }
-        if processed || self.intervention.is_some() || limit_reached {
+        let (limit, storage) = self.body_limits(request);
+        if processed || self.intervention.is_some() || limit_reached || limit == 0 {
+            if pending_headers && (limit_reached || limit == 0) && !data.is_empty() {
+                if request {
+                    self.request_body_state.pending_discarded = true;
+                } else {
+                    self.response_body_state.pending_discarded = true;
+                }
+            }
             return Ok(BodyWriteResult {
                 consumed: 0,
-                limit_reached,
+                limit_reached: limit_reached || limit == 0,
                 pending_headers,
                 inspection_complete: processed,
             });
         }
-        let limit = if request {
-            self.ruleset.body_config().request_limit
-        } else {
-            self.ruleset.body_config().response_limit
-        };
         let current = if request {
             self.request_body_buffered_len()
         } else {
@@ -799,10 +812,27 @@ impl Transaction {
         let action = self.body_limit_action(request);
         let consumed = data.len().min(remaining);
         if !(reached && !pending_headers && action == BodyLimitAction::Reject) {
+            if consumed > storage.saturating_sub(current) {
+                if reached {
+                    if request {
+                        self.request.inbound_data_error = true;
+                    } else {
+                        self.response.outbound_data_error = true;
+                    }
+                }
+                return Err(crate::Error::BodyStorageLimit {
+                    direction,
+                    limit: storage,
+                });
+            }
             if request {
-                self.append_request_prefix(&data[..consumed], limit)?;
+                self.append_request_prefix(&data[..consumed], limit.min(storage))?;
             } else {
-                append_memory(&mut self.response.body, &data[..consumed], limit)?;
+                append_memory(
+                    &mut self.response.body,
+                    &data[..consumed],
+                    limit.min(storage),
+                )?;
             }
         }
         if reached {
@@ -832,6 +862,7 @@ impl Transaction {
                     &mut self.response_body_state
                 };
                 state.pending_reject_length = Some(current);
+                state.pending_discarded = consumed < data.len();
             }
         }
         if reached && !pending_headers {
@@ -886,11 +917,7 @@ impl Transaction {
     }
 
     fn log_body_limit(&self, request: bool, action: BodyLimitAction) {
-        let limit = if request {
-            self.ruleset.body_config().request_limit
-        } else {
-            self.ruleset.body_config().response_limit
-        };
+        let (limit, _) = self.body_limits(request);
         tracing::warn!(
             direction = if request { "request" } else { "response" },
             limit,
@@ -919,40 +946,74 @@ impl Transaction {
         } else {
             self.response_body_accessible()
         };
-        if !accessible || self.engine_mode() == RuleEngineMode::Off {
+        let (limit, _) = self.body_limits(request);
+        let enabled = accessible && self.engine_mode() != RuleEngineMode::Off && limit != 0;
+        let action = self.body_limit_action(request);
+        let length = if request {
+            self.request_body_buffered_len()
+        } else {
+            self.response_body_buffered_len()
+        };
+        let (state, data_error) = if request {
+            (
+                &mut self.request_body_state,
+                &mut self.request.inbound_data_error,
+            )
+        } else {
+            (
+                &mut self.response_body_state,
+                &mut self.response.outbound_data_error,
+            )
+        };
+        let previous = state.pending_reject_length.take();
+        let discarded = std::mem::take(&mut state.pending_discarded);
+        if !enabled {
+            state.limit_reached = false;
+            *data_error = false;
             if request {
                 self.truncate_request_body(0);
-                self.request.inbound_data_error = false;
-                self.request_body_state.limit_reached = false;
-                self.request_body_state.pending_reject_length = None;
             } else {
                 self.response.body = Vec::new();
-                self.response.outbound_data_error = false;
-                self.response_body_state.limit_reached = false;
-                self.response_body_state.pending_reject_length = None;
             }
             return Ok(());
         }
-        let previous = if request {
-            self.request_body_state.pending_reject_length.take()
-        } else {
-            self.response_body_state.pending_reject_length.take()
-        };
-        if let Some(previous) = previous {
-            let action = self.body_limit_action(request);
-            self.log_body_limit(request, action);
-            if action == BodyLimitAction::Reject {
-                if request {
-                    self.truncate_request_body(previous);
-                } else {
-                    self.response.body.truncate(previous);
-                }
-                self.reject_body_limit(request);
-            } else if request {
-                self.process_request_body()?;
-            } else {
-                self.process_response_body()?;
+        // A connector may write before header rules select the final limit.
+        // Never finish inspection from an incomplete prefix after a limit raise.
+        if length < limit {
+            if discarded && self.intervention.is_none() {
+                state.failure = Some(
+                    "header rules raised the limit after provisional body bytes were discarded"
+                        .into(),
+                );
+                return self.check_body_callback(request);
             }
+            if previous.is_some() {
+                state.limit_reached = false;
+                *data_error = false;
+            }
+            return Ok(());
+        }
+        state.limit_reached = true;
+        *data_error = true;
+        let retained = if action == BodyLimitAction::Reject {
+            // If header rules newly lowered the threshold, discard the provisional
+            // buffer unless a previously completed chunk is known to fit.
+            previous.filter(|len| *len < limit).unwrap_or(0)
+        } else {
+            limit
+        };
+        if request {
+            self.truncate_request_body(retained);
+        } else {
+            self.response.body.truncate(retained);
+        }
+        self.log_body_limit(request, action);
+        if action == BodyLimitAction::Reject {
+            self.reject_body_limit(request);
+        } else if request {
+            self.process_request_body()?;
+        } else {
+            self.process_response_body()?;
         }
         Ok(())
     }
@@ -1521,6 +1582,11 @@ impl Transaction {
                     .expect("compiled control action")
                     .clone();
                 if !matches!(directive, CtlDirective::Unsupported { .. }) {
+                    if matches!(directive, CtlDirective::RequestBodyLimit(_) if tx.phase > Phase::RequestHeaders)
+                        || matches!(directive, CtlDirective::ResponseBodyLimit(_) if tx.phase > Phase::ResponseHeaders)
+                    {
+                        continue;
+                    }
                     if directive == CtlDirective::ResponseBodyProcessorJson {
                         if tx.phase > Phase::ResponseHeaders {
                             continue;
@@ -1848,6 +1914,23 @@ mod tests {
 
     fn make_ruleset(rules: &str) -> Arc<CompiledRuleset> {
         Arc::new(CompiledRuleset::from_string(rules).unwrap())
+    }
+
+    #[test]
+    fn late_or_invalid_body_limit_controls_preserve_the_selected_thresholds() {
+        use crate::ModSecurity;
+        let engine = ModSecurity::from_string(r#"SecAction "id:1,phase:1,pass,ctl:requestBodyLimit=6,ctl:requestBodyLimit=-1,ctl:responseBodyLimit=2"
+SecAction "id:2,phase:2,pass,ctl:requestBodyLimit=1,ctl:responseBodyLimit=3"
+SecAction "id:3,phase:3,pass,ctl:responseBodyLimit=4,ctl:responseBodyLimit=invalid"
+SecAction "id:4,phase:4,pass,ctl:responseBodyLimit=1""#).unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.controls.request_body_limit, Some(6));
+        assert_eq!(tx.controls.response_body_limit, Some(3));
+        tx.process_response_headers().unwrap();
+        tx.process_response_body().unwrap();
+        assert_eq!(tx.controls.response_body_limit, Some(4));
     }
 
     #[test]

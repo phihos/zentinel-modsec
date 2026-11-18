@@ -405,3 +405,190 @@ SecRule ARGS_GET:x "@rx %{{ARGS_GET.pattern}}" "id:2,phase:{phase},pass""#
         assert_eq!(tx.tx().get("runs"), Some(vec!["1"]));
     }
 }
+
+#[test]
+fn local_limits_are_selected_per_direction_per_request_and_per_phase() {
+    let engine = ModSecurity::from_string(r#"SecRequestBodyAccess On
+SecRequestBodyLimit 8
+SecResponseBodyAccess On
+SecResponseBodyLimit 8
+SecResponseBodyLimitAction Reject
+SecRule REQUEST_URI "@streq /limited" "id:10,phase:1,pass,ctl:requestBodyLimit=2,ctl:requestBodyLimit=4,ctl:responseBodyLimit=2"
+SecRule REQUEST_URI "@streq /limited" "id:20,phase:3,pass,ctl:responseBodyLimit=4"
+SecAction "id:30,phase:2,pass,ctl:requestBodyLimit=1"
+SecAction "id:40,phase:4,pass,ctl:responseBodyLimit=1""#).unwrap();
+    for (uri, request, expected_status) in [
+        ("/limited", true, Some(413)),
+        ("/limited", false, Some(500)),
+        ("/other", true, None),
+        ("/other", false, None),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri(uri, "POST", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        let result = if request {
+            tx.write_request_body(b"four").unwrap()
+        } else {
+            tx.process_request_body().unwrap();
+            tx.process_response_headers().unwrap();
+            tx.write_response_body(b"four").unwrap()
+        };
+        assert_eq!(tx.intervention().map(|it| it.status), expected_status);
+        assert_eq!(
+            result.consumed,
+            if expected_status.is_some() { 0 } else { 4 }
+        );
+    }
+}
+
+#[test]
+fn zero_suppresses_acquisition_without_raising_data_errors() {
+    for action in ["Reject", "ProcessPartial"] {
+        let engine = ModSecurity::from_string(&format!(
+            r#"SecRequestBodyAccess On
+SecResponseBodyAccess On
+SecRequestBodyLimitAction {action}
+SecResponseBodyLimitAction {action}
+SecAction "id:1,phase:1,pass,ctl:requestBodyLimit=0,ctl:responseBodyLimit=0"
+SecRule INBOUND_DATA_ERROR "@streq 1" "id:2,phase:2,pass"
+SecRule OUTBOUND_DATA_ERROR "@streq 1" "id:3,phase:4,pass""#
+        ))
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_request_headers().unwrap();
+        let read = tx.write_request_body(b"body").unwrap();
+        assert_eq!(read.consumed, 0);
+        assert!(read.limit_reached);
+        tx.process_request_body().unwrap();
+        tx.process_response_headers().unwrap();
+        let read = tx.write_response_body(b"body").unwrap();
+        assert_eq!(read.consumed, 0);
+        assert!(read.limit_reached);
+        tx.process_response_body().unwrap();
+        assert_eq!(tx.matched_rules(), ["1"]);
+        assert!(tx.intervention().is_none());
+    }
+}
+
+#[test]
+fn raised_threshold_preserves_storage_bound_and_reject_precedence() {
+    for request in [true, false] {
+        for action in ["Reject", "ProcessPartial"] {
+            let engine = ModSecurity::from_string(&format!(
+                r#"SecRequestBodyAccess On
+SecResponseBodyAccess On
+SecRequestBodyLimit 8
+SecResponseBodyLimit 8
+SecRequestBodyLimitAction {action}
+SecResponseBodyLimitAction {action}
+SecAction "id:1,phase:1,pass,ctl:requestBodyLimit=12,ctl:responseBodyLimit=12""#
+            ))
+            .unwrap();
+            let mut tx = engine.new_transaction();
+            tx.process_request_headers().unwrap();
+            if !request {
+                tx.process_request_body().unwrap();
+                tx.process_response_headers().unwrap();
+            }
+            let write = |tx: &mut zentinel_modsec::Transaction, data: &[u8]| {
+                if request {
+                    tx.write_request_body(data)
+                } else {
+                    tx.write_response_body(data)
+                }
+            };
+            assert!(matches!(
+                write(&mut tx, b"123456789"),
+                Err(zentinel_modsec::Error::BodyStorageLimit { limit: 8, .. })
+            ));
+            assert!(tx.intervention().is_none());
+            assert_eq!(write(&mut tx, b"12345678").unwrap().consumed, 8);
+            let result = write(&mut tx, b"9012");
+            if action == "Reject" {
+                assert_eq!(result.unwrap().consumed, 0);
+                assert_eq!(
+                    tx.intervention().map(|it| it.status),
+                    Some(if request { 413 } else { 500 })
+                );
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(zentinel_modsec::Error::BodyStorageLimit { limit: 8, .. })
+                ));
+            }
+            assert_eq!(
+                if request {
+                    tx.request_body_buffered_len()
+                } else {
+                    tx.response_body_buffered_len()
+                },
+                8
+            );
+        }
+    }
+}
+
+#[test]
+fn early_prefix_is_reconciled_once_with_final_header_limits() {
+    for (local, action, retained, status) in [
+        (0, "Reject", 0, None),
+        (3, "ProcessPartial", 3, None),
+        (4, "ProcessPartial", 4, None),
+        (3, "Reject", 0, Some(413)),
+        (8, "Reject", 4, None),
+    ] {
+        let engine = ModSecurity::from_string(&format!(
+            r#"SecRequestBodyAccess On
+SecRequestBodyLimit 8
+SecRequestBodyLimitAction {action}
+SecAction "id:1,phase:1,pass,ctl:requestBodyLimit={local}"
+SecRule INBOUND_DATA_ERROR "@streq 1" "id:2,phase:2,pass""#
+        ))
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        assert!(tx.write_request_body(b"data").unwrap().pending_headers);
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.request_body_buffered_len(), retained);
+        assert_eq!(tx.intervention().map(|it| it.status), status);
+        tx.process_request_body().unwrap();
+        assert_eq!(
+            tx.matched_rules().iter().any(|id| id == "2"),
+            action == "ProcessPartial"
+        );
+    }
+}
+
+#[test]
+fn raised_response_limit_can_resume_a_complete_provisional_prefix() {
+    for (early, later_discarded, lost) in [
+        (b"abc".as_slice(), false, false),
+        (b"abcd", false, true),
+        (b"abc", true, true),
+    ] {
+        let engine = ModSecurity::from_string(
+            r#"SecResponseBodyAccess On
+SecResponseBodyLimit 8
+SecAction "id:1,phase:1,pass,ctl:responseBodyLimit=3"
+SecAction "id:2,phase:3,pass,ctl:responseBodyLimit=6""#,
+        )
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        let early_result = tx.write_response_body(early).unwrap();
+        assert!(early_result.pending_headers && early_result.limit_reached);
+        if later_discarded {
+            assert_eq!(tx.write_response_body(b"x").unwrap().consumed, 0);
+        }
+        let headers = tx.process_response_headers();
+        if lost {
+            assert!(headers.is_err());
+            assert!(tx.process_response_body().is_err());
+        } else {
+            headers.unwrap();
+            let end = tx.write_response_body(b"def").unwrap();
+            assert!(end.inspection_complete && end.limit_reached);
+            assert_eq!(end.consumed, 3);
+        }
+    }
+}

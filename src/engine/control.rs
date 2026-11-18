@@ -65,6 +65,10 @@ pub enum CtlDirective {
     RequestBodyAccess(bool),
     /// `ctl:responseBodyAccess=On|Off`
     ResponseBodyAccess(bool),
+    /// Local request inspection threshold in bytes.
+    RequestBodyLimit(usize),
+    /// Local response inspection threshold in bytes.
+    ResponseBodyLimit(usize),
     /// `ctl:requestBodyProcessor=URLENCODED|MULTIPART|JSON|XML|RAW`
     RequestBodyProcessor(String),
     /// `ctl:responseBodyProcessor=JSON`
@@ -222,6 +226,24 @@ impl CtlDirective {
                 }
             }
 
+            "requestbodylimit" | "responsebodylimit" => {
+                let Some(limit) = value
+                    .parse::<i64>()
+                    .ok()
+                    .and_then(|n| usize::try_from(n).ok())
+                else {
+                    return Self::unsupported(
+                        directive,
+                        value,
+                        "body limit must be a nonnegative integer",
+                    );
+                };
+                if directive.eq_ignore_ascii_case("requestbodylimit") {
+                    Self::RequestBodyLimit(limit)
+                } else {
+                    Self::ResponseBodyLimit(limit)
+                }
+            }
             "requestbodyaccess" => match value.to_ascii_lowercase().as_str() {
                 "on" => CtlDirective::RequestBodyAccess(true),
                 "off" => CtlDirective::RequestBodyAccess(false),
@@ -356,6 +378,8 @@ pub struct TransactionControls {
     /// Parsed tag targets and, for regex keys, the compiled key matcher.
     removed_tag_targets: Vec<(String, VariableSpec, Option<Arc<regex::bytes::Regex>>)>,
     request_body_access: Option<bool>,
+    pub(crate) request_body_limit: Option<usize>,
+    pub(crate) response_body_limit: Option<usize>,
     request_body_processor: Option<String>,
     response_json: bool,
     force_request_body_variable: bool,
@@ -431,6 +455,8 @@ impl TransactionControls {
                     _ => tracing::warn!(%tag, %target, "invalid ctl:ruleRemoveTargetByTag target"),
                 }
             }
+            CtlDirective::RequestBodyLimit(n) => self.request_body_limit = Some(n),
+            CtlDirective::ResponseBodyLimit(n) => self.response_body_limit = Some(n),
             CtlDirective::RequestBodyAccess(on) => self.request_body_access = Some(on),
             CtlDirective::ResponseBodyAccess(on) => self.response_body_access = Some(on),
             CtlDirective::ResponseBodyProcessorJson => self.response_json = true,
