@@ -279,6 +279,11 @@ by the input edges or bytes outside ASCII A–Z and a–z. An empty operand matc
 every value. Coraza 3.8.1 does not implement this operator. `@strmatch` uses
 substring matching and emits a load-time compatibility warning.
 
+`@validateByteRange` accepts decimal bytes and inclusive ranges, for example
+`9,13,32-126`. Rules with an invalid static entry fail at load. A macro-supplied
+list is checked after expansion. An omitted range matches every input, including
+an empty value. A descending range contributes no permitted bytes.
+
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,
 `@gsbLookup`, `@inspectFile`, `@fuzzyHash`, `@rsub`. A rule that depends on one

@@ -15,7 +15,9 @@ pub use detection::{DetectSqliOperator, DetectXssOperator};
 pub use network::IpMatchOperator;
 pub use pattern::{PmOperator, RxOperator};
 pub use traits::{ByteOperatorResult, Operator, OperatorResult};
-pub use validation::{ValidateUrlEncodingOperator, ValidateUtf8EncodingOperator};
+pub use validation::{
+    ValidateByteRangeOperator, ValidateUrlEncodingOperator, ValidateUtf8EncodingOperator,
+};
 
 use crate::error::Result;
 use crate::parser::{OperatorName, OperatorSpec};
@@ -67,7 +69,9 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         }
         OperatorName::NoMatch => Ok(Arc::new(NoMatchOperator)),
         OperatorName::UnconditionalMatch => Ok(Arc::new(UnconditionalMatchOperator)),
-        OperatorName::ValidateByteRange => Ok(Arc::new(ValidateByteRangeOperator::new(argument))),
+        OperatorName::ValidateByteRange => {
+            Ok(Arc::new(ValidateByteRangeOperator::try_new(argument)?))
+        }
         // Placeholder operators - acknowledge but don't match
         OperatorName::VerifyCc | OperatorName::VerifySsn | OperatorName::VerifyCpf => {
             Ok(Arc::new(NoMatchOperator))
@@ -118,68 +122,6 @@ impl Operator for UnconditionalMatchOperator {
 
     fn name(&self) -> &'static str {
         "unconditionalMatch"
-    }
-}
-
-/// Validates that all bytes are within specified ranges.
-pub struct ValidateByteRangeOperator {
-    #[allow(dead_code)]
-    ranges: Vec<(u8, u8)>,
-}
-
-impl ValidateByteRangeOperator {
-    /// Create a new byte range validator.
-    pub fn new(spec: &str) -> Self {
-        // Parse ranges like "9,10,13,32-126"
-        let mut ranges = Vec::new();
-        for part in spec.split(',') {
-            let part = part.trim();
-            if part.contains('-') {
-                let parts: Vec<&str> = part.split('-').collect();
-                if parts.len() == 2 {
-                    if let (Ok(start), Ok(end)) = (parts[0].parse(), parts[1].parse()) {
-                        ranges.push((start, end));
-                    }
-                }
-            } else if let Ok(byte) = part.parse() {
-                ranges.push((byte, byte));
-            }
-        }
-        Self { ranges }
-    }
-}
-
-impl Operator for ValidateByteRangeOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(
-            if value
-                .iter()
-                .any(|byte| !self.ranges.iter().any(|(a, b)| byte >= a && byte <= b))
-            {
-                ByteOperatorResult::matched(value.to_vec())
-            } else {
-                ByteOperatorResult::no_match()
-            },
-        )
-    }
-
-    fn execute(&self, value: &str) -> OperatorResult {
-        // Check if all bytes are within the allowed ranges
-        for byte in value.bytes() {
-            let valid = self
-                .ranges
-                .iter()
-                .any(|(start, end)| byte >= *start && byte <= *end);
-            if !valid {
-                // Invalid byte found - this is a match (rule should trigger)
-                return OperatorResult::matched(format!("invalid byte: {}", byte));
-            }
-        }
-        OperatorResult::no_match()
-    }
-
-    fn name(&self) -> &'static str {
-        "validateByteRange"
     }
 }
 
