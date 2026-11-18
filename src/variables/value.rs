@@ -123,6 +123,10 @@ static ASCII_ESCAPES: LazyLock<[AsciiEscape; 256]> = LazyLock::new(|| {
     })
 });
 
+fn needs_ascii_escape(byte: u8) -> bool {
+    !matches!(byte, b' '..=b'~') || matches!(byte, b'\'' | b'"' | b'\\')
+}
+
 impl BinaryValue {
     fn escaped(bytes: &[u8]) -> String {
         const BLOCK: usize = 256;
@@ -130,9 +134,13 @@ impl BinaryValue {
         let mut output = Vec::with_capacity(bytes.len());
         let mut buffer = [0; BLOCK * 4];
         for block in bytes.chunks(BLOCK) {
-            if block
-                .iter()
-                .all(|byte| matches!(byte, b' '..=b'~') && !matches!(byte, b'\'' | b'"' | b'\\'))
+            // Reject a non-ASCII block cheaply. For printable text a bitwise
+            // reduction lets the compiler check multiple bytes at a time.
+            if !needs_ascii_escape(block[0])
+                && block.is_ascii()
+                && !block
+                    .iter()
+                    .fold(false, |any, &byte| any | needs_ascii_escape(byte))
             {
                 output.extend_from_slice(block);
                 continue;
@@ -395,12 +403,27 @@ mod tests {
         bytes.extend([b'a'; 512]);
         bytes.extend([b'\\', b'"', b'\'', b'\t', b'\r', b'\n', 0x7f, 0xff]);
         bytes.extend([0xff; 257]);
-        for len in [0, 1, 255, 256, 257, 511, 512, 769, bytes.len()] {
+        for len in [0, 1, 15, 16, 17, 255, 256, 257, 511, 512, 769, bytes.len()] {
             let input = &bytes[..len];
             assert_eq!(
                 BinaryValue::escaped(input),
                 input.escape_ascii().to_string()
             );
+        }
+    }
+
+    #[test]
+    fn printable_block_keeps_standard_escaping_for_each_byte() {
+        let mut bytes = [b'a'; 256];
+        for index in [0, 1, 15, 16, 127, 255] {
+            for byte in 0..=255 {
+                bytes[index] = byte;
+                assert_eq!(
+                    BinaryValue::escaped(&bytes),
+                    bytes.escape_ascii().to_string()
+                );
+            }
+            bytes[index] = b'a';
         }
     }
 
