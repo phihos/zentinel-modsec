@@ -2,6 +2,21 @@
 
 ## Current local checkpoint
 
+Engine commits `d410f28` and `2725d4b` prepare deterministic phase-1 TX defaults
+and avoid regex searches on inputs that cannot match. Compared with the previous
+engine at `a213869`, eight paired runs of the 698-rule OWASP CRS 4.25.0 benchmark
+showed 11.2% lower latency for GET, 9.8% for form POST and 15.5% for nested JSON POST.
+A second measurement interleaving warmed workers improved all three in every pair.
+
+Across 24 mixed fixtures, default Rust p50 went from 163.2 to 155.2 µs and p99
+from 203.6 to 186.5 µs. Fresh full-CRS loading measured 279.4 to 277.5 ms.
+Both detector backends retained the same corpus outcomes, blocking traces and
+complete audit records. The final regex differential found zero mismatches in
+20,044,080 comparisons. The [local report and raw measurements](../zentinel-eval/results/perf-regex-followup/RESULTS.md)
+include the workload definitions, process-pair results and concurrent checks.
+
+## Regex match-width checkpoint at `a213869`
+
 Engine `a213869` computes minimum regex match widths while compiling each expression.
 Against `9fa45f6` on the 698-rule CRS benchmark in upstream PR #69, warmed GET went
 from 73.9 to 64.1 µs, form POST from 87.6 to 77.7 µs and nested JSON POST from
