@@ -1,5 +1,21 @@
 # Coraza parity handoff — 2026-11-18
 
+## Engine refactoring
+
+Engine `af315574` shares collection lookup between rule targets and macros.
+It centralizes request and response body policy, moves per-match actions out of
+operator evaluation, and separates rule edits, dispatch planning and schema
+compilation from request processing. The connector API and test fixtures are
+unchanged.
+
+Both detector builds reproduced the previous CRS stage results, all 22 blocking
+traces, all 24 audit records and the public rule/body fixture outputs. Across
+16 interleaved benchmark pairs with all 698 CRS rules, median paired wall time
+changed by −2.24% for GET, −1.37% for form POST and −2.28% for JSON POST
+relative to the previous runtime `d8402968`. Form POST was 1.04% slower on one
+of the two cores.
+[Qualification and timing results](https://github.com/phihos/zentinel-modsec/tree/996a3a3f7ed9a25191e4857d47df6860456b8389/benches/results/refactoring)
+
 ## Transaction body policy, rule evaluation and recursive schemas
 
 Engine `d840296` adds transaction-local request and response limits, a request
