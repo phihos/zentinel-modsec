@@ -2,6 +2,16 @@
 
 ## Current local checkpoint
 
+Engine commit `e532df5c83c67ee4996d2b698444fc1621e4d596` on `spike/crs-parity`
+adds scoped allow actions, file-backed operator aliases, ordered phrase
+captures, ModSecurity word matching and IPv4-mapped network handling. Capture
+storage moves owned bytes into transaction slots. Both detection backends
+passed the repository gates and matched the prior CRS outcomes and blocking
+traces. The [local qualification report](../zentinel-eval/results/rules-6a8f8a5/RESULTS.md)
+records the performance measurements and remaining reference differences.
+
+## Rust detector checkpoint at `3910553`
+
 Engine commit `391055367c54e6a3e307fb6b6ceac84fe0725603` on
 `spike/crs-parity` uses a pure-Rust libinjection port by default. The optional
 C backend remains available. Both backends produced identical outcomes on every
