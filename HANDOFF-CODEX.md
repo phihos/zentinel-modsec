@@ -2,6 +2,19 @@
 
 ## Current local checkpoint
 
+Engine `a213869` computes minimum regex match widths while compiling each expression.
+Against `9fa45f6` on the 698-rule CRS benchmark in upstream PR #69, warmed GET went
+from 73.9 to 64.1 µs, form POST from 87.6 to 77.7 µs and nested JSON POST from
+109.7 to 104.9 µs. Each improved in all eight process pairs. On 24 mixed fixtures,
+default Rust p50 went from 177.2 to 161.5 µs and p99 from 218.9 to 204.7 µs.
+Fresh full-CRS loading went from 265.4 to 273.9 ms.
+
+Both detector backends retained the external corpus outcomes, 22 blocking traces
+and 24 full audit records. The local [report and raw measurements](../zentinel-eval/results/perf-post-grouped/RESULTS.md)
+identify the benchmark revisions and the separate cold-load and regex checks.
+
+## Request target and TX checkpoint at `3594fa0`
+
 Engine `3594fa0e54d275449a59e165765438e34bdd0f15` on `spike/crs-parity` scans request-target
 delimiters and copies plain path spans directly. Numeric TX rules can reuse a
 verified collection position for the four most frequently compared keys per
