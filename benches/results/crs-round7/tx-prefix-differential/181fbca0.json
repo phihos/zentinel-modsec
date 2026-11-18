@@ -1,0 +1,16 @@
+{
+  "commit": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+  "oracle": "d2e9fb1fa2cee89f0d33088cfb6f8632d875e5b2720bdb42df75f1eb0892224b",
+  "backends": {
+    "default": {
+      "compiler_library": "8076bdaf17a36216c03ae11cc6ec325162d2fb721b880e3849c2fc8d306b15e6",
+      "worker": "a989f3148a7efbb2e6b67bfad769eee8fc02026d0562f4dcf871c2342e127f10",
+      "result": "8284 folded and opaque keys x 26 regex selectors; all exact against regex::bytes"
+    },
+    "ffi": {
+      "compiler_library": "e936ddce880e8ed53590758db2a5cbbc81a6e99b5f1b466279acf1332c218aa6",
+      "worker": "699d8e17edaa5d36eeafd73fb5f48f0f09027600e7a0beb6dc2999306a25cb0a",
+      "result": "8284 folded and opaque keys x 26 regex selectors; all exact against regex::bytes"
+    }
+  }
+}

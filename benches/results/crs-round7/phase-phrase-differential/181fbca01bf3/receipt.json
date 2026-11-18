@@ -1,0 +1,54 @@
+{
+  "commit": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+  "tree": "26833b383124f50c940711fe5ba4399092ec7a45",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/operators/pattern.rs": {
+      "production_sha256": "841bd501ec6d15f0bb508dccf0fe8816eb422e256b5cdeda8e22b4071ecec32f",
+      "oracle": "differential.rs",
+      "oracle_sha256": "49eda104ab6bd13b6ada1df74b6d572fad470d4b5112dd00a78f67a355ab6aa6",
+      "combined_sha256": "54e00cb68a53cf1d265e2fed3781648b151bce11a848cf42420ad73949f90c63"
+    },
+    "src/operators/traits.rs": {
+      "combined_sha256": "2a8c09be87ac3a83b176cc529e076f0c365cedb615751b463da19fdd0f13eacf"
+    },
+    "src/engine/ruleset.rs": {
+      "production_sha256": "bab53959525ea11e8c324cf646ea0680112bda163d04d0decf1fa621e6548c62",
+      "oracle": "access.ruleset.rs",
+      "oracle_sha256": "de05ef530fe350945a675b03edc2257e8c6e5f960681efdd3961f0c5704bcfc1",
+      "combined_sha256": "7cda0dfe1c9bc46384ff170bc34a8613818eab881269d1bc23cf5e69819e4683"
+    },
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "7f2cb7e2f40f8dcc05f47a19f95d5d96f4928cd29757fd0de655859039a82337",
+      "oracle": "access.pipeline.rs",
+      "oracle_sha256": "22936020507f9a6bec9c4d0a55b815ec35ca5466e994154532e3962a87c53620",
+      "combined_sha256": "3c048e2023cbe7114f3dc9722ad45302a79f22e7d9b9670fd7680b5748f199f1"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "crs_phrase_differential",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "926ca93b31277ad1adbcc063348e555fee0916d5fb9aac9972cb857b384f8853",
+  "results": [
+    "phase search CRS actual target pruning [arguments,filename,headers] [132368, 41867, 30012]",
+    "phase search CRS: stages 332060, pruned word targets 138639, pruned non-word path targets 65608, positive stages 12866, positive changed stages 1797 (words 1, paths 1796), mismatches 0",
+    "phase search controls actual target pruning [arguments,filename,headers] [25676, 0, 0]",
+    "phase search controls: stages 59710, pruned word targets 17246, pruned non-word path targets 8430, positive stages 6782, positive changed stages 15 (words 7, paths 8), mismatches 0",
+    "CRS rules 698, inline phrase rules 12, file-backed phrase rules 21, distinct live programs plus two controls 27, phrases 5899, capture-mode comparisons 3932762, early rejections 1548505, matched portions 32028, ordered captures 36798, mismatches 0",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 211 filtered out; finished in 1.42s"
+  ]
+}

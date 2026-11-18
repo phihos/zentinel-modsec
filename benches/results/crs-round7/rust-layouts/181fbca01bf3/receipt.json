@@ -1,0 +1,181 @@
+{
+  "baseline": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+  "candidate": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+  "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2\n",
+  "baseline_log_sha256": "dc00eaaa3eb019116d87216120fad94c88833faac1f43c4859ae6e468b3d6a05",
+  "candidate_log_sha256": "d2392630fad25f60e2c4482986463d39368991858a3907a6b0ab35836a304244",
+  "baseline_types": {
+    "Transaction": {
+      "name": "engine::transaction::Transaction",
+      "size": 2408,
+      "align": 8
+    },
+    "RequestData": {
+      "name": "variables::request::RequestData",
+      "size": 1504,
+      "align": 8
+    },
+    "CompiledRuleset": {
+      "name": "engine::ruleset::CompiledRuleset",
+      "size": 624,
+      "align": 8
+    },
+    "CompiledRule": {
+      "name": "engine::ruleset::CompiledRule",
+      "size": 176,
+      "align": 8
+    },
+    "RuleDispatch": {
+      "name": "engine::ruleset::RuleDispatch",
+      "size": 168,
+      "align": 8
+    },
+    "SelectorPrograms": {
+      "name": "variables::selectors::SelectorPrograms",
+      "size": 96,
+      "align": 8
+    },
+    "HashMapCollection": {
+      "name": "variables::collection::HashMapCollection",
+      "size": 80,
+      "align": 8
+    },
+    "TxCollection": {
+      "name": "variables::tx::TxCollection",
+      "size": 80,
+      "align": 8
+    },
+    "TargetIndices": {
+      "name": "engine::target_indices::TargetIndices",
+      "size": 56,
+      "align": 8
+    },
+    "CollectionValues": {
+      "name": "variables::collection::CollectionValues",
+      "size": 56,
+      "align": 8
+    },
+    "TargetSelection": {
+      "name": "variables::selectors::TargetSelection",
+      "size": 48,
+      "align": 8
+    },
+    "MemberValues": {
+      "name": "variables::collection::MemberValues",
+      "size": 32,
+      "align": 8
+    },
+    "RequestCollections": {
+      "name": "engine::target_indices::RequestCollections",
+      "size": 24,
+      "align": 8
+    },
+    "MemberSelector": {
+      "name": "variables::selectors::MemberSelector",
+      "size": 24,
+      "align": 8
+    },
+    "ActiveTargets": {
+      "name": "engine::target_indices::ActiveTargets",
+      "size": 4,
+      "align": 2
+    },
+    "WidthSources": {
+      "name": "engine::target_indices::WidthSources",
+      "size": 3,
+      "align": 1
+    },
+    "Widths": {
+      "name": "engine::target_indices::Widths",
+      "size": 2,
+      "align": 1
+    }
+  },
+  "candidate_types": {
+    "Transaction": {
+      "name": "engine::transaction::Transaction",
+      "size": 2520,
+      "align": 8
+    },
+    "RequestData": {
+      "name": "variables::request::RequestData",
+      "size": 1608,
+      "align": 8
+    },
+    "CompiledRuleset": {
+      "name": "engine::ruleset::CompiledRuleset",
+      "size": 624,
+      "align": 8
+    },
+    "CompiledRule": {
+      "name": "engine::ruleset::CompiledRule",
+      "size": 176,
+      "align": 8
+    },
+    "RuleDispatch": {
+      "name": "engine::ruleset::RuleDispatch",
+      "size": 168,
+      "align": 8
+    },
+    "SelectorPrograms": {
+      "name": "variables::selectors::SelectorPrograms",
+      "size": 96,
+      "align": 8
+    },
+    "HashMapCollection": {
+      "name": "variables::collection::HashMapCollection",
+      "size": 88,
+      "align": 8
+    },
+    "TxCollection": {
+      "name": "variables::tx::TxCollection",
+      "size": 80,
+      "align": 8
+    },
+    "TargetIndices": {
+      "name": "engine::target_indices::TargetIndices",
+      "size": 56,
+      "align": 8
+    },
+    "CollectionValues": {
+      "name": "variables::collection::CollectionValues",
+      "size": 56,
+      "align": 8
+    },
+    "TargetSelection": {
+      "name": "variables::selectors::TargetSelection",
+      "size": 48,
+      "align": 8
+    },
+    "MemberValues": {
+      "name": "variables::collection::MemberValues",
+      "size": 32,
+      "align": 8
+    },
+    "RequestCollections": {
+      "name": "engine::target_indices::RequestCollections",
+      "size": 24,
+      "align": 8
+    },
+    "MemberSelector": {
+      "name": "variables::selectors::MemberSelector",
+      "size": 24,
+      "align": 8
+    },
+    "ActiveTargets": {
+      "name": "engine::target_indices::ActiveTargets",
+      "size": 4,
+      "align": 2
+    },
+    "WidthSources": {
+      "name": "engine::target_indices::WidthSources",
+      "size": 3,
+      "align": 1
+    },
+    "Widths": {
+      "name": "variables::widths::Widths",
+      "size": 2,
+      "align": 1
+    }
+  }
+}

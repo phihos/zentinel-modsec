@@ -1,0 +1,316 @@
+{
+  "sources": {
+    "baseline": {
+      "commit": "b2f41fe9133547b7e4e5f012c694193e7b064c8c",
+      "engine_sha256": "3a130f37b0678f69269d47b42e482b787f0bc704c7271b13397e68aedcc6d086",
+      "driver_sha256": "1a172440ad9a5b00636947b2d1d6b20201af862022904238f17fc58fc9ba41a5",
+      "observations_sha256": "47e2c61430a337704439d0bac4db0dfc5fc602c5a9f9980c69bfd9392ec5001e"
+    },
+    "published": {
+      "commit": "337a3cf4e11e48caceb6361ad5c7f1251142baa7",
+      "engine_sha256": "c9903508feab725c1e5f985bc1e40b04a2cbce8ba496d5ca3f8c25d6304271c8",
+      "driver_sha256": "9c31ee90809ef7e1f15c9e4ee136f9648718efa3cf95261c4dd056ca0a79cddc",
+      "observations_sha256": "47e2c61430a337704439d0bac4db0dfc5fc602c5a9f9980c69bfd9392ec5001e"
+    },
+    "final": {
+      "commit": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+      "engine_sha256": "1346c63caf450d83671855dc15d19e0baace5cdafb20b618f93a9ce9c7ea3a78",
+      "driver_sha256": "31822153ccb114c78ce468660249c0230c5a5d1b238d2934cbbada5a90831e41",
+      "observations_sha256": "47e2c61430a337704439d0bac4db0dfc5fc602c5a9f9980c69bfd9392ec5001e"
+    }
+  },
+  "fixture_sha256": "960bcab476ae4ef2dc5bd66148cf98644ae7a5fb9a062b70e44443f01b75cd16",
+  "raw_sha256": "851ea585a0a359678bd946ab1e7b467de4dadd22cee32cbd3b345c453cf7b908",
+  "cpu": 12,
+  "fields": 8192,
+  "cases": [
+    "indexed last member match",
+    "indexed member miss",
+    "absent key"
+  ],
+  "rules": 1,
+  "compiled_minimums": {
+    "word": 6,
+    "dotted": 6,
+    "path": 6
+  },
+  "same_observations": true,
+  "request_phases": 5,
+  "paired_blocks": 12,
+  "repetitions_per_case_per_block": 32,
+  "release_backend": "Rust",
+  "stages": [
+    "create",
+    "parse_uri",
+    "request_headers_phase",
+    "full_request_including_drop"
+  ],
+  "summary": {
+    "hit": {
+      "create": {
+        "median_us": {
+          "baseline": 0.238,
+          "published": 0.249,
+          "final": 0.2285
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 5.46610169491526,
+            "faster_blocks": 3
+          },
+          "published-to-final": {
+            "paired_percent": -8.138842975206611,
+            "faster_blocks": 9
+          },
+          "baseline-to-final": {
+            "paired_percent": -5.000347246336551,
+            "faster_blocks": 8
+          }
+        }
+      },
+      "parse_uri": {
+        "median_us": {
+          "baseline": 1306.2655,
+          "published": 1286.6425,
+          "final": 1339.331
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": -1.5015467503416091,
+            "faster_blocks": 10
+          },
+          "published-to-final": {
+            "paired_percent": 4.570913351948402,
+            "faster_blocks": 0
+          },
+          "baseline-to-final": {
+            "paired_percent": 2.6203971046381946,
+            "faster_blocks": 1
+          }
+        }
+      },
+      "request_headers_phase": {
+        "median_us": {
+          "baseline": 2.6145,
+          "published": 108.5665,
+          "final": 2.5845
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 4079.9989455545133,
+            "faster_blocks": 0
+          },
+          "published-to-final": {
+            "paired_percent": -97.5682442323191,
+            "faster_blocks": 12
+          },
+          "baseline-to-final": {
+            "paired_percent": 0.19614551499478883,
+            "faster_blocks": 6
+          }
+        }
+      },
+      "full_request_including_drop": {
+        "median_us": {
+          "baseline": 1379.6155,
+          "published": 1455.356,
+          "final": 1413.1615
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 5.711342576487888,
+            "faster_blocks": 0
+          },
+          "published-to-final": {
+            "paired_percent": -2.7029482441577657,
+            "faster_blocks": 12
+          },
+          "baseline-to-final": {
+            "paired_percent": 2.4563377810564946,
+            "faster_blocks": 1
+          }
+        }
+      }
+    },
+    "miss": {
+      "create": {
+        "median_us": {
+          "baseline": 0.247,
+          "published": 0.2485,
+          "final": 0.2385
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 0.39541135283821527,
+            "faster_blocks": 4
+          },
+          "published-to-final": {
+            "paired_percent": -5.936133758714401,
+            "faster_blocks": 10
+          },
+          "baseline-to-final": {
+            "paired_percent": -1.5067786619510748,
+            "faster_blocks": 7
+          }
+        }
+      },
+      "parse_uri": {
+        "median_us": {
+          "baseline": 1305.9045,
+          "published": 1277.941,
+          "final": 1339.361
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": -2.315830784141898,
+            "faster_blocks": 12
+          },
+          "published-to-final": {
+            "paired_percent": 4.8626386045691365,
+            "faster_blocks": 0
+          },
+          "baseline-to-final": {
+            "paired_percent": 2.663799358759278,
+            "faster_blocks": 0
+          }
+        }
+      },
+      "request_headers_phase": {
+        "median_us": {
+          "baseline": 0.847,
+          "published": 107.613,
+          "final": 0.8515
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 12572.30356836507,
+            "faster_blocks": 0
+          },
+          "published-to-final": {
+            "paired_percent": -99.18932541006969,
+            "faster_blocks": 12
+          },
+          "baseline-to-final": {
+            "paired_percent": 3.8209119115412693,
+            "faster_blocks": 5
+          }
+        }
+      },
+      "full_request_including_drop": {
+        "median_us": {
+          "baseline": 1376.8945,
+          "published": 1443.022,
+          "final": 1410.5145
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 4.619645370065717,
+            "faster_blocks": 0
+          },
+          "published-to-final": {
+            "paired_percent": -2.5977674481393653,
+            "faster_blocks": 12
+          },
+          "baseline-to-final": {
+            "paired_percent": 2.5515180092014034,
+            "faster_blocks": 0
+          }
+        }
+      }
+    },
+    "absent": {
+      "create": {
+        "median_us": {
+          "baseline": 0.236,
+          "published": 0.245,
+          "final": 0.2385
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 4.366812227074234,
+            "faster_blocks": 4
+          },
+          "published-to-final": {
+            "paired_percent": -5.439360929557013,
+            "faster_blocks": 9
+          },
+          "baseline-to-final": {
+            "paired_percent": -0.6350072780203775,
+            "faster_blocks": 7
+          }
+        }
+      },
+      "parse_uri": {
+        "median_us": {
+          "baseline": 1305.076,
+          "published": 1280.059,
+          "final": 1337.275
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": -2.02409343746609,
+            "faster_blocks": 11
+          },
+          "published-to-final": {
+            "paired_percent": 4.097911597268123,
+            "faster_blocks": 0
+          },
+          "baseline-to-final": {
+            "paired_percent": 2.611416816973633,
+            "faster_blocks": 0
+          }
+        }
+      },
+      "request_headers_phase": {
+        "median_us": {
+          "baseline": 0.429,
+          "published": 107.6785,
+          "final": 0.422
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 24144.86934214531,
+            "faster_blocks": 0
+          },
+          "published-to-final": {
+            "paired_percent": -99.60532288706938,
+            "faster_blocks": 12
+          },
+          "baseline-to-final": {
+            "paired_percent": -4.473393142435789,
+            "faster_blocks": 7
+          }
+        }
+      },
+      "full_request_including_drop": {
+        "median_us": {
+          "baseline": 1376.0725,
+          "published": 1447.985,
+          "final": 1407.7745
+        },
+        "comparisons": {
+          "baseline-to-published": {
+            "paired_percent": 5.195295888437091,
+            "faster_blocks": 0
+          },
+          "published-to-final": {
+            "paired_percent": -3.0866997485632206,
+            "faster_blocks": 12
+          },
+          "baseline-to-final": {
+            "paired_percent": 2.4333664419195378,
+            "faster_blocks": 0
+          }
+        }
+      }
+    }
+  },
+  "rotation": 2,
+  "smt_sibling_cpu": 4,
+  "smt_sibling_median_busy_percent": 0.0,
+  "smt_sibling_max_busy_percent": 5.882352941176472,
+  "preflight_sibling_busy_percent": [
+    8.080808080808078,
+    5.154639175257736
+  ]
+}

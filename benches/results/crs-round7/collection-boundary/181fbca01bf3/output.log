@@ -1,0 +1,15 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+   Compiling zentinel-modsec v0.6.0 (/tmp/zentinel-r7-collections-181fbca01bf3)
+    Finished `release` profile [optimized] target(s) in 36.18s
+     Running unittests src/lib.rs (/tmp/zentinel-next-regex-target/release/deps/zentinel_modsec-4b42985b4d595045)
+
+running 1 test
+boundary sweep mutation snapshots 1110, independently rescanned alphabet/length decisions 488400, cold/warm append, clone, set, delete, clear, safe missed pruning opportunities 0, unsound decisions 0
+boundary sweep CRS: fixtures 336, rules 698, removed targets 45360, source members checked 6688332, unfiltered transformed-stage decisions 7366744, over-4KiB rule masks checked 134016, targets pruned over 4KiB 25728, differences 0
+boundary sweep controls: fixtures 336, rules 5, removed targets 504, source members checked 73800, unfiltered transformed-stage decisions 98400, over-4KiB rule masks checked 960, targets pruned over 4KiB 288, differences 0
+late matches fixtures 336, fixtures above reference 4KiB charged budget 192, last-field positives 336, late positives above reference 4KiB charged budget 192, above 4KiB actual name/value bytes 96, late positives grouped by member count {32: 24, 33: 24, 64: 72, 127: 24, 128: 72, 129: 24, 256: 48, 257: 24, 384: 24}, matched rule and audit differences 0
+test operators::pattern::full_collections_at_arg_limits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 211 filtered out; finished in 2.38s
+

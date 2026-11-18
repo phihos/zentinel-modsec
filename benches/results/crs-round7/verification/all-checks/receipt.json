@@ -1,0 +1,85 @@
+{
+  "commit": "181fbca01bf3142fc006fba61b4241165c2cd00b",
+  "checks": {
+    "fmt": {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "seconds": 0.52
+    },
+    "diff": {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "grouped/19-native-crs..HEAD"
+      ],
+      "exit": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "seconds": 0.02
+    },
+    "default-clippy": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "log_sha256": "a1f0c9d13a201df738b0e768e1135319a404edaf3af152355f067d87d052e387",
+      "seconds": 12.23
+    },
+    "default-all": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--all-targets"
+      ],
+      "exit": 0,
+      "log_sha256": "6ac25a0d41f944feb5a85ab0191983717d65cec3ca87fcedf5d366e0de931e64",
+      "seconds": 82.38
+    },
+    "ffi-clippy": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--features",
+        "libinjection-ffi",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "log_sha256": "bb4b9480c184ec8969ded655b9707ddbf8a6516b91baf6d07c19e1ea60e437ac",
+      "seconds": 33.13
+    },
+    "ffi-all": {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--features",
+        "libinjection-ffi"
+      ],
+      "exit": 0,
+      "log_sha256": "898e937f315c0a36c1f5bdef6f99643189ed94bd013fb18bea8015a103e2a1ff",
+      "seconds": 60.33
+    }
+  }
+}

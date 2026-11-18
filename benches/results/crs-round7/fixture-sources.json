@@ -1,0 +1,46 @@
+{
+  "resident_sha256": "93ee000894d6a2ce78b9218fb7b703274cf345e75ba5043d476a8fa9ab268ff1",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "fixtures": {
+    "varied": {
+      "fixture": "edge-full.rs",
+      "fixture_sha256": "47269d41befafe98286932e3a274759eb6083b61f96d5104d8f89bd3d0b34ff7",
+      "workers": {
+        "b2f41fe9133547b7e4e5f012c694193e7b064c8c": "6ba2cabd5cb58ac7911b707475e80287bbe79769eb3aca71d20fc35fd9358156",
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "f68f7be55c9fadb3c2ef2c8f2612e4bb5a31d32f153399ed65e55948798d3e60"
+      }
+    },
+    "additional": {
+      "fixture": "additional-full.rs",
+      "fixture_sha256": "0a7cec5c96e9e44d6b3c053ade6b53de4ceb2d681409510037ae8fe4592cacb9",
+      "workers": {
+        "b2f41fe9133547b7e4e5f012c694193e7b064c8c": "049b4c28221986e7c357004f0795f7300176b358432233eab356a534c12a5563",
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "174f22cff55851a84b80006485da3ef4ace9165c888f54519ec513529c507922"
+      }
+    },
+    "coverage": {
+      "fixture": "coverage-full.rs",
+      "fixture_sha256": "2ab5f0dea9ea16dafdf0ee3f2b2104efe7dd7414927439e4abc557d5f88313b4",
+      "workers": {
+        "b2f41fe9133547b7e4e5f012c694193e7b064c8c": "700404856cb66e709fe378b83b99958542deeb05f1f1f0e335c845940c26d149",
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "8c5d744ec178221c8a41900be4377635bdc0ef5e193c0dded9f49ad731720b64"
+      }
+    },
+    "limits": {
+      "fixture": "limits-full.rs",
+      "fixture_sha256": "b2a2e73c99842bc2ae9cbbe85f7d56f3a70bb2cc70bfcca0349fb23c601494fd",
+      "workers": {
+        "b2f41fe9133547b7e4e5f012c694193e7b064c8c": "b9d7583f6a071e35591341a8d1cafa5b29c9f148927d333e21f1488549a1bc06",
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "2c44731fd21fb39b08c6e8ec545956ec43d09440d76428254f6ab07c03f8bbf9"
+      }
+    },
+    "large": {
+      "fixture": "large-full.rs",
+      "fixture_sha256": "0fb54a4deb7243150f7875c68a577ff3b8f63d9dcfc68b394e619c0430b69191",
+      "workers": {
+        "b2f41fe9133547b7e4e5f012c694193e7b064c8c": "7a8c43c5ca03a2b973230abfcbe993bba94ff6baa9c462b73f13851feb0a5c23",
+        "181fbca01bf3142fc006fba61b4241165c2cd00b": "b42e100618620f414e5d2e8d45e327ee98aecc3324299121bd5d013fd83fc012"
+      }
+    }
+  }
+}
