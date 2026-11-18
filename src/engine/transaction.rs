@@ -720,7 +720,7 @@ impl Transaction {
     pub fn request_body_buffered_len(&self) -> usize {
         self.request_spool
             .as_ref()
-            .map_or(self.request.body.len(), |spool| spool.len)
+            .map_or(self.request.body.len(), |spool| spool.len())
     }
 
     /// Parsed response JSON and any processor error when a rule selected JSON.
@@ -932,7 +932,7 @@ impl Transaction {
             self.request_spool = None;
             self.request.body = Vec::new();
         } else if let Some(spool) = &mut self.request_spool {
-            spool.len = spool.len.min(len);
+            spool.truncate(len);
         } else {
             self.request.body.truncate(len);
         }

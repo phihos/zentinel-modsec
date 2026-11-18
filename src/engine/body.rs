@@ -93,7 +93,8 @@ pub struct BodyWriteResult {
 /// a failed write or a provisional acquisition left more bytes in the file.
 pub(crate) struct RequestSpool {
     file: std::fs::File,
-    pub len: usize,
+    len: usize,
+    needs_seek: bool,
 }
 
 impl RequestSpool {
@@ -104,13 +105,31 @@ impl RequestSpool {
         Ok(Self {
             file,
             len: prefix.len(),
+            needs_seek: false,
         })
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn truncate(&mut self, len: usize) {
+        if len < self.len {
+            self.len = len;
+            self.needs_seek = true;
+        }
     }
 
     pub fn append(&mut self, bytes: &[u8]) -> std::io::Result<()> {
         use std::io::{Seek, SeekFrom, Write};
-        self.file.seek(SeekFrom::Start(self.len as u64))?;
+        if self.needs_seek {
+            self.file.seek(SeekFrom::Start(self.len as u64))?;
+        }
+        // A short write followed by an I/O error can leave the cursor beyond
+        // the committed prefix. On retry, overwrite those provisional bytes.
+        self.needs_seek = true;
         self.file.write_all(bytes)?;
+        self.needs_seek = false;
         self.len += bytes.len();
         Ok(())
     }
@@ -122,10 +141,12 @@ impl RequestSpool {
             .try_reserve_exact(self.len)
             .map_err(|source| Error::BodyBufferAllocation { source })?;
         bytes.resize(self.len, 0);
+        self.needs_seek = true;
         self.file
             .rewind()
             .and_then(|_| self.file.read_exact(&mut bytes))
             .map_err(Error::BodySpoolIo)?;
+        self.needs_seek = false;
         Ok(bytes)
     }
 }
@@ -162,4 +183,20 @@ pub(crate) struct BodyState {
     pub pending_reject_length: Option<usize>,
     /// The caller offered bytes after the provisional prefix was full.
     pub pending_discarded: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RequestSpool;
+
+    #[test]
+    fn writes_after_truncation_overwrite_the_discarded_suffix() {
+        let mut spool = RequestSpool::new(b"first").unwrap();
+        spool.append(b"-old").unwrap();
+        spool.truncate(5);
+        spool.append(b"!").unwrap();
+        assert_eq!(spool.read_prefix().unwrap(), b"first!");
+        spool.append(b"?").unwrap();
+        assert_eq!(spool.read_prefix().unwrap(), b"first!?");
+    }
 }
