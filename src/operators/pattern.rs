@@ -15,11 +15,16 @@ use std::sync::{Arc, Mutex, Weak};
 /// removed on a miss so repeated configuration reloads cannot accumulate them.
 #[derive(Default)]
 struct RegexCache {
-    entries: Mutex<HashMap<String, Weak<Regex>>>,
+    entries: Mutex<HashMap<String, Weak<RegexProgram>>>,
+}
+
+struct RegexProgram {
+    regex: Regex,
+    minimum_len: usize,
 }
 
 impl RegexCache {
-    fn get(&self, pattern: &str) -> Result<Arc<Regex>> {
+    fn get(&self, pattern: &str) -> Result<Arc<RegexProgram>> {
         // Compilation is serialized with insertion, preventing concurrent
         // loads of the same pattern from building duplicate automata. Matching
         // never takes this lock.
@@ -33,17 +38,29 @@ impl RegexCache {
             return Ok(regex);
         }
         entries.retain(|_, regex| regex.strong_count() > 0);
-        let regex = Arc::new(
-            RegexBuilder::new(&normalize_binary_braced_escapes(pattern, binary))
-                .unicode(!binary)
-                .dot_matches_new_line(!binary)
-                .multi_line(!binary)
-                .build()
-                .map_err(|source| Error::RegexCompile {
-                    pattern: pattern.to_string(),
-                    source,
-                })?,
-        );
+        let expression = normalize_binary_braced_escapes(pattern, binary);
+        let regex = RegexBuilder::new(&expression)
+            .unicode(!binary)
+            .dot_matches_new_line(!binary)
+            .multi_line(!binary)
+            .build()
+            .map_err(|source| Error::RegexCompile {
+                pattern: pattern.to_string(),
+                source,
+            })?;
+        // Use the same byte syntax and inline flags as RegexBuilder. A parse
+        // disagreement only disables the early rejection.
+        let minimum_len = regex_syntax::ParserBuilder::new()
+            .utf8(false)
+            .unicode(!binary)
+            .dot_matches_new_line(!binary)
+            .multi_line(!binary)
+            .build()
+            .parse(&expression)
+            .ok()
+            .and_then(|hir| hir.properties().minimum_len())
+            .unwrap_or(0);
+        let regex = Arc::new(RegexProgram { regex, minimum_len });
         entries.insert(key, Arc::downgrade(&regex));
         Ok(regex)
     }
@@ -146,7 +163,8 @@ fn normalize_binary_braced_escapes(pattern: &str, binary: bool) -> std::borrow::
 /// Compilation happens at load time so an oversized program, like a syntax
 /// error, is reported by the loader with the affected rule ID.
 pub struct RxOperator {
-    compiled: Arc<Regex>,
+    compiled: Arc<RegexProgram>,
+    minimum_len: usize,
     has_subgroups: bool,
 }
 
@@ -161,7 +179,8 @@ impl RxOperator {
         }
         let compiled = REGEX_CACHE.get(pattern)?;
         Ok(Self {
-            has_subgroups: compiled.captures_len() > 1,
+            minimum_len: compiled.minimum_len,
+            has_subgroups: compiled.regex.captures_len() > 1,
             compiled,
         })
     }
@@ -176,7 +195,8 @@ impl RxOperator {
         negated: bool,
     ) -> Option<ByteOperatorResult> {
         if negated {
-            (!self.compiled.is_match(value)).then(ByteOperatorResult::no_match)
+            (value.len() < self.minimum_len || !self.compiled.regex.is_match(value))
+                .then(ByteOperatorResult::no_match)
         } else {
             self.positive_match(value, capture)
         }
@@ -184,13 +204,18 @@ impl RxOperator {
 
     #[inline]
     fn positive_match(&self, value: &[u8], capture: bool) -> Option<ByteOperatorResult> {
+        if value.len() < self.minimum_len {
+            return None;
+        }
         if !capture || !self.has_subgroups {
             return self
                 .compiled
+                .regex
                 .find(value)
                 .map(|m| ByteOperatorResult::matched(m.as_bytes()));
         }
         self.compiled
+            .regex
             .captures(value)
             .map(|captures| ByteOperatorResult {
                 matched: true,
