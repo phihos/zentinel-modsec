@@ -171,7 +171,7 @@ pub enum LoggingAction {
 }
 
 /// Control actions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ControlAction {
     /// Control directive.
     pub directive: String,

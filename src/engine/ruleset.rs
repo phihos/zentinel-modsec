@@ -116,6 +116,8 @@ pub struct CompiledRuleset {
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
     body_config: super::body::BodyConfig,
+    pub(crate) controls: HashMap<crate::parser::ControlAction, super::control::CtlDirective>,
+    pub(crate) selectors: crate::variables::SelectorPrograms,
 }
 
 /// Rule engine operating mode.
@@ -135,6 +137,8 @@ impl CompiledRuleset {
     pub fn new() -> Self {
         Self {
             rules: Rules::new(),
+            selectors: Default::default(),
+            controls: Default::default(),
             engine_mode: RuleEngineMode::default(),
             body_config: super::body::BodyConfig::default(),
         }
@@ -167,7 +171,7 @@ impl CompiledRuleset {
         // startup, because the alternative -- finding out from a rule that
         // never fired -- is the failure this reporting exists to prevent.
         report_unsupported_controls(&directives);
-        super::diagnostics::report(&directives);
+        super::diagnostics::report(&directives, &mut ruleset.selectors);
 
         // SecRuleRemoveById and SecRuleUpdateTargetById are applied against
         // the whole ruleset once loading completes (like ModSecurity, where
@@ -333,6 +337,26 @@ impl CompiledRuleset {
         }
 
         apply_target_updates(&mut ruleset, &target_updates);
+        for rule in ruleset.rules.by_phase.values().flatten() {
+            for action in &rule.actions {
+                if let Action::Control(ctl) = action {
+                    ruleset.controls.entry(ctl.clone()).or_insert_with(|| {
+                        let directive = super::control::CtlDirective::parse(ctl);
+                        if let super::control::CtlDirective::RuleRemoveTargetByTag {
+                            target, ..
+                        } = &directive
+                        {
+                            if let Ok(spec) = crate::parser::parse_single_variable(target) {
+                                if let Some(Selection::Regex(pattern)) = spec.selection {
+                                    ruleset.selectors.add(&pattern, spec.name);
+                                }
+                            }
+                        }
+                        directive
+                    });
+                }
+            }
+        }
         ruleset.body_config.validate()?;
         if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
             ruleset.body_config.request_limit_action =
@@ -440,11 +464,20 @@ fn apply_target_updates(
                 for exclusion in &update.exclusions {
                     for var in rule.variables.iter_mut() {
                         if !var.exclusions.iter().any(|e| e == exclusion) {
+                            if let Some((name, pattern)) =
+                                crate::variables::regex_exclusion(exclusion)
+                            {
+                                ruleset.selectors.add(pattern, name);
+                            }
                             var.exclusions.push(exclusion.clone());
                         }
                     }
                 }
-                super::diagnostics::report_added_targets(&update.additions, rule.id.as_deref());
+                super::diagnostics::report_added_targets(
+                    &update.additions,
+                    rule.id.as_deref(),
+                    &mut ruleset.selectors,
+                );
                 rule.variables.extend(update.additions.iter().cloned());
             }
         }
@@ -477,7 +510,8 @@ fn variable_matches_target(var: &VariableSpec, target: &str) -> bool {
         (None, None) => true,
         (Some(Selection::Regex(existing)), Some(Selection::Regex(wanted))) => existing == wanted,
         (Some(Selection::Key(existing)), Some(Selection::Key(wanted))) => {
-            existing.eq_ignore_ascii_case(wanted.as_str())
+            crate::variables::folded_key(existing.as_bytes())
+                == crate::variables::folded_key(wanted.as_bytes())
         }
         _ => false,
     }
