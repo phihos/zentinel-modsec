@@ -4,23 +4,15 @@ use crate::parser::{Action, DataAction, OperatorName, SetVarValue};
 use crate::variables::{folded_key, ByteValue, MemberSelector};
 use indexmap::IndexMap;
 
-// Bound both the planner's work and the per-ruleset positions it retains.
+// Bound both the planner's work and the per-ruleset defaults it retains.
 const MAX_RULES: usize = 64;
 const MAX_ASSIGNMENTS: usize = 128;
 const MIN_DEFAULTS: usize = 8;
 
-type ActionPosition = (u8, u8);
-
-#[derive(Clone, Copy)]
-pub(super) struct TxWrite {
-    pub key: ActionPosition,
-    pub value: ActionPosition,
-}
-
 pub(super) struct TxDefaults {
     pub end: usize,
-    // Positions of the final literal assignments, in first-insertion order.
-    pub assignments: Box<[TxWrite]>,
+    // Final literal assignments, in first-insertion order.
+    pub assignments: Box<[(ByteValue, ByteValue)]>,
     pub ids: Box<[u8]>,
     pub counts: Box<[(u8, u8)]>,
     pub last_count: Option<(u8, u8)>,
@@ -36,7 +28,7 @@ impl TxDefaults {
     }
 
     pub fn compile(rules: &[CompiledRule], dispatch: &[RuleDispatch]) -> Option<Box<Self>> {
-        let mut assignments = IndexMap::<&[u8], TxWrite>::new();
+        let mut assignments = IndexMap::<ByteValue, ByteValue>::new();
         let mut ids = Vec::new();
         let mut counts = Vec::new();
         let mut last_count = None;
@@ -90,15 +82,10 @@ impl TxDefaults {
             } else {
                 None
             };
-            for (action, op) in plan.setvars.iter().enumerate() {
-                let key = (index as u8, action as u8);
-                assignments.insert(
-                    op.key.as_ref().unwrap().as_bytes(),
-                    TxWrite {
-                        key,
-                        value: copied.unwrap_or(key),
-                    },
-                );
+            for op in &plan.setvars {
+                let key = op.key.as_ref().unwrap();
+                let value = op.value.as_ref().or(copied.as_ref()).unwrap();
+                assignments.insert(key.clone(), value.clone());
             }
             if rule.id.is_some() {
                 ids.push(index as u8);
@@ -110,7 +97,7 @@ impl TxDefaults {
         (assignments.len() >= MIN_DEFAULTS).then(|| {
             Box::new(Self {
                 end,
-                assignments: assignments.into_values().collect(),
+                assignments: assignments.into_iter().collect(),
                 ids: ids.into_boxed_slice(),
                 counts: counts.into_boxed_slice(),
                 last_count,
@@ -124,8 +111,8 @@ impl TxDefaults {
 fn literal_copy_source(
     rule: &CompiledRule,
     plan: &RuleDispatch,
-    assignments: &IndexMap<&[u8], TxWrite>,
-) -> Option<ActionPosition> {
+    assignments: &IndexMap<ByteValue, ByteValue>,
+) -> Option<ByteValue> {
     let [op] = &*plan.setvars else { return None };
     let Action::Data(DataAction::SetVar(spec)) = &rule.actions[op.action_index] else {
         return None;
@@ -140,7 +127,9 @@ fn literal_copy_source(
     if !collection.eq_ignore_ascii_case("tx") {
         return None;
     }
-    Some(assignments.get(folded_key(key.as_bytes()).as_ref())?.value)
+    assignments
+        .get(folded_key(key.as_bytes()).as_ref())
+        .cloned()
 }
 
 #[cfg(test)]
