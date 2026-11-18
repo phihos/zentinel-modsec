@@ -80,6 +80,19 @@ impl MemberSelector {
 
 impl TargetSelection {
     pub fn compile(spec: &VariableSpec, programs: &SelectorPrograms) -> Self {
+        let mut selection = Self::for_lookup(spec, programs);
+        selection.match_name = if spec.count_mode {
+            Some(Box::new(count_name(spec)))
+        } else if let (VariableName::Tx, MemberSelector::Key(key)) = (spec.name, &selection.member)
+        {
+            Some(Box::new(qualified_name("TX", Some(key))))
+        } else {
+            None
+        };
+        selection
+    }
+
+    pub fn for_lookup(spec: &VariableSpec, programs: &SelectorPrograms) -> Self {
         let regex =
             |pattern: &str| MemberSelector::Regex(programs.get(pattern, spec.name).cloned());
         let member = match &spec.selection {
@@ -122,16 +135,9 @@ impl TargetSelection {
                 (collection.into(), member)
             })
             .collect();
-        let match_name = if spec.count_mode {
-            Some(Box::new(count_name(spec)))
-        } else if let (VariableName::Tx, MemberSelector::Key(key)) = (spec.name, &member) {
-            Some(Box::new(qualified_name("TX", Some(key))))
-        } else {
-            None
-        };
         Self {
             member,
-            match_name,
+            match_name: None,
             exclusions,
         }
     }

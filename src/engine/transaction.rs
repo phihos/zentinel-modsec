@@ -139,10 +139,7 @@ impl StaticSearch<'_> {
         } else {
             let transformed = self.rule.transformations.apply_bytes(raw)?;
             Ok(execute(&transformed)?.map(|result| PreparedStage {
-                value: match transformed {
-                    Cow::Borrowed(bytes) => ByteValue::from(bytes),
-                    Cow::Owned(bytes) => ByteValue::from(bytes),
-                },
+                value: ByteValue::from(transformed),
                 result,
                 resume_after: None,
             }))
