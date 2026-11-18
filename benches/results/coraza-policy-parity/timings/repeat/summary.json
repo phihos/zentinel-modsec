@@ -1,0 +1,54 @@
+{
+  "baseline": "bfdde0683308194d9066c87326206157217e018b",
+  "candidate": "19cc49939494341eba3bcace2b92699f5b079706",
+  "cpu": 14,
+  "siblings": [
+    6,
+    14
+  ],
+  "start_utc": "2026-11-18T20:47:10.652670+00:00",
+  "end_utc": "2026-11-18T20:48:05.714361+00:00",
+  "thread_cpu": {
+    "get": {
+      "before_us": 78.441984375,
+      "after_us": 78.36097395833335,
+      "paired_percent": 0.617778328973656,
+      "wins": 4
+    },
+    "form": {
+      "before_us": 98.94375520833333,
+      "after_us": 100.79094791666667,
+      "paired_percent": 3.293920438078257,
+      "wins": 2
+    },
+    "json": {
+      "before_us": 115.71733072916668,
+      "after_us": 117.64909374999999,
+      "paired_percent": 1.4412233729344304,
+      "wins": 2
+    }
+  },
+  "wall": {
+    "get": {
+      "before_us": 141.0329375,
+      "after_us": 129.47073177083334,
+      "paired_percent": -7.395390239047456,
+      "wins": 6
+    },
+    "form": {
+      "before_us": 171.32363020833333,
+      "after_us": 180.781265625,
+      "paired_percent": 1.4264150907661532,
+      "wins": 4
+    },
+    "json": {
+      "before_us": 199.23074739583333,
+      "after_us": 189.37690625,
+      "paired_percent": -1.4065917450957033,
+      "wins": 6
+    }
+  },
+  "selection": "ad1f2d36b0cc1da52a539c4ac23951801735cbdabc87dfc30a1aa4fa08f26f7e",
+  "harness": "33fda7c448bef92afccafa5053cc9a88f49a1176033be288381c3f5e7e2a1a39",
+  "receipt": "15d0afdf93697857b4899cf1108bc9855860c2971d457ae81eb7fbf5249a4606"
+}

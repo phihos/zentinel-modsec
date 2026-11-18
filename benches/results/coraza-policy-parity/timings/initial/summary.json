@@ -1,0 +1,54 @@
+{
+  "start_utc": "2026-11-18T20:45:27.669781+00:00",
+  "end_utc": "2026-11-18T20:46:06.691232+00:00",
+  "clock": "CLOCK_THREAD_CPUTIME_ID and monotonic wall time",
+  "baseline": "bfdde0683308194d9066c87326206157217e018b",
+  "historical_binary_source": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "candidate": "19cc49939494341eba3bcace2b92699f5b079706",
+  "harness_sha256": "33fda7c448bef92afccafa5053cc9a88f49a1176033be288381c3f5e7e2a1a39",
+  "receipt_sha256": "258c7bd3fbc25856810530bbc2ab1e87448cdc10416111b7d1f3497dfed989c8",
+  "cpu_model": "AMD Ryzen 7 5700X3D 8-Core Processor",
+  "cpu_siblings": "6,14",
+  "linux": "7.3.3-1-cachyos",
+  "cpu_governor": "performance",
+  "numbers": {
+    "get": {
+      "before_us": 46.557460937500004,
+      "after_us": 49.1558359375,
+      "paired_percent": 2.077978127820723,
+      "wins": 1
+    },
+    "form": {
+      "before_us": 59.49991145833334,
+      "after_us": 57.883692708333335,
+      "paired_percent": 3.2414022458294833,
+      "wins": 1
+    },
+    "json": {
+      "before_us": 74.10565104166668,
+      "after_us": 69.79918229166667,
+      "paired_percent": 0.8802879359369409,
+      "wins": 3
+    }
+  },
+  "wall_numbers": {
+    "get": {
+      "before_us": 51.2971484375,
+      "after_us": 52.76238802083333,
+      "paired_percent": 1.6578142595604972,
+      "wins": 2
+    },
+    "form": {
+      "before_us": 65.28025,
+      "after_us": 64.27193229166667,
+      "paired_percent": 5.199946030929803,
+      "wins": 3
+    },
+    "json": {
+      "before_us": 84.42061979166667,
+      "after_us": 78.33732552083333,
+      "paired_percent": 1.0927200906283074,
+      "wins": 3
+    }
+  }
+}
