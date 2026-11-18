@@ -167,6 +167,9 @@ not only a nonzero HTTP status. Status arguments retain the public `u16` domain.
 
 Response headers can be supplied with `process_response_headers_with_status()`;
 `process_response_body()` runs phase 4 after MIME/access checks.
+`RESPONSE_CONTENT_LENGTH` holds the inspected byte count starting in phase 4,
+including zero for an inspected empty body and the retained prefix length for
+`ProcessPartial`. It stays empty when inspection is skipped.
 
 ### Detection only and anomaly scoring
 
