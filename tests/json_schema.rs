@@ -115,3 +115,45 @@ fn unconstrained_schema_accepts_deep_json_and_still_checks_raw_syntax() {
         assert_eq!(!tx.matched_rules().is_empty(), violation, "{scalar}");
     }
 }
+
+#[test]
+fn compound_schemas_inspect_nested_fields_and_validate_the_discarded_tail() {
+    let dir = tempdir().unwrap();
+    fs::write(
+        dir.path().join("manifest.json"),
+        r##"{
+        "$defs":{"entry":{"type":"object","required":["kind","detail"],"properties":{
+            "kind":{"enum":["book","album"]},
+            "detail":{"anyOf":[{"const":{"label":[]}},{"type":"array","minItems":1}]}
+        }}},
+        "type":"object","required":["entries"],
+        "properties":{"entries":{"type":"array","items":{"$ref":"#/$defs/entry"}}}
+    }"##,
+    )
+    .unwrap();
+    let rule = dir.path().join("policy.conf");
+    fs::write(
+        &rule,
+        r#"SecRule ARGS:q "@validateSchema manifest.json" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    let engine = ModSecurity::from_file(rule.to_str().unwrap()).unwrap();
+    let deep = format!("{}42{}", "[".repeat(240), "]".repeat(240));
+    let out_of_range = format!("{}2e400{}", "[".repeat(240), "]".repeat(240));
+    for (kind, detail, invalid) in [
+        ("book", deep.clone(), false),
+        ("unknown", deep.clone(), true),
+        ("album", out_of_range, true),
+        ("book", format!(r#"{{"label":{deep}}}"#), true),
+        ("book", format!("{deep}X"), true),
+        ("book", "[]".to_owned(), true),
+    ] {
+        let doc =
+            format!(r#"{{"metadata":{deep},"entries":[{{"kind":"{kind}","detail":{detail}}}]}}"#);
+        let mut tx = engine.new_transaction();
+        tx.process_uri(&format!("/?q={doc}"), "GET", "HTTP/1.1")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(!tx.matched_rules().is_empty(), invalid, "{kind} {detail}");
+    }
+}

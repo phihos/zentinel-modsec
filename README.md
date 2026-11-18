@@ -325,9 +325,13 @@ fail rule loading. A schema violation or malformed nonempty JSON matches the
 operator. From phase 2 it prefers `TX:json_request_body`; from phase 4 it first
 checks `TX:json_response_body`. It falls back to the transformed rule target
 when neither applicable body is available. An empty fallback has no violation.
-The unconstrained schemas `true` and `{}` check syntax up to Coraza's 10,000
-nested containers. Other schemas receive a `serde_json::Value`; at 128 nested
-containers the library rejects the instance and the operator reports a violation.
+Schemas with a proven inspection depth support inputs up to Coraza's 10,000
+nested containers. This includes ordinary object and array constraints, enum
+and const comparisons, boolean combinations, and simple acyclic references to
+definitions within the same document. The complete input still undergoes syntax
+and numeric checks. For schemas requiring unbounded inspection, such as recursive
+references or `uniqueItems: true`, and schemas the depth analysis cannot resolve,
+the operator reports a violation at 128 nested containers.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@rbl`, `@geoLookup`,
