@@ -8,13 +8,13 @@ use super::control::{CtlDirective, TransactionControls};
 use super::intervention::Intervention;
 use super::phase::Phase;
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
-use crate::actions::{
-    execute_actions, ActionResult, DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar,
-    SetVarOperation,
-};
+use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
-use crate::parser::{Action, BodyLimitAction, DataAction, FlowAction, VariableSpec};
+use crate::parser::{
+    Action, BodyLimitAction, DataAction, DisruptiveAction, FlowAction, MetadataAction, SetVarSpec,
+    SetVarValue, VariableSpec,
+};
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
 };
@@ -81,9 +81,8 @@ pub struct Transaction {
     response_body_state: BodyState,
 }
 
-/// Deferred actions and audit snapshots from a matched link.
+/// Audit snapshots from a matched link.
 struct RuleOutcome {
-    actions: ActionResult,
     first_data: Option<MatchedData>,
     first_message: Option<RuleMessage>,
 }
@@ -253,19 +252,20 @@ impl Transaction {
         &self.rule_messages
     }
 
-    fn expand_rule_message(&self, result: &ActionResult) -> Option<RuleMessage> {
+    fn expand_rule_message(&self, actions: &[Action]) -> Option<RuleMessage> {
+        let (mut id, mut msg, mut logdata) = (None, None, None);
+        for action in actions {
+            match action {
+                Action::Metadata(MetadataAction::Id(value)) => id = Some(value),
+                Action::Metadata(MetadataAction::Msg(value)) => msg = Some(value),
+                Action::Metadata(MetadataAction::LogData(value)) => logdata = Some(value),
+                _ => {}
+            }
+        }
         Some(RuleMessage {
-            rule_id: result.metadata.id.clone()?,
-            message: result
-                .metadata
-                .msg
-                .as_deref()
-                .map(|s| self.expand_operator_macros_bytes(s)),
-            logdata: result
-                .metadata
-                .logdata
-                .as_deref()
-                .map(|s| self.expand_operator_macros_bytes(s)),
+            rule_id: id?.to_string(),
+            message: msg.map(|s| self.expand_operator_macros_bytes(s)),
+            logdata: logdata.map(|s| self.expand_operator_macros_bytes(s)),
         })
     }
 
@@ -954,20 +954,16 @@ impl Transaction {
         }
 
         let mut chain_state = ChainState::new();
-        // A chain is one logical rule: the starter's actions fire only when
-        // every link matches, so they are held here until the chain completes.
-        let mut pending_chain_actions: Option<ActionResult> = None;
-        let mut pending_chain_id: Option<String> = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data: Vec<MatchedData> = Vec::new();
         let mut skip_count: u32 = 0;
-        let mut skip_after: Option<String> = None;
+        let mut skip_after: Option<&str> = None;
 
         let mut idx = 0;
         while idx < rules.len() {
             // Handle skipAfter
-            if let Some(ref marker) = skip_after {
+            if let Some(marker) = skip_after {
                 // A marker records the index of the next rule. An adjacent
                 // marker therefore points to the current index.
                 match self.ruleset.marker(marker, phase) {
@@ -1020,18 +1016,14 @@ impl Transaction {
             // Evaluate rule
             // Runtime tag exclusions apply to every link of the logical rule,
             // including children that carry no tag of their own.
-            let tag_actions = chain_state
-                .chain_start
-                .map_or(rule.actions.as_slice(), |start| {
-                    rules[start].actions.as_slice()
-                });
-            let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
+            let starter = chain_state.chain_start.map_or(rule, |start| &rules[start]);
+            let tag_actions = &starter.actions;
+            let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && !chain_state.in_chain;
             if let Some(outcome) =
                 self.evaluate_rule(rule, link_rule_id, tag_actions, standalone)?
             {
                 let RuleOutcome {
-                    actions: action_result,
                     first_data,
                     first_message,
                 } = outcome;
@@ -1051,8 +1043,6 @@ impl Transaction {
                     // a match.
                     if !chain_state.in_chain {
                         chain_state.start_chain(idx);
-                        pending_chain_id = rule.id.clone();
-                        pending_chain_actions = Some(action_result);
                     }
                     chain_state.continue_chain(true, &[]);
                     idx += 1;
@@ -1062,123 +1052,93 @@ impl Transaction {
                 // Either a standalone rule, or the final link of a chain that
                 // has now matched in full. A completed chain keeps the
                 // starter's disruptive action, flow and metadata.
-                let action_result = if chain_state.in_chain {
+                if chain_state.in_chain {
                     chain_state.reset();
-                    if let Some(id) = pending_chain_id.take() {
-                        self.matched_rules.push(id);
-                    }
                     self.matched_data.append(&mut pending_chain_data);
-                    pending_chain_actions.take().unwrap_or(action_result)
-                } else {
-                    // Track matched rule
-                    if let Some(ref id) = rule.id {
-                        self.matched_rules.push(id.clone());
-                    }
-                    action_result
-                };
+                }
+                if let Some(id) = &starter.id {
+                    self.matched_rules.push(id.clone());
+                }
 
                 if self.record_rule_messages {
                     if let Some(message) =
-                        first_message.or_else(|| self.expand_rule_message(&action_result))
+                        first_message.or_else(|| self.expand_rule_message(&starter.actions))
                     {
                         self.rule_messages.push(message);
                     }
                 }
 
-                // Handle flow control
-                match action_result.flow {
-                    FlowOutcome::Chain => {
+                // Resolve the last effective flow and disruptive actions, as
+                // SecDefaultAction can contribute earlier ones of both kinds.
+                let mut flow = None;
+                let mut disruptive = None;
+                for action in &starter.actions {
+                    match action {
+                        Action::Flow(FlowAction::MultiMatch) => {}
+                        Action::Flow(f) => flow = Some(f),
+                        Action::Disruptive(d) => disruptive = Some(d),
+                        _ => {}
+                    }
+                }
+                match flow {
+                    Some(FlowAction::Chain) => {
                         if !chain_state.in_chain {
                             chain_state.start_chain(idx);
                         }
                         chain_state.continue_chain(true, &[]);
                     }
-                    FlowOutcome::Skip(n) => {
-                        skip_count = n;
-                    }
-                    FlowOutcome::SkipAfter(marker) => {
-                        skip_after = Some(marker);
-                    }
-                    FlowOutcome::Continue => {}
+                    Some(FlowAction::Skip(n)) => skip_count = *n,
+                    Some(FlowAction::SkipAfter(marker)) => skip_after = Some(marker),
+                    _ => {}
                 }
-
-                // Handle disruptive action
-                if let Some(outcome) = action_result.disruptive {
-                    // Only apply if not in detection-only mode
-                    let should_block = self.engine_mode() == RuleEngineMode::On;
-
-                    match outcome {
-                        DisruptiveOutcome::Deny(status) => {
-                            if should_block {
-                                let mut intervention = Intervention::deny(
-                                    action_result
-                                        .metadata
-                                        .status
-                                        .filter(|status| *status != 0)
-                                        .unwrap_or(status),
+                match disruptive {
+                    None | Some(DisruptiveAction::Pass) => {}
+                    Some(
+                        DisruptiveAction::Allow
+                        | DisruptiveAction::AllowPhase
+                        | DisruptiveAction::AllowRequest,
+                    ) => {
+                        self.allowed = true;
+                        return Ok(());
+                    }
+                    Some(action) if self.engine_mode() == RuleEngineMode::On => {
+                        let metadata = rule_metadata(&starter.actions);
+                        let id = rule.id.clone();
+                        let mut intervention = match action {
+                            DisruptiveAction::Deny | DisruptiveAction::Block => {
+                                let default = if matches!(action, DisruptiveAction::Block) {
+                                    self.default_status
+                                } else {
+                                    403
+                                };
+                                Intervention::deny(
+                                    metadata.status.filter(|s| *s != 0).unwrap_or(default),
                                     phase,
-                                    rule.id.clone(),
-                                );
-                                intervention.add_metadata(action_result.metadata);
-                                self.intervention = Some(intervention);
-                                if phase != Phase::Logging {
-                                    return Ok(());
-                                }
+                                    id,
+                                )
                             }
-                        }
-                        DisruptiveOutcome::Block => {
-                            if should_block {
-                                let mut intervention = Intervention::deny(
-                                    action_result
-                                        .metadata
-                                        .status
-                                        .filter(|status| *status != 0)
-                                        .unwrap_or(self.default_status),
-                                    phase,
-                                    rule.id.clone(),
-                                );
-                                intervention.add_metadata(action_result.metadata);
-                                self.intervention = Some(intervention);
-                                if phase != Phase::Logging {
-                                    return Ok(());
-                                }
+                            DisruptiveAction::Redirect(url) => {
+                                let mut it = Intervention::redirect(url.clone(), phase, id);
+                                it.status = metadata
+                                    .status
+                                    .filter(|s| matches!(s, 301 | 302 | 303 | 307))
+                                    .unwrap_or(302);
+                                it
                             }
-                        }
-                        DisruptiveOutcome::Allow => {
-                            self.allowed = true;
+                            DisruptiveAction::Drop => {
+                                let mut it = Intervention::drop(phase, id);
+                                it.status = metadata.status.unwrap_or(0);
+                                it
+                            }
+                            _ => unreachable!("non-interrupting actions handled above"),
+                        };
+                        intervention.add_metadata(metadata);
+                        self.intervention = Some(intervention);
+                        if phase != Phase::Logging {
                             return Ok(());
                         }
-                        DisruptiveOutcome::Redirect(url) => {
-                            if should_block {
-                                let mut intervention =
-                                    Intervention::redirect(url, phase, rule.id.clone());
-                                intervention.status = action_result
-                                    .metadata
-                                    .status
-                                    .filter(|status| matches!(status, 301 | 302 | 303 | 307))
-                                    .unwrap_or(302);
-                                intervention.add_metadata(action_result.metadata);
-                                self.intervention = Some(intervention);
-                                if phase != Phase::Logging {
-                                    return Ok(());
-                                }
-                            }
-                        }
-                        DisruptiveOutcome::Drop => {
-                            if should_block {
-                                let mut intervention = Intervention::drop(phase, rule.id.clone());
-                                intervention.status = action_result.metadata.status.unwrap_or(0);
-                                intervention.add_metadata(action_result.metadata);
-                                self.intervention = Some(intervention);
-                                if phase != Phase::Logging {
-                                    return Ok(());
-                                }
-                            }
-                        }
-                        DisruptiveOutcome::Pass => {
-                            // Continue processing
-                        }
                     }
+                    _ => {}
                 }
             } else {
                 // Rule didn't match. If it belongs to a chain, the chain as a
@@ -1187,8 +1147,6 @@ impl Transaction {
                 // their own.
                 if chain_state.in_chain || rule.is_chain {
                     chain_state.reset();
-                    pending_chain_actions = None;
-                    pending_chain_id = None;
                     pending_chain_data.clear();
                     while idx < rules.len() && rules[idx].is_chain {
                         idx += 1;
@@ -1323,7 +1281,6 @@ impl Transaction {
             let outcome = outcome.get_or_insert_with(|| {
                 tx.matched_vars.clear();
                 RuleOutcome {
-                    actions: execute_actions(&rule.actions, None, &[]),
                     first_data: None,
                     first_message: None,
                 }
@@ -1349,10 +1306,17 @@ impl Transaction {
             if capture {
                 tx.store_captures(result.matched_value, &result.captures);
             }
-            for op in &outcome.actions.setvar_ops {
-                tx.apply_setvar(op, logical_id);
+            // SecLang runs all setvars before the controls for each
+            // matching value. The parsed operations belong to the ruleset.
+            for action in &rule.actions {
+                if let Action::Data(DataAction::SetVar(op)) = action {
+                    tx.apply_setvar(op, logical_id);
+                }
             }
-            for ctl in &outcome.actions.control_ops {
+            for action in &rule.actions {
+                let Action::Control(ctl) = action else {
+                    continue;
+                };
                 let directive = tx
                     .ruleset
                     .controls
@@ -1368,7 +1332,7 @@ impl Transaction {
                 }
             }
             if first && standalone && tx.record_rule_messages {
-                outcome.first_message = tx.expand_rule_message(&outcome.actions);
+                outcome.first_message = tx.expand_rule_message(&rule.actions);
             }
             // Captures, MATCHED_VAR and setvar may all change a macro even
             // between two transformation stages of the same target value.
@@ -1489,27 +1453,36 @@ impl Transaction {
     }
 
     /// Apply a setvar operation.
-    fn apply_setvar(&mut self, op: &RuleSetVar, rule_id: Option<&str>) {
-        let name = if op.name.contains("%{") {
-            self.expand_operator_macros_bytes(&op.name)
+    fn apply_setvar(&mut self, op: &SetVarSpec, rule_id: Option<&str>) {
+        use std::borrow::Cow;
+        let name = if op.key.contains("%{") {
+            Cow::Owned(self.expand_operator_macros_bytes(&op.key))
         } else {
-            op.name.as_bytes().to_vec()
+            Cow::Borrowed(op.key.as_bytes())
         };
-        let change = match &op.operation {
-            SetVarOperation::Set(value) => {
-                self.tx.set_bytes(name.clone(), value.clone());
-                SetVarChange::Set(value.clone())
+        let record = rule_id.filter(|_| self.record_setvar_effects);
+        let change = match &op.value {
+            SetVarValue::String(value) => {
+                self.tx.set_bytes(name.as_ref(), value.as_str());
+                record.map(|_| SetVarChange::Set(value.clone()))
             }
-            SetVarOperation::Macro(raw) => {
+            SetVarValue::Int(n) => {
+                let value = n.to_string();
+                let change = record.map(|_| SetVarChange::Set(value.clone()));
+                self.tx.set_bytes(name.as_ref(), value);
+                change
+            }
+            SetVarValue::Macro(raw) => {
                 let (kind, operand) = split_setvar_rhs(raw);
                 let operand = self.expand_operator_macros_bytes(operand);
                 match kind {
                     SetVarKind::Set => {
-                        self.tx.set_bytes(name.clone(), operand.clone());
-                        match String::from_utf8(operand) {
-                            Ok(text) => SetVarChange::Set(text),
-                            Err(error) => SetVarChange::SetBytes(error.into_bytes()),
-                        }
+                        let change = record.map(|_| match std::str::from_utf8(&operand) {
+                            Ok(text) => SetVarChange::Set(text.to_owned()),
+                            Err(_) => SetVarChange::SetBytes(operand.clone()),
+                        });
+                        self.tx.set_bytes(name.as_ref(), operand);
+                        change
                     }
                     SetVarKind::Add | SetVarKind::Subtract => {
                         let n = std::str::from_utf8(&operand).map(leading_int).unwrap_or(0);
@@ -1523,32 +1496,32 @@ impl Transaction {
                         };
                         self.tx.increment_bytes(&name, delta);
                         if matches!(kind, SetVarKind::Subtract) {
-                            SetVarChange::Decrement(n)
+                            Some(SetVarChange::Decrement(n))
                         } else {
-                            SetVarChange::Increment(n)
+                            Some(SetVarChange::Increment(n))
                         }
                     }
                 }
             }
-            SetVarOperation::Increment(n) => {
+            SetVarValue::Increment(n) => {
                 self.tx.increment_bytes(&name, *n);
-                SetVarChange::Increment(*n)
+                Some(SetVarChange::Increment(*n))
             }
-            SetVarOperation::Decrement(n) => {
+            SetVarValue::Decrement(n) => {
                 self.tx.increment_bytes(&name, n.wrapping_neg());
-                SetVarChange::Decrement(*n)
+                Some(SetVarChange::Decrement(*n))
             }
-            SetVarOperation::Delete => {
+            SetVarValue::Delete => {
                 self.tx.delete_bytes(&name);
-                SetVarChange::Delete
+                Some(SetVarChange::Delete)
             }
         };
-        if let Some(rule_id) = rule_id.filter(|_| self.record_setvar_effects) {
+        if let (Some(rule_id), Some(op_change)) = (record, change) {
             self.setvar_effects.push(SetVarEffect {
                 rule_id: rule_id.into(),
                 collection: op.collection.to_ascii_lowercase(),
-                key: ByteValue::from(name.clone()).to_string(),
-                op: change,
+                key: ByteValue::from(name.into_owned()).to_string(),
+                op: op_change,
             });
         }
     }
