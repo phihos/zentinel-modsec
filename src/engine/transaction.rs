@@ -711,6 +711,11 @@ impl Transaction {
         self.request.body.len()
     }
 
+    /// Parsed response JSON and any processor error when a rule selected JSON.
+    pub fn response_json(&self) -> Option<&crate::variables::ResponseJson> {
+        self.response.json.as_deref()
+    }
+
     /// Number of bytes currently retained for response inspection.
     pub fn response_body_buffered_len(&self) -> usize {
         self.response.body.len()
@@ -1666,6 +1671,13 @@ impl Transaction {
         let Some((collection, key)) = name.split_once('.') else {
             if name.eq_ignore_ascii_case("unique_id") {
                 return self.id().as_bytes();
+            }
+            if name.eq_ignore_ascii_case("res_body_processor") {
+                return if self.response.json.is_some() {
+                    b"JSON"
+                } else {
+                    b""
+                };
             }
             if name.eq_ignore_ascii_case("arguments_limit_reached") {
                 return self.request.argument_limit_flag();

@@ -74,10 +74,14 @@ SecRule RES_BODY_ERROR "@streq 1" "id:17,phase:4,pass""#,
         tx.append_response_body(body.as_bytes()).unwrap();
         tx.process_response_body().unwrap();
         tx.process_response_body().unwrap();
-        if expected.contains(&"12") {
-            assert_eq!(tx.tx().get("title").unwrap(), ["Book"]);
-        }
         assert_eq!(tx.matched_rules(), expected, "{media} {body}");
+        if expected.contains(&"12") {
+            assert_eq!(tx.tx().get("title"), Some(vec!["Book"]));
+        }
+        assert_eq!(
+            tx.response_json().unwrap().error.is_some(),
+            expected.contains(&"17")
+        );
         assert_eq!(
             tx.tx().get("json_response_body"),
             stored.then(|| vec![body])
