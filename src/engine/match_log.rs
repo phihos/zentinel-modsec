@@ -68,6 +68,37 @@ impl MatchRecord for RuleLocation {
     }
 }
 
+/// A single named match can borrow its public ID directly from the ruleset.
+#[derive(Default)]
+pub(super) enum MatchedRules {
+    #[default]
+    Empty,
+    One(RuleLocation),
+    Many(MatchLog<RuleLocation>),
+}
+
+impl MatchedRules {
+    pub fn push(&mut self, ruleset: &CompiledRuleset, next: RuleLocation) {
+        match self {
+            Self::Empty => *self = Self::One(next),
+            Self::One(first) => {
+                let mut records = MatchLog::default();
+                records.extend(ruleset, [*first, next]);
+                *self = Self::Many(records);
+            }
+            Self::Many(records) => records.extend(ruleset, std::iter::once(next)),
+        }
+    }
+
+    pub fn as_slice<'a>(&'a self, ruleset: &'a CompiledRuleset, phase: Phase) -> &'a [String] {
+        match self {
+            Self::Empty => &[],
+            Self::One(loc) => ruleset.rules_for_phase(loc.phase)[loc.index].id.as_slice(),
+            Self::Many(records) => records.as_slice(ruleset, phase),
+        }
+    }
+}
+
 pub(super) struct MatchLog<T: MatchRecord> {
     // Recording always has exclusive transaction access and uses get_mut().
     // The first reader takes the raw buffer, leaving only the published form.
