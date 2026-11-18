@@ -324,8 +324,8 @@ impl Transaction {
         }
         Some(RuleMessage {
             rule_id: id?.to_string(),
-            message: msg.map(|s| self.expand_operator_macros_bytes(s).into_owned()),
-            logdata: logdata.map(|s| self.expand_operator_macros_bytes(s).into_owned()),
+            message: msg.map(|s| self.expand_macros_bytes(s).into_owned()),
+            logdata: logdata.map(|s| self.expand_macros_bytes(s).into_owned()),
         })
     }
 
@@ -1433,8 +1433,7 @@ impl Transaction {
             } else {
                 let operator: &dyn Operator = if dynamic {
                     if bound_operator.is_none() {
-                        let expanded =
-                            tx.expand_operator_macros_bytes(&rule.operator_spec.argument);
+                        let expanded = tx.expand_macros_bytes(&rule.operator_spec.argument);
                         bound_operator =
                             Some(compile_operator_bytes(&rule.operator_spec, &expanded)?);
                     }
@@ -1597,10 +1596,13 @@ impl Transaction {
             let mut target = ResolvedTarget::default();
             // Read the TX operand for this target. After the first match, actions
             // may change it and subsequent evaluations use the dynamic binder.
-            let within = dispatch
-                .within_tx_key
-                .as_deref()
-                .map(|key| self.tx.canonical_value(key).unwrap_or_default());
+            let within = dispatch.within_tx_key.as_deref().map(|key| {
+                self.tx.canonical_value(key).unwrap_or_else(|| {
+                    // This shortcut is compiled only for an exact %{TX.key} operand.
+                    let arg = rule.operator_spec.argument.as_bytes();
+                    &arg[2..arg.len() - 1]
+                })
+            });
             let search = (!schema && (!dynamic || within.is_some()))
                 .then_some(StaticSearch { within, ..search });
             self.resolve_rule_target(
@@ -1645,15 +1647,11 @@ impl Transaction {
 
     /// Expand against current transaction state. Literal text and standalone
     /// macro values can be borrowed until the caller needs to store a snapshot.
-    fn expand_operator_macros_bytes<'a>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
-        self.expand_macros_bytes::<false>(arg)
-    }
-
-    fn expand_macros_bytes<'a, const KEEP_MISSING: bool>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
+    fn expand_macros_bytes<'a>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
         let mut output = Vec::new();
         let mut rest = arg;
         while let Some((prefix, name, suffix)) = super::split_operator_macro(rest) {
-            let value = self.macro_value_bytes::<KEEP_MISSING>(name);
+            let value = self.macro_value_bytes(name);
             if prefix.is_empty() && output.is_empty() && suffix.is_empty() {
                 return Cow::Borrowed(value);
             }
@@ -1670,7 +1668,7 @@ impl Transaction {
         }
     }
 
-    fn macro_value_bytes<'a, const KEEP_MISSING: bool>(&'a self, name: &'a str) -> &'a [u8] {
+    fn macro_value_bytes<'a>(&'a self, name: &'a str) -> &'a [u8] {
         let Some((collection, key)) = name.split_once('.') else {
             if name.eq_ignore_ascii_case("unique_id") {
                 return self.id().as_bytes();
@@ -1705,21 +1703,11 @@ impl Transaction {
                 .unwrap_or_default();
         };
         let key = key.as_bytes();
-        if collection.eq_ignore_ascii_case("tx") {
-            return self.tx.first_value_bytes(key).unwrap_or(if KEEP_MISSING {
-                name.as_bytes()
-            } else {
-                &[]
-            });
-        }
-        if collection.eq_ignore_ascii_case("request_headers") {
-            return self
-                .request
-                .headers
-                .first_value_bytes(key)
-                .unwrap_or(if KEEP_MISSING { name.as_bytes() } else { &[] });
-        }
-        let value = if collection.eq_ignore_ascii_case("args") {
+        let value = if collection.eq_ignore_ascii_case("tx") {
+            self.tx.first_value_bytes(key)
+        } else if collection.eq_ignore_ascii_case("request_headers") {
+            self.request.headers.first_value_bytes(key)
+        } else if collection.eq_ignore_ascii_case("args") {
             self.request
                 .args_get
                 .first_value_bytes(key)
@@ -1736,7 +1724,7 @@ impl Transaction {
         } else {
             return &[];
         };
-        // A missing ARGS macro expands to its original name.
+        // Coraza returns the original collection.key spelling for a missing member.
         value.unwrap_or(name.as_bytes())
     }
 
@@ -1775,7 +1763,7 @@ impl Transaction {
         let (key, audit_key) = match &prepared.key {
             Some(key) => (key.clone(), record.map(|_| op.key.clone())),
             None => {
-                let expanded = self.expand_macros_bytes::<true>(&op.key);
+                let expanded = self.expand_macros_bytes(&op.key);
                 let key = ByteValue::from(crate::variables::folded_key(&expanded));
                 (
                     key,
@@ -1792,7 +1780,7 @@ impl Transaction {
             SetVarValue::Unresolved => return,
             value => {
                 let expanded = match value {
-                    SetVarValue::Macro(raw) => Some(self.expand_macros_bytes::<true>(raw)),
+                    SetVarValue::Macro(raw) => Some(self.expand_macros_bytes(raw)),
                     _ => None,
                 };
                 let operation = match (value, expanded.as_deref()) {
@@ -1878,15 +1866,15 @@ mod tests {
         for (template, expected) in [
             ("%{x}", b"value".as_slice()),
             ("%%{x}-%{}-%{Tx.X}-%{", b"%value-%{}-value-%{"),
-            ("%{tx.a%{x}}", b"}"),
-            ("%{tX.absent}%{ARGS.Label}", b"\xff"),
+            ("%{tx.a%{x}}", b"tx.a%{x}"),
+            ("%{tX.absent}%{ARGS.Label}", b"tX.absent\xff"),
             ("%{arGs_Get.label}%{args_post.label}", b"\xffbody"),
             ("%{ArGs.Missing}", b"ArGs.Missing"),
             ("%{Request_Headers.X-REPORT}", b"summary"),
             ("%{unknown.foo} and %{matched_var}", b" and "),
             ("%{x}%{x}", b"valuevalue"),
         ] {
-            assert_eq!(tx.expand_operator_macros_bytes(template).as_ref(), expected);
+            assert_eq!(tx.expand_macros_bytes(template).as_ref(), expected);
         }
     }
 

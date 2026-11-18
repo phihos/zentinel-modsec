@@ -40,13 +40,13 @@ pub fn expand_macros(
     let mut result = value.to_string();
 
     // Expand %{TX.varname}
-    let tx_re = regex::Regex::new(r"%\{TX\.([^}]+)\}").unwrap();
+    let tx_re = regex::Regex::new(r"%\{((?i:TX)\.([^}]+))\}").unwrap();
     result = tx_re
         .replace_all(&result, |caps: &regex::Captures| {
-            let var_name = &caps[1];
+            let var_name = &caps[2];
             tx.get(var_name)
                 .and_then(|v| v.first().map(|s| s.to_string()))
-                .unwrap_or_default()
+                .unwrap_or_else(|| caps[1].to_owned())
         })
         .into_owned();
 
@@ -113,6 +113,12 @@ mod tests {
     fn test_macro_expansion() {
         let mut tx = HashMapCollection::new();
         tx.set("anomaly_score".to_string(), "25".to_string());
+
+        tx.set("empty".to_owned(), String::new());
+        assert_eq!(
+            expand_macros("%{tX.Missing}|%{Tx.Empty}", &tx, None, None),
+            "tX.Missing|"
+        );
 
         let value = "Score is %{TX.anomaly_score}, matched %{MATCHED_VAR}";
         let expanded = expand_macros(value, &tx, Some("<script>"), None);

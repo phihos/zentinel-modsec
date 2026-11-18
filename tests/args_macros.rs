@@ -52,6 +52,43 @@ fn a_known_but_absent_argument_preserves_the_macro_token_text() {
     assert_eq!(tx.tx().get("missing"), Some(vec!["ARGS.absent"]));
 }
 
+#[test]
+fn missing_and_empty_keyed_macros_agree_in_operators_actions_and_messages() {
+    let engine = ModSecurity::from_string(
+        r#"SecRuleEngine DetectionOnly
+SecAction "id:1,phase:1,pass,setvar:'tx.void=%{REQUEST_HEADERS.X-Empty}',setvar:'tx.values=%{Tx.MiSsInG}|%{rEqUeSt_HeAdErS.X-MiSs}|%{TX.VOID}|%{ReQuEsT_HeAdErS.X-EMPty}'"
+SecRule ARGS:whole "@streq %{Tx.MiSsInG}" "id:2,phase:1,pass,log,msg:'%{Tx.MiSsInG}|%{rEqUeSt_HeAdErS.X-MiSs}|%{TX.VOID}|%{ReQuEsT_HeAdErS.X-EMPty}',logdata:'%{MATCHED_VAR}'"
+SecRule ARGS:part "@within %{Tx.MiSsInG}" "id:3,phase:1,pass"
+SecRule ARGS:part "@within %{Tx.Void}" "id:4,phase:1,pass"
+SecRule TX:values "@streq Tx.MiSsInG|rEqUeSt_HeAdErS.X-MiSs||" "id:5,phase:1,pass"
+SecRule ARGS:header "@streq %{rEqUeSt_HeAdErS.X-MiSs}" "id:6,phase:1,pass"
+SecRule TX:values "@streq %{Tx.VoId}Tx.MiSsInG|rEqUeSt_HeAdErS.X-MiSs||%{ReQuEsT_HeAdErS.X-EMPty}" "id:7,phase:1,pass"
+SecRule ARGS:empty_part "@within %{Tx.Void}" "id:8,phase:1,pass""#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.set_record_rule_messages(true);
+    tx.process_uri(
+        "/?whole=Tx.MiSsInG&part=MiSs&header=rEqUeSt_HeAdErS.X-MiSs&empty_part=Void",
+        "GET",
+        "HTTP/1.1",
+    )
+    .unwrap();
+    tx.add_request_header("X-Empty", "").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "3", "5", "6", "7"]);
+    let message = tx
+        .rule_messages()
+        .iter()
+        .find(|m| m.rule_id == "2")
+        .unwrap();
+    assert_eq!(
+        message.message.as_deref(),
+        Some(b"Tx.MiSsInG|rEqUeSt_HeAdErS.X-MiSs||".as_slice())
+    );
+    assert_eq!(message.logdata.as_deref(), Some(b"Tx.MiSsInG".as_slice()));
+}
+
 // These positive body fixtures explicitly request inspection; the engine's
 // bare defaults match Coraza and leave body access off.
 fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
