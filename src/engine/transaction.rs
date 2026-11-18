@@ -1396,26 +1396,14 @@ impl Transaction {
     fn expand_operator_macros_bytes<'a>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
         let mut output = Vec::new();
         let mut rest = arg;
-        let mut search_from = 0;
-        while let Some(offset) = rest[search_from..].find("%{") {
-            let start = search_from + offset;
-            let Some((name, suffix)) = rest[start + 2..].split_once('}') else {
-                break;
-            };
-            if name.is_empty() {
-                // An empty placeholder is literal text. Keep looking after it.
-                search_from = start + 3;
-                continue;
-            }
-
+        while let Some((prefix, name, suffix)) = super::split_operator_macro(rest) {
             let value = self.macro_value_bytes(name);
-            if start == 0 && output.is_empty() && suffix.is_empty() {
+            if prefix.is_empty() && output.is_empty() && suffix.is_empty() {
                 return Cow::Borrowed(value);
             }
-            output.extend_from_slice(&rest.as_bytes()[..start]);
+            output.extend_from_slice(prefix.as_bytes());
             output.extend_from_slice(value);
             rest = suffix;
-            search_from = 0;
         }
         if output.is_empty() {
             Cow::Borrowed(rest.as_bytes())

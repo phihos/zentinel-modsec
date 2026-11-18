@@ -43,7 +43,7 @@ fn compiled_ranges_match_the_reference_at_every_byte_boundary() {
 #[test]
 fn malformed_static_rules_fail_at_load_and_dynamic_lists_validate_at_evaluation() {
     for entry in [
-        "x", "256", "1-256", "2-3-4", "1-", ",0", "255,", "0,,9", "3 - 4",
+        "x", "256", "1-256", "2-3-4", "1-", ",0", "255,", "0,,9", "3 - 4", "%{}", "1,%{}%{",
     ] {
         let rules = format!(r#"SecRule ARGS:x "@validateByteRange {entry}" "id:1,phase:1,pass""#);
         let error = ModSecurity::from_string(&rules).expect_err("invalid config");

@@ -19,6 +19,18 @@ pub use transaction::{RuleMessage, SetVarChange, SetVarEffect, Transaction};
 use crate::error::Result;
 use std::sync::Arc;
 
+/// Split at the first nonempty operator macro. Empty and unclosed placeholders
+/// are literal text during both rule loading and transaction evaluation.
+fn split_operator_macro(input: &str) -> Option<(&str, &str, &str)> {
+    for (start, _) in input.match_indices("%{") {
+        let (name, suffix) = input[start + 2..].split_once('}')?;
+        if !name.is_empty() {
+            return Some((&input[..start], name, suffix));
+        }
+    }
+    None
+}
+
 /// Main ModSecurity engine.
 pub struct ModSecurity {
     /// Compiled ruleset.

@@ -646,10 +646,7 @@ fn compile_operator_reporting(
 ) -> Result<(Arc<dyn Operator>, bool)> {
     // A byte range supplied by a transaction macro is validated after expansion.
     if spec.name == OperatorName::ValidateByteRange
-        && spec
-            .argument
-            .split_once("%{")
-            .is_some_and(|(_, rest)| rest.contains('}'))
+        && super::split_operator_macro(&spec.argument).is_some()
     {
         return Ok((
             Arc::new(crate::operators::ValidateByteRangeOperator::new(
