@@ -412,6 +412,9 @@ selector/exclusion regexes and unsupported macro sources also warn with IDs.
 `setvar` requires a nonempty member of TX. The engine expands the value before interpreting signed integer addition or subtraction, and preserves the original bytes of plain assignments.
 
 `multiMatch` evaluates the original value and each changed transformation stage.
+Scalar macros such as `%{REQUEST_METHOD}` and `%{RESPONSE_STATUS}` read the
+transaction value in the current phase. A bare collection macro looks up the
+empty key, so `%{ARGS}` reads the first argument with an empty name if present.
 For supported keyed macros, a missing member expands to the name inside the
 braces, preserving its spelling. For example, an absent `%{Tx.Code}` expands
 to `Tx.Code`. An existing member with an empty value expands to an empty string.

@@ -135,10 +135,12 @@ fn mixed_supported_and_unsupported_targets_do_not_hide_the_gap() {
 }
 
 #[test]
-fn unsupported_macro_sources_are_reported_in_operator_and_setvar() {
+fn unsupported_macro_sources_name_the_affected_rule() {
     for config in [
         r#"SecRule ARGS "@contains %{rule.msg}" "id:108,phase:2,pass""#,
-        r#"SecAction "id:108,phase:1,pass,setvar:tx.source=%{REMOTE_ADDR}""#,
+        r#"SecAction "id:108,phase:1,pass,setvar:tx.source=%{SESSION.member}""#,
+        r#"SecAction "id:108,phase:1,pass,msg:'%{SESSION.member}'""#,
+        r#"SecAction "id:108,phase:1,pass,logdata:'%{rule.msg}'""#,
     ] {
         let (_, log) = load_logs(config);
         assert!(
@@ -153,6 +155,7 @@ fn supported_semantics_and_component_metadata_do_not_warn() {
     let (_, log) = load_logs(
         r#"
 SecComponentSignature "example"
+SecRule REQUEST_METHOD "@streq %{ReQuEsT_MeThOd}" "id:101,phase:1,pass,msg:'%{ARGS}',logdata:'%{ARGS_NAMES.item}',setvar:tx.source=%{REMOTE_ADDR},setvar:tx.copy=%{custom_name}"
 SecAction "id:107,phase:2,allow:phase"
 SecAction "id:108,phase:2,allow:request"
 SecRule ARGS "@contains attack" "id:109,phase:2,pass,t:lowercase,setvar:tx.score=+1"

@@ -242,6 +242,10 @@ fn report_action(found: &mut Diagnostics, action: &Action, id: &str) {
             );
             return;
         }
+        Action::Metadata(MetadataAction::Msg(value) | MetadataAction::LogData(value)) => {
+            report_macros(found, value, id);
+            return;
+        }
         Action::Data(DataAction::SetVar(spec)) => {
             report_macros(found, &spec.key, id);
             if let SetVarValue::Macro(value) = &spec.value {
@@ -256,28 +260,11 @@ fn report_action(found: &mut Diagnostics, action: &Action, id: &str) {
 
 fn report_macros(found: &mut Diagnostics, value: &str, id: &str) {
     let mut remaining = value;
-    while let Some((_, after)) = remaining.split_once("%{") {
-        let Some((name, tail)) = after.split_once('}') else {
-            break;
-        };
+    while let Some((_, name, tail)) = super::split_operator_macro(remaining) {
         remaining = tail;
-        let lower = name.to_ascii_lowercase();
-        let supported = match lower.split_once('.') {
-            Some((collection, _)) => matches!(
-                collection,
-                "tx" | "request_headers" | "args" | "args_get" | "args_post" | "response_args"
-            ),
-            None => {
-                matches!(
-                    lower.as_str(),
-                    "matched_var"
-                        | "matched_var_name"
-                        | "res_body_processor"
-                        | "unique_id"
-                        | "arguments_limit_reached"
-                ) || VariableName::from_str(name).is_none()
-            }
-        };
+        let (source, key) = name.split_once('.').unzip();
+        let supported = VariableName::from_str(source.unwrap_or(name))
+            .map_or(key.is_none(), |variable| variable.is_implemented());
         if !supported {
             record(
                 found,
