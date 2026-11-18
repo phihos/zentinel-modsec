@@ -18,9 +18,74 @@ struct RegexCache {
     entries: Mutex<HashMap<String, Weak<RegexProgram>>>,
 }
 
+#[derive(Clone, Copy, Default)]
+struct MatchLengths {
+    any: usize,
+    word: usize,
+}
+
+fn word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
+}
+
+// Minimum match width when the entire value consists of ASCII word bytes
+// and hyphens. An impossible branch has infinite width. Ignoring anchors
+// and boundary assertions gives a conservative lower bound.
+fn word_width(hir: &regex_syntax::hir::Hir) -> usize {
+    use regex_syntax::hir::{Class, HirKind};
+    let overlaps_word = |lo: u32, hi: u32| {
+        [
+            (b'-', b'-'),
+            (b'0', b'9'),
+            (b'A', b'Z'),
+            (b'_', b'_'),
+            (b'a', b'z'),
+        ]
+        .iter()
+        .any(|&(start, end)| lo <= u32::from(end) && u32::from(start) <= hi)
+    };
+    match hir.kind() {
+        HirKind::Empty | HirKind::Look(_) => 0,
+        HirKind::Literal(literal) => {
+            if literal.0.iter().copied().all(word_byte) {
+                literal.0.len()
+            } else {
+                usize::MAX
+            }
+        }
+        HirKind::Class(class) => {
+            let possible = match class {
+                Class::Bytes(bytes) => bytes
+                    .iter()
+                    .any(|r| overlaps_word(r.start().into(), r.end().into())),
+                Class::Unicode(chars) => chars
+                    .iter()
+                    .any(|r| overlaps_word(r.start().into(), r.end().into())),
+            };
+            if possible {
+                1
+            } else {
+                usize::MAX
+            }
+        }
+        HirKind::Capture(cap) => word_width(&cap.sub),
+        HirKind::Repetition(rep) => word_width(&rep.sub).saturating_mul(rep.min as usize),
+        HirKind::Concat(parts) => parts.iter().map(word_width).fold(0, usize::saturating_add),
+        HirKind::Alternation(parts) => parts.iter().map(word_width).min().unwrap_or(usize::MAX),
+    }
+}
+
+impl MatchLengths {
+    #[inline]
+    fn too_short(self, value: &[u8]) -> bool {
+        value.len() < self.any
+            || value.len() < self.word && value.len() <= 64 && value.iter().copied().all(word_byte)
+    }
+}
+
 struct RegexProgram {
     regex: Regex,
-    minimum_len: usize,
+    lengths: MatchLengths,
 }
 
 impl RegexCache {
@@ -50,7 +115,7 @@ impl RegexCache {
             })?;
         // Use the same byte syntax and inline flags as RegexBuilder. A parse
         // disagreement only disables the early rejection.
-        let minimum_len = regex_syntax::ParserBuilder::new()
+        let lengths = regex_syntax::ParserBuilder::new()
             .utf8(false)
             .unicode(!binary)
             .dot_matches_new_line(!binary)
@@ -58,9 +123,12 @@ impl RegexCache {
             .build()
             .parse(&expression)
             .ok()
-            .and_then(|hir| hir.properties().minimum_len())
-            .unwrap_or(0);
-        let regex = Arc::new(RegexProgram { regex, minimum_len });
+            .map(|hir| MatchLengths {
+                any: hir.properties().minimum_len().unwrap_or(0),
+                word: word_width(&hir),
+            })
+            .unwrap_or_default();
+        let regex = Arc::new(RegexProgram { regex, lengths });
         entries.insert(key, Arc::downgrade(&regex));
         Ok(regex)
     }
@@ -164,7 +232,7 @@ fn normalize_binary_braced_escapes(pattern: &str, binary: bool) -> std::borrow::
 /// error, is reported by the loader with the affected rule ID.
 pub struct RxOperator {
     compiled: Arc<RegexProgram>,
-    minimum_len: usize,
+    lengths: MatchLengths,
     has_subgroups: bool,
 }
 
@@ -179,7 +247,7 @@ impl RxOperator {
         }
         let compiled = REGEX_CACHE.get(pattern)?;
         Ok(Self {
-            minimum_len: compiled.minimum_len,
+            lengths: compiled.lengths,
             has_subgroups: compiled.regex.captures_len() > 1,
             compiled,
         })
@@ -195,7 +263,7 @@ impl RxOperator {
         negated: bool,
     ) -> Option<ByteOperatorResult> {
         if negated {
-            (value.len() < self.minimum_len || !self.compiled.regex.is_match(value))
+            (self.lengths.too_short(value) || !self.compiled.regex.is_match(value))
                 .then(ByteOperatorResult::no_match)
         } else {
             self.positive_match(value, capture)
@@ -204,7 +272,7 @@ impl RxOperator {
 
     #[inline]
     fn positive_match(&self, value: &[u8], capture: bool) -> Option<ByteOperatorResult> {
-        if value.len() < self.minimum_len {
+        if self.lengths.too_short(value) {
             return None;
         }
         if !capture || !self.has_subgroups {
@@ -411,6 +479,30 @@ mod tests {
         let result = op.execute("user=john");
         assert!(result.matched);
         assert_eq!(result.captures, vec!["john"]);
+    }
+
+    #[test]
+    fn early_length_checks_preserve_regex_matches() {
+        for pattern in [
+            r"^foo[0-9]+$",
+            r"(xx|[:])+a",
+            r"-[a-z]{2,4}",
+            r"(?:[:;]+)?",
+            r"(?i:K+|[éx])",
+            r"(?-u:[\x80-\xff]|a-)",
+            r"\b",
+            r"[^a-zA-Z0-9_-]",
+        ] {
+            let rx = RxOperator::new(pattern).unwrap();
+            for first in 0..=255 {
+                for second in [0, b'a', b'0', b'x', b'-', b'_', b':', 0xff] {
+                    let value = [first, second];
+                    if rx.compiled.regex.is_match(&value) {
+                        assert!(!rx.lengths.too_short(&value), "{pattern} on {value:?}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]
