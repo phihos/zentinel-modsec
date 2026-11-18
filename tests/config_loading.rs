@@ -111,3 +111,40 @@ fn relative_globs_treat_the_declaring_directory_as_literal() {
     tx.process_request_headers().unwrap();
     assert_eq!(tx.matched_rules(), ["17"]);
 }
+
+#[test]
+fn failed_glob_append_restores_prior_rules_defaults_and_include_budget() {
+    use zentinel_modsec::{engine::CompiledRuleset, parser::Parser};
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("leaf"), "# shared settings").unwrap();
+    fs::write(
+        dir.path().join("a.conf"),
+        format!(
+            "{}SecDefaultAction \"phase:1,deny,status:410\"\nSecAction \"id:802,phase:1,pass\"",
+            "Include leaf\n".repeat(100)
+        ),
+    )
+    .unwrap();
+    fs::write(dir.path().join("b.conf"), "Include missing").unwrap();
+    let mut parser = Parser::new();
+    parser
+        .parse("SecDefaultAction \"phase:1,pass\"\nSecAction \"id:801,phase:1,pass\"")
+        .unwrap();
+    let previous = parser.directives().len();
+    assert!(parser
+        .parse_glob(dir.path().join("*.conf").to_str().unwrap())
+        .is_err());
+    assert_eq!(parser.directives().len(), previous);
+    parser
+        .parse_with_location(
+            "Include leaf\nSecRule REQUEST_METHOD \"@streq GET\" \"id:803,phase:1,block\"",
+            Some(&dir.path().join("fixed.conf")),
+        )
+        .unwrap();
+    let engine = ModSecurity::new(CompiledRuleset::compile(parser.into_directives()).unwrap());
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["801", "803"]);
+    assert!(tx.intervention().is_none());
+}
