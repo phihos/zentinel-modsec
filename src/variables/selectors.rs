@@ -51,13 +51,22 @@ pub(crate) fn compile_selector(
         .build()
 }
 
+/// Two processor-error aliases emit the same audit keys as their short forms.
+pub(super) fn emitted_name(name: VariableName) -> &'static str {
+    match name {
+        VariableName::ReqBodyProcessorError => "REQBODY_ERROR",
+        VariableName::ReqBodyProcessorErrorMsg => "REQBODY_ERROR_MSG",
+        _ => name.seclang_name(),
+    }
+}
+
 /// Selection data shared by requests after target updates have been applied.
 pub(crate) struct TargetSelection {
     pub member: MemberSelector,
     /// Fixed audit name for count targets and literal TX keys. Other named
     /// collections report the observed spelling of each member.
     pub match_name: Option<Box<ByteValue>>,
-    exclusions: Box<[(Box<str>, MemberSelector)]>,
+    exclusions: Box<[MemberSelector]>,
 }
 
 pub(crate) enum MemberSelector {
@@ -114,11 +123,15 @@ impl TargetSelection {
             Some(Selection::Regex(pattern)) => regex(pattern),
             _ => MemberSelector::All,
         };
+        let prefix = emitted_name(spec.name);
         let exclusions = spec
             .exclusions
             .iter()
-            .map(|target| {
+            .filter_map(|target| {
                 let (collection, selector) = target.split_once(':').unwrap_or((target, ""));
+                if !collection.eq_ignore_ascii_case(prefix) {
+                    return None;
+                }
                 let member = if selector.is_empty() {
                     MemberSelector::All
                 } else if let Some(pattern) =
@@ -132,7 +145,7 @@ impl TargetSelection {
                             .into_boxed_slice(),
                     )
                 };
-                (collection.into(), member)
+                Some(member)
             })
             .collect();
         Self {
@@ -142,10 +155,8 @@ impl TargetSelection {
         }
     }
 
-    pub fn excludes(&self, prefix: &str, key: Option<&[u8]>) -> bool {
-        self.exclusions.iter().any(|(collection, selector)| {
-            collection.eq_ignore_ascii_case(prefix) && selector.matches(key)
-        })
+    pub fn excludes(&self, key: Option<&[u8]>) -> bool {
+        self.exclusions.iter().any(|selector| selector.matches(key))
     }
 }
 

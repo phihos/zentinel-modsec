@@ -1,6 +1,6 @@
 //! Request data for variable resolution.
 
-use super::collection::{ByteCollection, Collection, HashMapCollection};
+use super::collection::{Collection, HashMapCollection};
 use super::ByteValue;
 
 /// Request data container.
@@ -246,7 +246,7 @@ impl RequestData {
         }
         // The first Content-Type selects form processors before phase 1,
         // including empty bodies. Later duplicate headers must not change it.
-        if lower == b"content-type" && self.headers.get_bytes(b"content-type").is_none() {
+        if lower == b"content-type" && self.headers.first_value_bytes(b"content-type").is_none() {
             let media = trim_header_leading_space(value);
             if media.get(..33).is_some_and(|prefix| {
                 prefix.eq_ignore_ascii_case(b"application/x-www-form-urlencoded")
@@ -499,8 +499,8 @@ fn parse_form_bytes(input: &[u8], collection: &mut HashMapCollection) {
         let equal = pair.iter().position(|&b| b == b'=');
         let (key, value) = equal.map_or((pair, &b""[..]), |i| (&pair[..i], &pair[i + 1..]));
         collection.add_bytes(
-            crate::transformations::bytes::url_decode(key, false, true),
-            crate::transformations::bytes::url_decode(value, false, true),
+            crate::transformations::bytes::url_decode_stage(key, false),
+            crate::transformations::bytes::url_decode_stage(value, false),
         );
     }
 }
