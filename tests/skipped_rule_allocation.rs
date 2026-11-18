@@ -141,3 +141,59 @@ fn literal_misses_and_counts_do_not_allocate_by_header_size_or_cardinality() {
         assert!(many <= one + 64, "{target}: {one} -> {many} bytes");
     }
 }
+
+#[test]
+fn static_misses_borrow_headers_arguments_and_body_bytes() {
+    let engine = ModSecurity::from_string(
+        r#"SecRuleEngine On
+SecRequestBodyAccess On
+SecResponseBodyAccess On
+SecResponseBodyLimit 2097152
+SecResponseBodyMimeType application/octet-stream
+SecAction "id:11,phase:1,pass,ctl:requestBodyProcessor=RAW"
+SecRule ARGS_GET|REQUEST_HEADERS "@streq unrelated" "id:12,phase:1,pass"
+SecRule REQUEST_BODY "@streq unrelated" "id:13,phase:2,pass"
+SecRule RESPONSE_BODY "@streq unrelated" "id:14,phase:4,pass,multiMatch,t:none"
+"#,
+    )
+    .unwrap();
+    let measure = |len, opaque| {
+        let mut data = vec![b'x'; len];
+        if opaque {
+            data[len - 1] = 0xff;
+        }
+        let mut tx = engine.new_transaction();
+        let mut uri = b"/?page=".to_vec();
+        uri.extend_from_slice(&data);
+        tx.process_uri_bytes(&uri, b"POST", b"HTTP/1.1").unwrap();
+        tx.add_request_header_bytes(b"X-Catalog", &data).unwrap();
+        let measure_call = |f: &mut dyn FnMut()| {
+            REQUESTED_BYTES.set(0);
+            TRACKING.set(true);
+            f();
+            TRACKING.set(false);
+            REQUESTED_BYTES.get()
+        };
+        let phase_one = measure_call(&mut || tx.process_request_headers().unwrap());
+        tx.append_request_body(&data).unwrap();
+        let phase_two = measure_call(&mut || tx.process_request_body().unwrap());
+        tx.add_response_header("Content-Type", "application/octet-stream")
+            .unwrap();
+        tx.process_response_headers_with_status(200, "HTTP/1.1")
+            .unwrap();
+        tx.append_response_body(&data).unwrap();
+        let phase_four = measure_call(&mut || tx.process_response_body().unwrap());
+        assert_eq!(tx.matched_rules(), ["11"]);
+        [phase_one, phase_two, phase_four]
+    };
+    for opaque in [false, true] {
+        let small = measure(4096, opaque);
+        let large = measure(1 << 20, opaque);
+        for (small, large) in small.into_iter().zip(large) {
+            assert!(
+                large <= small + 64,
+                "opaque={opaque}: {small} -> {large} requested bytes"
+            );
+        }
+    }
+}
