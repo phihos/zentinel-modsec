@@ -356,22 +356,6 @@ pub(super) fn apply<'a>(
                     }
                     input[start..end].to_vec()
                 }
-                "compressWhitespace" => {
-                    let mut out = Vec::new();
-                    let mut last = false;
-                    for &b in input {
-                        if space(b) {
-                            if !last {
-                                out.push(b' ');
-                            }
-                            last = true;
-                        } else {
-                            out.push(b);
-                            last = false;
-                        }
-                    }
-                    out
-                }
                 "cmdLine" => {
                     let mut out = Vec::with_capacity(input.len());
                     let mut pending = false;

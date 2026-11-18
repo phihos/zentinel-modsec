@@ -50,36 +50,62 @@ impl Transformation for Uppercase {
 /// Compress whitespace transformation.
 pub struct CompressWhitespace;
 
-impl Transformation for CompressWhitespace {
-    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
-    }
-
-    fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        let mut result = String::new();
-        let mut last_was_space = false;
-        let mut modified = false;
-
-        for c in input.chars() {
-            if c.is_whitespace() {
-                if !last_was_space {
-                    result.push(' ');
-                } else {
-                    modified = true;
+impl CompressWhitespace {
+    fn compress(input: &[u8]) -> Cow<'_, [u8]> {
+        let mut output = Vec::new();
+        let mut copied = 0;
+        let mut previous_space_end = None;
+        let mut space_at = |start: usize, width: usize| {
+            let adjacent = previous_space_end == Some(start);
+            previous_space_end = Some(start + width);
+            if adjacent || input[start] != b' ' {
+                output.extend_from_slice(&input[copied..start]);
+                if !adjacent {
+                    output.push(b' ');
                 }
-                last_was_space = true;
-            } else {
-                result.push(c);
-                last_was_space = false;
+                copied = start + width;
+            }
+        };
+
+        let mut offset = 0;
+        for chunk in input.utf8_chunks() {
+            for (index, ch) in chunk.valid().char_indices() {
+                // Coraza compresses the Latin-1 whitespace set.
+                if matches!(ch, ' ' | '\t'..='\r' | '\u{85}' | '\u{a0}') {
+                    space_at(offset + index, ch.len_utf8());
+                }
+            }
+            offset += chunk.valid().len();
+            for &byte in chunk.invalid() {
+                // At an invalid UTF-8 boundary, 0xA0 is a bare Latin-1 NBSP.
+                // Other malformed bytes pass through exactly as received.
+                if byte == 0xa0 {
+                    space_at(offset, 1);
+                }
+                offset += 1;
             }
         }
 
-        if modified || result.chars().any(|c| c.is_whitespace() && c != ' ') {
-            Cow::Owned(result)
-        } else if result == input {
-            Cow::Borrowed(input)
-        } else {
-            Cow::Owned(result)
+        if copied == 0 {
+            return Cow::Borrowed(input);
+        }
+        output.extend_from_slice(&input[copied..]);
+        Cow::Owned(output)
+    }
+}
+
+impl Transformation for CompressWhitespace {
+    fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        Ok(Self::compress(input))
+    }
+
+    fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
+        match Self::compress(input.as_bytes()) {
+            Cow::Borrowed(_) => Cow::Borrowed(input),
+            Cow::Owned(bytes) => Cow::Owned(
+                String::from_utf8(bytes)
+                    .expect("replacing whole whitespace characters preserves UTF-8"),
+            ),
         }
     }
 
