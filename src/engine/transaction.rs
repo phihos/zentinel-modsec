@@ -520,9 +520,11 @@ impl Transaction {
         }
 
         let dispatch = ruleset.dispatch_for_phase(phase);
-        let available =
-            RequestCollections::new(&self.request, ruleset.width_sources[phase.index()])
-                .with_headers(&self.request, &ruleset.header_slots[phase.index()]);
+        let available = RequestCollections::new(
+            &self.request,
+            ruleset.width_sources[phase.index()],
+            &ruleset.header_slots[phase.index()],
+        );
         let mut chain_start = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
@@ -1497,7 +1499,11 @@ SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
                     true,
                     rules.dispatch_for_phase(Phase::RequestHeaders)[0]
                         .targets
-                        .select(RequestCollections::new(&tx.request, Default::default())),
+                        .select(RequestCollections::new(
+                            &tx.request,
+                            Default::default(),
+                            &[],
+                        )),
                 )
                 .err()
                 .unwrap();

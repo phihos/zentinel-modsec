@@ -38,7 +38,7 @@ pub(super) struct RequestCollections {
 }
 
 impl RequestCollections {
-    pub fn new(request: &RequestData, sources: WidthSources) -> Self {
+    pub fn new(request: &RequestData, sources: WidthSources, header_keys: &[Box<[u8]>]) -> Self {
         let mut present = (u8::from(!request.args_get.is_empty()) * GET)
             | (u8::from(!request.args_post.is_empty()) * POST)
             | (u8::from(!request.cookies.is_empty()) * COOKIES)
@@ -71,16 +71,8 @@ impl RequestCollections {
                 | (u64::from(!request.files_names.is_empty()) * FILE_NAMES)
                 | (u64::from(!request.multipart_part_headers.is_empty()) * PART_HEADERS);
         }
-        Self {
-            present,
-            optional,
-            widths,
-            headers: [Some(Widths::UNKNOWN); HEADER_SLOTS],
-        }
-    }
-
-    pub fn with_headers(mut self, request: &RequestData, keys: &[Box<[u8]>]) -> Self {
-        for (slot, key) in self.headers.iter_mut().zip(keys) {
+        let mut headers = [Some(Widths::UNKNOWN); HEADER_SLOTS];
+        for (slot, key) in headers.iter_mut().zip(header_keys) {
             *slot = request.headers.canonical_values(key).map(|values| {
                 let mut widths = Widths::default();
                 if values.len() > 32 {
@@ -92,7 +84,12 @@ impl RequestCollections {
                 widths
             });
         }
-        self
+        Self {
+            present,
+            optional,
+            widths,
+            headers,
+        }
     }
 
     fn includes(present: u8, spec: &VariableSpec) -> bool {
@@ -315,6 +312,7 @@ mod tests {
                         arguments: true,
                         ..Default::default()
                     },
+                    &[],
                 ))
                 .indices(&targets)
                 .collect::<Vec<_>>()
@@ -336,7 +334,7 @@ mod tests {
             ..Default::default()
         };
         let active = |req: &RequestData| {
-            plan.select(RequestCollections::new(req, sources))
+            plan.select(RequestCollections::new(req, sources, &[]))
                 .indices(&targets)
                 .collect::<Vec<_>>()
         };
@@ -418,7 +416,7 @@ mod tests {
         let active = |request: &RequestData| {
             let mut sources = WidthSources::default();
             plan.add_width_sources(&mut sources, &specs);
-            plan.select(RequestCollections::new(request, sources))
+            plan.select(RequestCollections::new(request, sources, &[]))
                 .indices(&specs)
                 .collect::<Vec<_>>()
         };
