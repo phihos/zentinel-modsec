@@ -1,0 +1,263 @@
+# Coraza parity handoff — 2026-11-18
+
+The requested measured parity goal is complete for Coraza **3.8.1**, OWASP CRS
+**4.25.0**, and the specified GET/form-POST workloads. This qualifies a local
+candidate; production integration, concurrency/reload behavior, other CRS
+versions and every Coraza feature remain outside the evidence.
+
+The parity build requires **`libinjection-ffi`**. The default Rust heuristic
+backend remains available and does **not** meet this qualification.
+
+## Checkpoint and working state
+
+- Repository: `/home/phil/Quellcode/zentinel-modsec`.
+- Branch: `spike/crs-parity`.
+- Qualified code commit: `11abeffc0f0298e33862fd06a43369af05f859d6`.
+- Qualified Git tree: `33bc590b1b85a8f40b6b6450cb1cbac15105dc21`.
+- Original evaluation baseline: `f85a240`.
+- Original item-5 stopping checkpoint: `7f365d1bead8c1e85521d9a6f67307851fc78d98`.
+- This handoff is a documentation-only follow-up to the qualified code commit.
+  The qualification receipts continue to identify `11abeffc`.
+- Main and all listed agent worktrees were clean when preparing this handoff.
+  The completed validation recorded no active owned benchmark/test processes.
+- Nothing was pushed, published, deployed or submitted as a PR. No hosted CI
+  campaign or external contact occurred.
+
+The original spike obeyed its item-5 stop gate. The later goal authorized
+continuing to parity. Preserve that history rather than interpreting the first
+report as the current result.
+
+## Read these first
+
+1. [Final parity report](/home/phil/Quellcode/zentinel-eval/results/parity-goal/PARITY_REPORT.md):
+   changes, commit/test mapping, measurements, shared failures and limits.
+2. [Final delivery receipt](/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-delivery.json)
+   and [completion audit](/home/phil/Quellcode/zentinel-eval/results/parity-goal/completion-audit.json).
+3. [Blocking comparison report](/home/phil/Quellcode/zentinel-eval/results/parity-goal/final-blocking-matrix/REPORT.md).
+4. [Original prompt](/home/phil/Quellcode/zentinel-eval/CODEX_PROMPT.md)
+   and [historical spike report](/home/phil/Quellcode/zentinel-eval/SPIKE_REPORT.md).
+
+The historical report is unchanged, SHA256
+`52b78218236816d37c2789b377efa2db57094325103183a4dde1df7f158d1451`.
+All 16 entries in `final-artifact-hashes.json` were read back and verified while
+preparing this handoff.
+
+## Verified result
+
+| Check | Zentinel | Coraza |
+|---|---:|---:|
+| CRS cases passed / executed | 4,655 / 4,672 | 4,655 / 4,672 |
+| Failed case IDs | Same 17 | Same 17 |
+| Additional zentinel failures / PL1 false negatives / PL1 false positives | 0 / 0 / 0 | Reference |
+| Blocking matrix | All 22 exact comparisons | Reference |
+| Hot GET median p50 | 281.0 µs | 312.7 µs |
+| GET at 50 req/s median p50 | 403.5 µs | 436.4 µs |
+| Hot form POST median p50 | 682.3 µs | 766.3 µs |
+| Form POST at 50 req/s median p50 | 917.0 µs | 922.5 µs |
+| Extra ruleset memory, different tenant exclusions | 1.798 MiB RSS | 1.877 MiB RSS / 2.054 MiB heap |
+
+Latency uses three interleaved repetitions, 20,000 hot requests or 1,000 paced
+requests per run. The paced POST difference is within overlapping noise; describe
+it as parity. All observations, including a noisy repetition, are retained.
+Memory uses three repetitions at 1, 4 and 16 retained engines, both identical
+configs and distinct exclusions; the incremental slope is `(engine16-engine1)/15`.
+
+The corpus runs DetectionOnly at PL4. The separate blocking matrix runs On at
+PL1 with the complete pinned recommended/setup/CRS configuration. All 22
+comparisons match intervention status, every score-named TX key/value, and ordered
+rule IDs after phases 1, 2 and 5. It includes benign requests, attacks in multiple
+body formats, malformed bodies and the exact request-body limit. Malformed
+JSON/XML/multipart return 400; the exact 13,107,200-byte limit returns 413.
+
+Both engines have one additional client-side errored file: go-ftw refuses to
+construct a structured header containing raw CR/LF. Do not report 100% corpus
+success or silently remove this limitation.
+
+## What changed
+
+The historical report details the first five priorities: corrected
+`normalizePathWin`, optional statically compiled upstream C libinjection,
+full-width decoding, tag target exclusions and shared compiled regexes.
+
+The continuation landed separate commits for the following work. The final
+report lists the full commit-to-regression mapping.
+
+| Area | Main commits / effect |
+|---|---|
+| Request execution | `8be9dd0`: borrow immutable phase rules instead of deep-cloning them per request. Allocation regression coverage prevents the old cost returning. |
+| Original bytes | `e1e831d`, `e95e80f`, `f961d01`, `dff9b36`: retain binary keys/values through collections, transforms, operators, captures and macros; display strings never become detection input. |
+| Normalization and regexes | One-pass URL plus/percent handling; full 370-entry Unicode best-fit map; decoded filenames with raw URI retained; native escape/Base64/CSS/JS behavior; correct regex flags, binary captures and braced byte escapes. |
+| Rule semantics | TX selector folding without corrupting regex syntax; argument macros; `multiMatch` on the original and every changed stage; quoted numeric IDs. |
+| XML | Separate text/attribute collection instead of synthetic HTTP arguments or raw markup. Streaming/entity/error behavior retained. General XPath was not added. |
+| Multipart | `5352162`, `ad6779a`, `38abca3`, `f7dcdff`: byte-safe framing, quoted/extended/continued parameters, real FILES collections and sizes, strict/parser errors, quoted-printable and folded-header controls. Closed all 18 remaining multipart detection misses. |
+| Body policy | `4299a8e`: bounded acquisition, access/MIME policy, Reject/ProcessPartial, explicit prefix counts and once-only phases 1–4. |
+| Metadata and logs | Actual response status/protocol; first Content-Type processor selection before phase 1; original header spelling with canonical lookup; opt-in match-time message/logdata snapshots. |
+| Numeric behavior | `90c71b8`: pinned signed-64 conversion for empty, malformed, binary and overflow inputs. Eliminates false benign-request denial at recommended rule 200003. |
+| Scores | `abfef70`: preserve rule-owned TX scores; remove stale cache writes that reset category scores to zero and create absent variables. |
+| Logging/status | `085a021`, `ed61ada`: phase 5 after denial, pinned repeated/allow/disruptive behavior, explicit status actions, redirect and drop semantics. |
+| Arithmetic safety | `11abeff`: explicit wrapping for setvar/collection arithmetic; captured request values no longer trigger signed-overflow panics. Recorded operands remain exact. |
+| Memory | `8050c98`: share immutable phrase automata and phrase lists by exact parsed content, with weak lifetimes and concurrent-load tests. Extra ruleset RSS fell from about 9 MiB after regex sharing to about 1.8 MiB. |
+
+Broader shared-rule-program/sparse-exclusion redesign was investigated and held.
+Public `CompiledRule` fields and `rules_for_phase() -> &[CompiledRule]` complicate
+that design; PM sharing already met the memory target.
+
+## API details an integrator must preserve
+
+- Request and response body access default to **Off**, matching the reference.
+  Enable the required access and response MIME types explicitly.
+- Prefer byte input APIs for opaque input. String/display representations of
+  binary data must not be fed back into matching.
+- `write_request_body` / `write_response_body` expose the retained-prefix count
+  and completion state. Old append wrappers remain, but a connector must retain
+  the original bytes for forwarding and check interventions.
+- Supply actual response metadata with
+  `process_response_headers_with_status(status, protocol)`.
+- `set_record_rule_messages(true)` enables original-byte `msg`/`logdata`
+  snapshots. Recording is off by default; the connector owns logging policy and
+  escaping. A standalone rule's primary message retains its first match.
+- `anomaly_score()` reads legacy `TX:anomaly_score`. For this CRS, read
+  `TX:blocking_inbound_anomaly_score` and relevant per-paranoia TX variables.
+- Phase 5 deliberately matches pinned Coraza: it runs after denial, repeated
+  calls rerun actions, `allow` suppresses it, and a disruptive logging rule can
+  replace an earlier intervention while later logging rules still run.
+- Default `drop` has status **0** and `drop_connection=true`. Test whether an
+  intervention/drop exists; a nonzero HTTP status is not the only block signal.
+
+## Evidence and harness traps
+
+Evidence root:
+`/home/phil/Quellcode/zentinel-eval/results/parity-goal`.
+Working harness cache:
+`/home/phil/Quellcode/zentinel-build-cache/goal-harness`.
+
+| Evidence | Purpose |
+|---|---|
+| `final-v2-receipt.json`, `final-v2-classification.json`, `final-v2-zentinel.log.*`, `v2-pinned-baseline-coraza.*` | Source/binary/config hashes, real command exits and exact complete corpus sets. |
+| `final-blocking-matrix/manifest.json`, `final-comparison.json`, trace sources and compressed inputs | Full blocking comparison and pinned source provenance, including all 51 rules/data/config files. |
+| `final-local-checks.json`, `final-*.out/err` | Eight completed local checks. |
+| `final-latency-complete.json`, `final-latency-summary.json`, terminal receipt | All 24 completed timing observations. `final-latency.json` is only the retained first five observations from an interrupted session. |
+| `final-memory.json`, `final-memory-summary.json` | All 36 memory runs, including different exclusions and separate Coraza heap/RSS metrics. |
+| `final-libinj-receipt.json`, `final-libinj-summary.json` | Fresh final-source three-repeat FFI/API cost campaign; public API medians about 0.149–0.551 µs across four inputs. |
+| `final-load-inventory.err`, summary JSON | Visible unsupported/approximated features and affected rule IDs. |
+| `final-artifact-hashes.json` | Seal for the 16 primary final artifacts. |
+
+Use **adapter V2.1** and the final archived sources in
+`final-adapter-source-worker-v2/` and `final-adapter-source-ftw-v2/`. The original
+evaluation adapter discarded response status, lost invalid UTF-8 URI/header bytes
+through JSON strings, and emitted IDs without real expanded logs. V2.1 transports
+bytes as base64, supplies actual metadata and reads logging policy from compiled
+actions. It fixes the adapter rather than fabricating expected messages. The
+larger final case denominator reflects three previously aborted response cases.
+
+Use the quoted recommended config **bundled with coraza-coreruleset v4.25.0**:
+
+```
+/home/phil/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules/@coraza.conf-recommended
+```
+
+The recommended config in `coraza/v3@v3.8.1` is newer and includes additional
+unsupported variables/directives. Experiments selecting it fail visibly and are
+not parity evidence. Do not substitute it accidentally.
+
+The low timings in `pilot-v2` are **invalid**: benign requests were rejected at
+rule 200003 after 44 matches instead of continuing to the reference's 62. The
+numeric fix and exact blocking trace resolved that shortcut. Final benchmark
+counts before logging are GET **62** and POST **61** in both engines.
+
+The go-ftw runner can exit zero while cases fail. Read classifications, missing
+Coraza successes, raw failed/errored IDs and command receipts together. Also use
+distinct Cargo package/binary names for adapter variants; an early same-name
+shared-target experiment selected the old binary.
+
+## Resume commands
+
+Revalidate only when source or an unresolved concern warrants it. These checks
+passed on the frozen code. The handoff itself is documentation-only.
+
+```sh
+cd /home/phil/Quellcode/zentinel-modsec
+git status --short
+git log -1 --oneline
+cargo fmt --check
+git diff --check
+CARGO_BUILD_JOBS=2 SKIP_CRS_CONFORMANCE=1 cargo test --all-targets
+CARGO_BUILD_JOBS=2 SKIP_CRS_CONFORMANCE=1 cargo test --features libinjection-ffi --all-targets
+CARGO_BUILD_JOBS=2 cargo clippy --all-targets -- -D warnings
+CARGO_BUILD_JOBS=2 cargo clippy --features libinjection-ffi --all-targets -- -D warnings
+env -u SKIP_CRS_CONFORMANCE CARGO_BUILD_JOBS=2 CRS_DIR=/home/phil/Quellcode/zentinel-eval/results/parity-goal/native-crs-4.25 cargo test --features libinjection-ffi --test crs_conformance stock_crs_blocks_attacks_and_passes_ordinary_traffic -- --nocapture
+CARGO_BUILD_JOBS=2 RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --features libinjection-ffi
+```
+
+The native corpus gate is for a different CRS pin (main/4.31), with exact
+`MIN_PASSING=4900` and `EXPECTED_SKIPS_MAX=60`. It was **not qualified** in this
+campaign. The unit-job skip above is explicit; the pinned go-ftw corpus and the
+separate stock blocking test provide the 4.25 evidence. Before upstream CI work,
+test its actual pinned corpus and review any changed count. Do not lower a gate
+or edit expectations to hide a regression.
+
+After committing a future source candidate, use fresh result prefixes:
+
+```sh
+PARITY_EVIDENCE=/home/phil/Quellcode/zentinel-eval/results/parity-goal
+python3 "$PARITY_EVIDENCE/checkpoint-v2.py" next-candidate-001
+# Inspect next-candidate-001-receipt.json and classification before timing.
+python3 "$PARITY_EVIDENCE/benchmark-v2.py" next-latency-001 "$PARITY_EVIDENCE/bin/worker-next-candidate-001" 20000 1000 3
+python3 "$PARITY_EVIDENCE/memory-v2.py" next-memory-001 "$PARITY_EVIDENCE/bin/worker-next-candidate-001" 3
+```
+
+Do not compile or run other owned CPU-heavy work during latency measurements.
+If interrupted, inspect the actual process/PID and receipts; do not duplicate a
+confirmed-live job. Preserve partial evidence and resume only missing work.
+
+The checkpoint helper depends on the working harness cache and a target directory
+under `/tmp`. If those disappear, restore working copies from the final archived
+adapter sources, rebuild `ftw-v2.1`, and explicitly review its absolute paths.
+Never edit the archived final sources/results in place. The blocking matrix
+report provides reproduction commands; decompress its `cases.json.gz` in a fresh
+copy first. Manifests bind the actual decompressed input.
+
+## Limits and recommended next work
+
+No work remains for the stated measured acceptance criteria. Adoption still
+needs a separate, representative integration/traffic and concurrency/reload
+qualification. No installed HAPTIC/cgo replacement or production deployment has
+been tested. Upstream submission/release is not authorized by the completed work.
+
+Known feature gaps remain visible through warnings/errors: `SecRuleUpdateActionById`,
+in-memory body spooling/no-files limits, configurable JSON depth, general XPath,
+persistent collections/audit storage, `UNIQUE_ID`, and the documented `@within`
+approximation. Tag **target** exclusions are implemented; do not confuse them
+with unsupported `ctl:ruleRemoveByTag`. Custom XML DTD/entities remain literal
+with an error; no external entity resolution was added. C libinjection and the
+pinned Go port differ on two XML/XInclude inputs, so universal semantic identity
+is not claimed.
+
+The same 17 failures remain in both corpus runs: 13 protocol/front-end
+status/log expectations, one Apache-specific duplicate Content-Type assumption,
+and three multipart diagnostic-text expectations. Malformed multipart blocking
+is independently verified. The final report lists every ID. Do not remove these
+tests or invent matching diagnostic output to raise the pass count.
+
+If asked to continue: first read the report and verify current state; then choose
+either integration qualification, an upstream review/CI series, or a concrete
+unsupported feature required by the deployment. Keep those scopes explicit.
+
+## Constraints and remaining worktrees
+
+- No Lua in the engine, harness or workaround.
+- Never weaken detection, skip cases or edit pinned CRS rules/expectations to
+  improve results. Unsupported execution must remain visible.
+- Keep fixes in separate reviewable commits with meaningful regressions.
+- Original `zentinel-eval` inputs/scripts and historical reports are preserved;
+  add new results rather than overwriting old evidence.
+- No push, PR, contact, publication or deployment without a new request.
+- Use quick focused tests and parallelize independent work, while keeping timing
+  campaigns free of owned compilation contention. No admin commands were needed.
+
+Isolated worktrees remain under `/tmp/zentinel-goal-*` and
+`/tmp/zentinel-spike-*`; persistent build caches are under
+`/home/phil/Quellcode/zentinel-build-cache`. `git worktree list` is authoritative.
+All essential changes are already integrated into `spike/crs-parity`; agent SHAs
+often differ after cherry-picking. Do not blindly cherry-pick the remaining
+branch heads. No cleanup/removal of those worktrees was performed for this handoff.
