@@ -276,7 +276,8 @@ fn an_empty_body_is_not_a_parse_error() {
     let crs_200002 = "SecRuleEngine On\n\
          SecRule REQBODY_ERROR \"!@eq 0\" \"id:200002,phase:2,deny,status:400\"";
     assert!(!run(crs_200002, "application/json", b""));
-    assert!(!run(crs_200002, "application/json", b"   \n\t "));
+    // With bytes present the JSON processor runs. Whitespace alone is invalid.
+    assert!(run(crs_200002, "application/json", b"   \n\t "));
 }
 
 /// Duplicate keys must not hide a payload.
@@ -340,4 +341,63 @@ fn excluding_one_json_path_leaves_the_others_live() {
         ),
         "a different key must still be inspected"
     );
+}
+
+#[test]
+fn reference_array_lengths_numbers_and_duplicate_order() {
+    use zentinel_modsec::variables::{Collection, RequestData};
+    let mut req = RequestData::new();
+    req.append_body(br#"{"rate":1.50,"rate":1E+4,"tags":[1,2],"empty":[]}"#);
+    req.parse_json_body().unwrap();
+    assert_eq!(req.args_post.get("json.rate").unwrap(), ["1.50", "1E+4"]);
+    assert_eq!(req.args_post.get("json.tags").unwrap(), ["2"]);
+    assert_eq!(req.args_post.get("json.tags.1").unwrap(), ["2"]);
+    assert_eq!(req.args_post.get("json.empty"), None);
+    let mut req = RequestData::new();
+    req.append_body(b"1.50");
+    req.parse_json_body().unwrap();
+    assert_eq!(req.args_post.get("json.0").unwrap(), ["1.50"]);
+    assert_eq!(req.args_post.get("json").unwrap(), ["1"]);
+}
+
+#[test]
+fn completed_fields_survive_errors() {
+    use zentinel_modsec::variables::{Collection, RequestData};
+    for body in [br#"{"good":1,"more":"#.as_slice(), br#"{"good":1}x"#] {
+        let mut req = RequestData::new();
+        req.append_body(body);
+        assert!(req.parse_json_body().is_err());
+        assert_eq!(req.args_post.get("json.good").unwrap(), ["1"]);
+    }
+    let mut req = RequestData::new();
+    req.append_body(br#"{"arr":[1,2"#);
+    assert!(req.parse_json_body().is_err());
+    assert_eq!(req.args_post.get("json.arr").unwrap(), ["2"]);
+}
+
+#[test]
+fn array_metadata_shares_the_reference_expanded_byte_budget() {
+    use zentinel_modsec::variables::{Collection, RequestData};
+    let body = format!("{}0{}", "[".repeat(64), "]".repeat(64));
+    let mut req = RequestData::new();
+    req.append_body(body.as_bytes());
+    assert!(req.parse_json_body().unwrap_err().contains("byte budget"));
+    // Observed with Coraza v3.8.1 and SecRequestBodyJsonDepthLimit 64.
+    assert_eq!(req.args_post.count(), 47);
+    let mut req = RequestData::new();
+    req.append_body(format!("[{body}]").as_bytes());
+    assert!(req.parse_json_body().unwrap_err().contains("depth"));
+    assert_eq!(req.args_post.count(), 0);
+}
+
+#[test]
+fn array_field_name_is_visible_through_args_names() {
+    let rules = r#"SecRuleEngine On
+SecRule ARGS_NAMES "@streq json.labels" "id:101,phase:2,deny""#;
+    assert!(run(
+        rules,
+        "application/json",
+        br#"{"labels":["north","south"]}"#
+    ));
+    assert!(!run(rules, "application/json", br#"{"labels":[]}"#));
 }

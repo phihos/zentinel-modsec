@@ -161,12 +161,15 @@ impl<'a> VariableResolver<'a> {
                 vec![("ARGS_COMBINED_SIZE".to_string(), size.to_string())]
             }
             VariableName::RequestBody => {
-                vec![("REQUEST_BODY".to_string(), self.request.body_str())]
+                vec![(
+                    "REQUEST_BODY".to_string(),
+                    self.request.request_body_variable(),
+                )]
             }
             VariableName::RequestBodyLength => {
                 vec![(
                     "REQUEST_BODY_LENGTH".to_string(),
-                    self.request.body_length().to_string(),
+                    self.request.request_body_length_variable(),
                 )]
             }
 
@@ -395,49 +398,25 @@ impl<'a> VariableResolver<'a> {
         }
     }
 
-    /// Resolve ARGS collection (GET + POST combined).
-    /// Resolve an `XML:` target against the flattened XML body.
-    ///
-    /// The XML body processor flattens element text to `xml.<path>` and
-    /// attributes to `xml.<path>.@<name>` in `ARGS`. `XML:/*` and `XML://@*`
-    /// are exactly those two sets, so they are answered from the flattening
-    /// rather than by evaluating XPath.
-    ///
-    /// Values are reported under their XPath-style name -- `xml.order.item.@id`
-    /// is reported as `XML:/order/item/@id` -- so `%{MATCHED_VAR_NAME}` in a
-    /// rule's `logdata` names the node the way the rule addressed it.
+    /// Resolve the two XML value collections, using the same selector keys as
+    /// Coraza's RequestXML collection. XML values are independent of ARGS.
     fn resolve_xml(&self, selection: &Option<Selection>) -> Vec<(String, String)> {
-        use super::collection::Collection;
-
         let Some(target) = XmlTarget::from_selection(selection.as_ref()) else {
-            // An XPath expression this engine cannot express. Reported when the
-            // rules load, so there is nothing to say per request.
             return vec![];
         };
-
-        self.request
-            .args_post
-            .all()
-            .into_iter()
-            .filter_map(|(name, value)| {
-                let path = name.strip_prefix("xml.")?;
-                // An XML element name cannot begin with `@`, so `.@` only ever
-                // marks the attribute segment this processor appends.
-                let is_attribute = path.contains(".@");
-                let wanted = match target {
-                    XmlTarget::Elements => !is_attribute,
-                    XmlTarget::Attributes => is_attribute,
-                    XmlTarget::All => true,
-                };
-                if !wanted {
-                    return None;
-                }
-                Some((
-                    format!("XML:/{}", path.replace('.', "/")),
-                    value.to_string(),
-                ))
-            })
-            .collect()
+        match target {
+            XmlTarget::Elements => self.resolve_collection(
+                &self.request.xml,
+                "XML",
+                &Some(Selection::Key("/*".into())),
+            ),
+            XmlTarget::Attributes => self.resolve_collection(
+                &self.request.xml,
+                "XML",
+                &Some(Selection::Key("//@*".into())),
+            ),
+            XmlTarget::All => self.resolve_collection(&self.request.xml, "XML", &None),
+        }
     }
 
     fn resolve_collection_from_all_args(

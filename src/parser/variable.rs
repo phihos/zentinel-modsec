@@ -241,17 +241,12 @@ pub enum VariableName {
     MultipartStrictCheck,
 }
 
-/// Which part of a flattened XML body an `XML:` selector refers to.
+/// Which XML value collection an `XML:` selector refers to.
 ///
-/// ModSecurity selects XML through XPath. This engine has no XPath evaluator
-/// and flattens XML bodies into `ARGS` instead, but the two selectors the OWASP
-/// CRS actually writes -- `XML:/*` for element content and `XML://@*` for
-/// attributes -- map onto that flattening exactly, and between them account for
-/// every `XML:` target in the stock rule set. Resolving those two costs nothing
-/// at request time and needs no XPath engine.
-///
-/// Anything else is genuinely unsupported and is reported when the rules load,
-/// rather than resolving to nothing and leaving the rule silently dead.
+/// The two selectors in the pinned CRS rules -- `XML:/*` for text and
+/// `XML://@*` for attribute values -- read dedicated XML collections, without
+/// introducing synthetic HTTP arguments or requiring a general XPath engine.
+/// Other XPath expressions are reported when rules load.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum XmlTarget {
     /// `XML:/*` -- element text.
