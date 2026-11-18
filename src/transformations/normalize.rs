@@ -220,14 +220,13 @@ impl Transformation for TrimRight {
 // to the empty string, and restores an input's trailing separator.
 fn normalize_path(input: &[u8], windows: bool) -> Cow<'_, [u8]> {
     let separator = |byte: &u8| *byte == b'/' || (windows && *byte == b'\\');
-    if input.is_empty()
-        || (input != b"/"
-            && !(windows && input.contains(&b'\\'))
-            && !input.windows(2).any(|pair| pair == b"//")
-            && !input
-                .split(|b| *b == b'/')
-                .any(|part| matches!(part, b"." | b"..")))
-    {
+    let needs_cleaning = input == b"/"
+        || (windows && input.contains(&b'\\'))
+        || input.windows(2).any(|pair| pair == b"//")
+        || input
+            .split(|b| *b == b'/')
+            .any(|part| matches!(part, b"." | b".."));
+    if !needs_cleaning {
         return Cow::Borrowed(input);
     }
 
