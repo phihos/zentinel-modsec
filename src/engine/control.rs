@@ -359,18 +359,7 @@ impl TransactionControls {
     ) {
         match directive {
             CtlDirective::RuleEngine(mode) => self.engine_mode = Some(mode),
-            CtlDirective::RuleRemoveById(mut ranges) => {
-                self.removed_rules.append(&mut ranges);
-                self.removed_rules.sort_unstable_by_key(|r| r.start);
-                self.removed_rules.dedup_by(|next, previous| {
-                    if next.start <= previous.end.saturating_add(1) {
-                        previous.end = previous.end.max(next.end);
-                        true
-                    } else {
-                        false
-                    }
-                });
-            }
+            CtlDirective::RuleRemoveById(ranges) => self.add_removed_ids(ranges),
             CtlDirective::RuleRemoveByTag(tag) => {
                 if !self.removed_tags.contains(&tag) {
                     self.removed_tags.push(tag);
@@ -448,6 +437,28 @@ impl TransactionControls {
     /// Engine mode for this transaction, given the ruleset's configured mode.
     pub fn engine_mode(&self, ruleset_mode: RuleEngineMode) -> RuleEngineMode {
         self.engine_mode.unwrap_or(ruleset_mode)
+    }
+
+    fn add_removed_ids(&mut self, mut ranges: Vec<RuleIdRange>) {
+        // A list normally arrives in one directive. Sorting it once also
+        // lets an empty transaction grow the interval table from the end.
+        ranges.sort_unstable_by_key(|r| r.start);
+        for mut added in ranges {
+            let first = self
+                .removed_rules
+                .partition_point(|r| r.end.saturating_add(1) < added.start);
+            let count = self.removed_rules[first..]
+                .partition_point(|r| r.start <= added.end.saturating_add(1));
+            if count == 0 {
+                self.removed_rules.insert(first, added);
+            } else {
+                let last = first + count - 1;
+                added.start = added.start.min(self.removed_rules[first].start);
+                added.end = added.end.max(self.removed_rules[last].end);
+                self.removed_rules[first] = added;
+                self.removed_rules.drain(first + 1..=last);
+            }
+        }
     }
 
     /// Whether `ctl:ruleRemoveById` has excluded this rule.
