@@ -18,7 +18,7 @@ const HEADER_BITS: u64 = PART_HEADERS - 1;
 fn header_bit(key: &[u8]) -> u64 {
     let first = usize::from(key.first().copied().unwrap_or(0));
     let last = usize::from(key.last().copied().unwrap_or(0));
-    1 << (first * 17 + last + key.len()) % 61
+    1 << ((first * 17 + last + key.len()) % 61)
 }
 
 // For a bounded group, remember its longest field and narrowest shared alphabet.
