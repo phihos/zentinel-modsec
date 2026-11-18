@@ -356,34 +356,31 @@ mod tests {
 
     #[test]
     fn argument_budget_is_shared_across_duplicate_query_and_body_members() {
-        let mut request = RequestData::default();
         let target = crate::parser::parse_single_variable("ARGS").unwrap();
         let plan = TargetIndices::compile(&[target], [65; 3]);
-        for _ in 0..31 {
-            request.args_get.add_bytes("same", "tiny");
+        let sources = WidthSources {
+            arguments: true,
+            ..Default::default()
+        };
+        // The small-field cap and the 4 KiB byte cap both span GET and POST,
+        // including repeated keys. Crossing either restores ordinary evaluation.
+        for (count, key, value) in [
+            (128, "same".to_owned(), "tiny".to_owned()),
+            (32, "k".repeat(64), "v".repeat(64)),
+        ] {
+            let mut request = RequestData::default();
+            for _ in 1..count {
+                request.args_get.add_bytes(key.as_str(), value.as_str());
+            }
+            request.args_post.add_bytes(key.as_str(), value.as_str());
+            assert!(!plan
+                .select(RequestCollections::new(&request, sources))
+                .may_match(1));
+            request.args_post.add_bytes("more", "last");
+            assert!(plan
+                .select(RequestCollections::new(&request, sources))
+                .may_match(1));
         }
-        request.args_post.add_bytes("same", "body");
-        assert!(!plan
-            .select(RequestCollections::new(
-                &request,
-                WidthSources {
-                    arguments: true,
-                    filename: false,
-                    optional_targets: false
-                }
-            ))
-            .may_match(1));
-        request.args_post.add_bytes("same", "last");
-        assert!(plan
-            .select(RequestCollections::new(
-                &request,
-                WidthSources {
-                    arguments: true,
-                    filename: false,
-                    optional_targets: false
-                }
-            ))
-            .may_match(1));
     }
 
     #[test]
