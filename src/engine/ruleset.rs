@@ -112,6 +112,8 @@ impl Default for Rules {
 pub(super) struct RuleDispatch {
     pub targets: super::target_indices::TargetIndices,
     pub selections: Box<[crate::variables::TargetSelection]>,
+    /// Immutable numeric predicates match the full input without capture groups.
+    pub numeric: Option<crate::operators::NumericComparison>,
     pub dynamic: bool,
     pub capture: bool,
     pub multi_match: bool,
@@ -141,6 +143,8 @@ impl RuleDispatch {
         removed_tags: &HashSet<&str>,
         target_tags: &HashSet<&str>,
     ) -> Self {
+        let dynamic =
+            rule.operator_spec.argument.contains("%{") && !rule.operator_spec.name.uses_data_file();
         let mut dispatch = Self {
             targets: super::target_indices::TargetIndices::compile(&rule.variables),
             selections: rule
@@ -148,10 +152,14 @@ impl RuleDispatch {
                 .iter()
                 .map(|spec| crate::variables::TargetSelection::compile(spec, programs))
                 .collect(),
+            numeric: if dynamic {
+                None
+            } else {
+                rule.operator.numeric_comparison()
+            },
             effects_from: rule.actions.len(),
             disruptive: rule.actions.len(),
-            dynamic: rule.operator_spec.argument.contains("%{")
-                && !rule.operator_spec.name.uses_data_file(),
+            dynamic,
             ..Self::default()
         };
         for (index, action) in rule.actions.iter().enumerate() {
