@@ -110,6 +110,7 @@ impl Default for Rules {
 /// actions remain the source for captures, control arguments and audit messages.
 #[derive(Default)]
 pub(super) struct RuleDispatch {
+    pub targets: super::target_indices::TargetIndices,
     pub selections: Box<[crate::variables::TargetSelection]>,
     pub dynamic: bool,
     pub capture: bool,
@@ -141,6 +142,7 @@ impl RuleDispatch {
         target_tags: &HashSet<&str>,
     ) -> Self {
         let mut dispatch = Self {
+            targets: super::target_indices::TargetIndices::compile(&rule.variables),
             selections: rule
                 .variables
                 .iter()

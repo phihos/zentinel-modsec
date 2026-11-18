@@ -10,12 +10,13 @@ use super::intervention::Intervention;
 use super::match_log::{MatchLog, RawMatch, RuleLocation};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
+use super::target_indices::RequestCollections;
 use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
 use crate::parser::{
     Action, BodyLimitAction, DataAction, DisruptiveAction, MetadataAction, SetVarSpec, SetVarValue,
-    VariableName, VariableSpec,
+    VariableSpec,
 };
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
@@ -958,6 +959,7 @@ impl Transaction {
         }
 
         let dispatch = ruleset.dispatch_for_phase(phase);
+        let available = RequestCollections::new(&self.request);
         let mut chain_state = ChainState::new();
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
@@ -1027,9 +1029,14 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && !chain_state.in_chain;
-            if let Some(outcome) =
-                self.evaluate_rule(rule, &dispatch[idx], link_rule_id, tag_actions, standalone)?
-            {
+            if let Some(outcome) = self.evaluate_rule(
+                rule,
+                &dispatch[idx],
+                link_rule_id,
+                tag_actions,
+                standalone,
+                available,
+            )? {
                 let RuleOutcome {
                     first_data,
                     first_message,
@@ -1270,25 +1277,6 @@ impl Transaction {
         Ok(())
     }
 
-    /// An empty collection contributes no values, even to a negated operator.
-    /// Counts still evaluate once on their decimal count (including zero).
-    fn empty_collection_target(&self, spec: &VariableSpec) -> bool {
-        if spec.count_mode {
-            return false;
-        }
-        use VariableName::*;
-        match spec.name {
-            Args | ArgsNames => {
-                self.request.args_get.is_empty() && self.request.args_post.is_empty()
-            }
-            ArgsGet | ArgsGetNames => self.request.args_get.is_empty(),
-            ArgsPost | ArgsPostNames => self.request.args_post.is_empty(),
-            RequestCookies | RequestCookiesNames => self.request.cookies.is_empty(),
-            Xml => self.request.xml.is_empty(),
-            _ => false,
-        }
-    }
-
     fn evaluate_rule(
         &mut self,
         rule: &CompiledRule,
@@ -1296,6 +1284,7 @@ impl Transaction {
         logical_id: Option<&str>,
         tag_actions: &[Action],
         standalone: bool,
+        available: RequestCollections,
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
@@ -1405,10 +1394,9 @@ impl Transaction {
             // SecAction has no target and matches exactly once.
             evaluate(self, None, b"", None)?;
         }
-        for (spec, selection) in rule.variables.iter().zip(&dispatch.selections) {
-            if self.empty_collection_target(spec) {
-                continue;
-            }
+        for index in dispatch.targets.active(available, &rule.variables) {
+            let spec = &rule.variables[index];
+            let selection = &dispatch.selections[index];
             let mut target = ResolvedTarget::default();
             self.resolve_rule_target(
                 spec,
@@ -1768,6 +1756,7 @@ mod tests {
                     Some("77"),
                     &rule.actions,
                     true,
+                    RequestCollections::new(&tx.request),
                 )
                 .err()
                 .unwrap();
