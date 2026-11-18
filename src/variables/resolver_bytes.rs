@@ -1,7 +1,7 @@
 //! Lossless resolution used by transaction evaluation.
 use super::*;
 use crate::variables::{
-    folded_key, ByteValue, HashMapCollection, SelectorPrograms,
+    folded_key, ByteCollection, ByteValue, HashMapCollection, SelectorPrograms,
 };
 
 pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
@@ -298,7 +298,7 @@ impl<'a> VariableResolver<'a> {
                 }
             }
             _ => {
-                for (key, value) in self.resolve_variable(name, &None) {
+                for (key, value) in self.resolve_variable(name) {
                     scalar(&key, value.as_bytes());
                 }
             }
