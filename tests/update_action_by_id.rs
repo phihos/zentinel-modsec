@@ -87,6 +87,9 @@ fn unimplemented_actions_and_ambiguous_lists_reject_the_entire_configuration() {
         r#"0 "deny""#,
         r#"11-15 "deny""#,
         r#"11 13 "deny""#,
+        r#""11" "deny""#,
+        r#"'11' "deny""#,
+        r#"11 'deny'"#,
     ] {
         let rules = format!("{RULE}\nSecRuleUpdateActionById {update}");
         assert!(ModSecurity::from_string(&rules).is_err(), "{update}");

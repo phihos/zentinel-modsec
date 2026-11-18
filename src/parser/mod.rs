@@ -156,43 +156,7 @@ impl Parser {
             "secruleremovebyid" => self.parse_secruleremovebyid(lexer),
             "secruleupdatetargetbyid" => self.parse_secruleupdatetargetbyid(lexer),
             "secruleupdatetargetbytag" => self.parse_secruleupdatetargetbytag(lexer),
-            "secruleupdateactionbyid" => {
-                let id_text = self.expect_argument(lexer, "SecRuleUpdateActionById id")?;
-                let id = id_text
-                    .trim_matches(|c| c == '\'' || c == '"')
-                    .parse()
-                    .map_err(|_| {
-                        Error::parse(
-                            "SecRuleUpdateActionById requires a numeric rule ID",
-                            self.location.to_string(),
-                        )
-                    })?;
-                let actions = self.expect_argument(lexer, "SecRuleUpdateActionById actions")?;
-                // Coraza tokenizes this directive on whitespace before parsing
-                // actions, so a space within a list can discard earlier actions.
-                // Accept only an unambiguous, comma-separated list here.
-                if id == 0
-                    || self.peek_more_arguments(lexer)
-                    || actions.chars().any(char::is_whitespace)
-                    || actions.split(',').any(|item| {
-                        item.is_empty()
-                            || item.split_once(':').is_some_and(|(name, value)| {
-                                !value.is_empty()
-                                    && (name.eq_ignore_ascii_case("pass")
-                                        || name.eq_ignore_ascii_case("deny"))
-                            })
-                    })
-                {
-                    return Err(Error::parse(
-                        format!("SecRuleUpdateActionById {id} expects one positive rule ID and a comma-separated list of deny, pass or status without spaces"),
-                        self.location.to_string(),
-                    ));
-                }
-                Ok(Directive::SecRuleUpdateActionById {
-                    id,
-                    actions: action::parse_actions(&actions)?,
-                })
-            }
+            "secruleupdateactionbyid" => self.parse_action_update(lexer),
             "secrequestbodyaccess" => self.parse_boolean_directive(lexer, "SecRequestBodyAccess"),
             "secresponsebodyaccess" => self.parse_boolean_directive(lexer, "SecResponseBodyAccess"),
             "secrequestbodylimit" => self.parse_body_limit(lexer, true),
@@ -350,6 +314,60 @@ impl Parser {
             }
         }
         Ok(Directive::SecRuleRemoveById(ids))
+    }
+
+    fn parse_action_update(&mut self, lexer: &mut Lexer) -> Result<Directive> {
+        lexer.skip_whitespace();
+        if !matches!(lexer.peek(), Some('0'..='9' | '+')) {
+            return Err(Error::parse(
+                "SecRuleUpdateActionById requires an unquoted positive rule ID",
+                self.location.to_string(),
+            ));
+        }
+        let id = self
+            .expect_argument(lexer, "SecRuleUpdateActionById id")?
+            .parse::<i64>()
+            .ok()
+            .filter(|id| *id > 0)
+            .ok_or_else(|| {
+                Error::parse(
+                    "SecRuleUpdateActionById requires a positive numeric rule ID",
+                    self.location.to_string(),
+                )
+            })? as u64;
+        lexer.skip_whitespace();
+        if lexer.peek() == Some('\'') {
+            return Err(Error::parse(
+                format!(
+                    "SecRuleUpdateActionById {id} requires a bare or double-quoted action list"
+                ),
+                self.location.to_string(),
+            ));
+        }
+        let actions = self.expect_argument(lexer, "SecRuleUpdateActionById actions")?;
+        // Coraza tokenizes this directive on whitespace before parsing
+        // actions, so a space within a list can discard earlier actions.
+        // Accept only an unambiguous, comma-separated list here.
+        if self.peek_more_arguments(lexer)
+            || actions.chars().any(char::is_whitespace)
+            || actions.split(',').any(|item| {
+                item.is_empty()
+                    || item.split_once(':').is_some_and(|(name, value)| {
+                        !value.is_empty()
+                            && (name.eq_ignore_ascii_case("pass")
+                                || name.eq_ignore_ascii_case("deny"))
+                    })
+            })
+        {
+            return Err(Error::parse(
+                        format!("SecRuleUpdateActionById {id} expects one positive rule ID and a comma-separated list of deny, pass or status without spaces"),
+                        self.location.to_string(),
+                    ));
+        }
+        Ok(Directive::SecRuleUpdateActionById {
+            id,
+            actions: action::parse_actions(&actions)?,
+        })
     }
 
     /// Parse a SecRuleUpdateTargetById directive.
