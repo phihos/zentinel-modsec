@@ -1,12 +1,28 @@
 # Coraza parity handoff — 2026-11-18
 
+## Current local checkpoint
+
+Engine commit `391055367c54e6a3e307fb6b6ceac84fe0725603` on
+`spike/crs-parity` uses a pure-Rust libinjection port by default. The optional
+C backend remains available. Both backends produced identical outcomes on every
+stage of the pinned CI corpus and matched Coraza 3.8.1 on the CRS 4.25 suite
+and the 22 blocking cases. The reference fixture run also compared detector
+verdicts and SQL fingerprints on 167,646 upstream inputs.
+
+The same commit implements transaction-local rule removal by tag and reduces
+allocations for rule target evaluation, regex searches and action processing.
+The [local qualification report](../zentinel-eval/results/impact-ff45140/RESULTS.md)
+contains measurements, limitations and links to the frozen receipts.
+
+## Original checkpoint at `11abeffc`
+
 The requested measured parity goal is complete for Coraza **3.8.1**, OWASP CRS
 **4.25.0**, and the specified GET/form-POST workloads. This qualifies a local
 candidate; production integration, concurrency/reload behavior, other CRS
 versions and every Coraza feature remain outside the evidence.
 
-The parity build requires **`libinjection-ffi`**. The default Rust heuristic
-backend remains available and does **not** meet this qualification.
+At `11abeffc`, the parity build required **`libinjection-ffi`**. The
+then-default Rust heuristic fell short of the reference on that checkpoint.
 
 ## Checkpoint and working state
 
