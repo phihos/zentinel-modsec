@@ -180,7 +180,8 @@ fn deep_unique_items_compare_whole_values() {
         (r#"{"a":1,"b":"x"}"#, r#"{"b":"\u0078","a":1.0}"#, true),
         (r#"{"a":0,"a":1}"#, r#"{"a":1}"#, true),
         (r#"{"a":1}"#, r#"{"b":1}"#, false),
-        ("-0.0", "0", true),
+        ("-0.0", "0", false),
+        ("-0.0", "-0", true),
     ] {
         let nest = |value| format!("{}{value}{}", "[".repeat(160), "]".repeat(160));
         let doc = format!("[{},{}]", nest(first), nest(second));
@@ -193,5 +194,44 @@ fn deep_unique_items_compare_whole_values() {
             violation,
             "{first} vs {second}"
         );
+    }
+}
+
+#[test]
+fn signed_zero_only_changes_uniqueness_of_the_array_selected_by_the_schema() {
+    let dir = tempdir().unwrap();
+    fs::write(
+        dir.path().join("values.json"),
+        r##"{
+        "$defs":{"distinct":{"uniqueItems":true}},
+        "properties":{
+            "count":{"const":0},
+            "unchecked":{"uniqueItems":false},
+            "list":{"if":{"type":"array"},"then":{"$ref":"#/$defs/distinct"}}
+        }
+    }"##,
+    )
+    .unwrap();
+    let rule = dir.path().join("policy.conf");
+    fs::write(
+        &rule,
+        r#"SecRule ARGS:q "@validateSchema values.json" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    let engine = ModSecurity::from_file(rule.to_str().unwrap()).unwrap();
+    for (list, violation) in [
+        ("[-0.0,0,1]", false),
+        ("[-0.0,0,1,1.0]", true),
+        ("[-0.0,-0]", true),
+        (r#"[{"a":-0,"b":0},{"b":-0,"a":0}]"#, false),
+        (r#"[{"a":-0,"b":0},{"b":0,"a":-0.0}]"#, true),
+        (r#""value""#, false),
+    ] {
+        let doc = format!(r#"{{"count":-0.0,"unchecked":[0,0],"list":{list}}}"#);
+        let mut tx = engine.new_transaction();
+        tx.process_uri(&format!("/?q={doc}"), "GET", "HTTP/1.1")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(!tx.matched_rules().is_empty(), violation, "{doc}");
     }
 }
