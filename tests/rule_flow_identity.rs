@@ -175,3 +175,24 @@ SecRule ARGS_GET:color "@streq green" "id:4,phase:2,pass,tag:unrelated"
         assert_eq!(tx.matched_rules(), expected, "{method}");
     }
 }
+
+#[test]
+fn empty_collections_preserve_counts_negation_and_chain_effects() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule ARGS "!@streq unused" "id:1,phase:1,pass"
+SecRule &ARGS "@eq 0" "id:2,phase:1,pass,setvar:tx.note=blue"
+SecRule TX:note "@streq blue" "id:3,phase:1,pass,chain,setvar:tx.collected=yes"
+SecRule REQUEST_COOKIES "!@streq unused" "t:none"
+SecRule ARGS|TX:collected "@streq yes" "id:4,phase:1,pass"
+SecRule REQUEST_COOKIES|ARGS:present "@streq " "id:5,phase:1,pass"
+"#,
+    )
+    .unwrap();
+    for (uri, expected) in [("/", vec!["2", "4"]), ("/?present=", vec!["1", "5"])] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri(uri, "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.matched_rules(), expected);
+    }
+}

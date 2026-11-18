@@ -14,7 +14,7 @@ use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
 use crate::parser::{
     Action, BodyLimitAction, DataAction, DisruptiveAction, MetadataAction, SetVarSpec, SetVarValue,
-    VariableSpec,
+    VariableName, VariableSpec,
 };
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
@@ -1236,6 +1236,25 @@ impl Transaction {
         Ok(target)
     }
 
+    /// An empty collection contributes no values, even to a negated operator.
+    /// Counts still evaluate once on their decimal count (including zero).
+    fn empty_collection_target(&self, spec: &VariableSpec) -> bool {
+        if spec.count_mode {
+            return false;
+        }
+        use VariableName::*;
+        match spec.name {
+            Args | ArgsNames => {
+                self.request.args_get.is_empty() && self.request.args_post.is_empty()
+            }
+            ArgsGet | ArgsGetNames => self.request.args_get.is_empty(),
+            ArgsPost | ArgsPostNames => self.request.args_post.is_empty(),
+            RequestCookies | RequestCookiesNames => self.request.cookies.is_empty(),
+            Xml => self.request.xml.is_empty(),
+            _ => false,
+        }
+    }
+
     fn evaluate_rule(
         &mut self,
         rule: &CompiledRule,
@@ -1359,6 +1378,9 @@ impl Transaction {
             evaluate(self, None, b"", None)?;
         }
         for (spec, selection) in rule.variables.iter().zip(&dispatch.selections) {
+            if self.empty_collection_target(spec) {
+                continue;
+            }
             let target = self.resolve_rule_target(
                 spec,
                 selection,
