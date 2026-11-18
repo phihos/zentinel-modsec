@@ -8,13 +8,13 @@ use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
 use super::intervention::Intervention;
 use super::phase::Phase;
-use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
+use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
 use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
 use crate::parser::{
-    Action, BodyLimitAction, DataAction, DisruptiveAction, FlowAction, MetadataAction, SetVarSpec,
-    SetVarValue, VariableSpec,
+    Action, BodyLimitAction, DataAction, DisruptiveAction, MetadataAction, SetVarSpec, SetVarValue,
+    VariableSpec,
 };
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
@@ -956,27 +956,23 @@ impl Transaction {
             return Ok(());
         }
 
+        let dispatch = ruleset.dispatch_for_phase(phase);
         let mut chain_state = ChainState::new();
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data: Vec<MatchedData> = Vec::new();
         let mut skip_count: u32 = 0;
-        let mut skip_after: Option<&str> = None;
+        let mut skip_after: Option<usize> = None;
 
         let mut idx = 0;
         while idx < rules.len() {
             // Handle skipAfter
-            if let Some(marker) = skip_after {
-                // A marker records the index of the next rule. An adjacent
-                // marker therefore points to the current index.
-                match self.ruleset.marker(marker, phase) {
-                    Some(next) if next >= idx => {
-                        idx = next;
-                        skip_after = None;
-                        continue;
-                    }
-                    _ => break,
+            if let Some(next) = skip_after.take() {
+                if next < idx {
+                    break;
                 }
+                idx = next;
+                continue;
             }
 
             // A ctl:ruleEngine=Off from an earlier rule stops this phase where
@@ -993,7 +989,8 @@ impl Transaction {
             // chain while it is still executing.
             if !chain_state.in_chain {
                 let removed = self.controls.is_rule_removed(rule.id.as_deref())
-                    || self.controls.is_tag_removed(&rule.actions);
+                    || (dispatch[idx].removable_by_tag
+                        && self.controls.is_tag_removed(&rule.actions));
                 if removed || skip_count > 0 {
                     if !removed {
                         skip_count -= 1;
@@ -1019,12 +1016,18 @@ impl Transaction {
             // Evaluate rule
             // Runtime tag exclusions apply to every link of the logical rule,
             // including children that carry no tag of their own.
-            let starter = chain_state.chain_start.map_or(rule, |start| &rules[start]);
-            let tag_actions = &starter.actions;
+            let starter_index = chain_state.chain_start.unwrap_or(idx);
+            let starter = &rules[starter_index];
+            let starter_dispatch = &dispatch[starter_index];
+            let tag_actions = if starter_dispatch.target_removable_by_tag {
+                starter.actions.as_slice()
+            } else {
+                &[]
+            };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && !chain_state.in_chain;
             if let Some(outcome) =
-                self.evaluate_rule(rule, link_rule_id, tag_actions, standalone)?
+                self.evaluate_rule(rule, &dispatch[idx], link_rule_id, tag_actions, standalone)?
             {
                 let RuleOutcome {
                     first_data,
@@ -1071,30 +1074,18 @@ impl Transaction {
                     }
                 }
 
-                // Resolve the last effective flow and disruptive actions, as
-                // SecDefaultAction can contribute earlier ones of both kinds.
-                let mut flow = None;
-                let mut disruptive = None;
-                for action in &starter.actions {
-                    match action {
-                        Action::Flow(FlowAction::MultiMatch) => {}
-                        Action::Flow(f) => flow = Some(f),
-                        Action::Disruptive(d) => disruptive = Some(d),
-                        _ => {}
-                    }
-                }
-                match flow {
-                    Some(FlowAction::Chain) => {
+                match starter_dispatch.flow {
+                    CompiledFlow::Chain => {
                         if !chain_state.in_chain {
                             chain_state.start_chain(idx);
                         }
                         chain_state.continue_chain(true, &[]);
                     }
-                    Some(FlowAction::Skip(n)) => skip_count = *n,
-                    Some(FlowAction::SkipAfter(marker)) => skip_after = Some(marker),
-                    _ => {}
+                    CompiledFlow::Skip(n) => skip_count = n,
+                    CompiledFlow::SkipAfter(next) => skip_after = Some(next),
+                    CompiledFlow::Next => {}
                 }
-                match disruptive {
+                match starter_dispatch.disruptive(starter) {
                     None | Some(DisruptiveAction::Pass) => {}
                     _ if self.engine_mode() != RuleEngineMode::On => {}
                     Some(DisruptiveAction::AllowPhase) => return Ok(()),
@@ -1190,7 +1181,7 @@ impl Transaction {
         )
         .with_selectors(&self.ruleset.selectors);
         let by_id = self.controls.has_target_removals(logical_id);
-        let by_tag = self.controls.has_tag_target_removals(tag_actions);
+        let by_tag = !tag_actions.is_empty() && self.controls.has_tag_target_removals(tag_actions);
         let mut resolved = Ok(ResolvedTarget::default());
         let mut count = 0usize;
         resolver.visit_values(spec, |prefix, member, value| {
@@ -1248,22 +1239,16 @@ impl Transaction {
     fn evaluate_rule(
         &mut self,
         rule: &CompiledRule,
+        dispatch: &RuleDispatch,
         logical_id: Option<&str>,
         tag_actions: &[Action],
         standalone: bool,
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
-        let dynamic =
-            rule.operator_spec.argument.contains("%{") && !rule.operator_spec.name.uses_data_file();
-        let capture = rule
-            .actions
-            .iter()
-            .any(|a| matches!(a, Action::Data(DataAction::Capture)));
-        let multi_match = rule
-            .actions
-            .iter()
-            .any(|a| matches!(a, Action::Flow(FlowAction::MultiMatch)));
+        let dynamic = dispatch.dynamic;
+        let capture = dispatch.capture;
+        let multi_match = dispatch.multi_match;
 
         let search = (!dynamic).then_some(StaticSearch {
             rule,
@@ -1336,12 +1321,13 @@ impl Transaction {
             }
             // SecLang runs all setvars before the controls for each
             // matching value. The parsed operations belong to the ruleset.
-            for action in &rule.actions {
+            let effects = &rule.actions[dispatch.effects_from..];
+            for action in effects {
                 if let Action::Data(DataAction::SetVar(op)) = action {
                     tx.apply_setvar(op, logical_id);
                 }
             }
-            for action in &rule.actions {
+            for action in effects {
                 let Action::Control(ctl) = action else {
                     continue;
                 };
@@ -1721,7 +1707,13 @@ mod tests {
             let mut tx = Transaction::new(rules.clone(), 403);
             tx.process_uri(query, "GET", "HTTP/1.1").unwrap();
             let error = tx
-                .evaluate_rule(&rule, Some("77"), &rule.actions, true)
+                .evaluate_rule(
+                    &rule,
+                    &rules.dispatch_for_phase(Phase::RequestHeaders)[0],
+                    Some("77"),
+                    &rule.actions,
+                    true,
+                )
                 .err()
                 .unwrap();
             assert!(error.to_string().contains("test callback stopped"));
