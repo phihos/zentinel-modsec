@@ -11,7 +11,7 @@
 use super::DetectionResult;
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use once_cell::sync::Lazy;
-use regex::{Regex, RegexSet};
+use regex::bytes::{Regex, RegexSet};
 
 // ============================================================================
 // Static Pattern Matchers (compiled once at first use)
@@ -288,6 +288,11 @@ pub fn is_xss(input: &str) -> bool {
 
 /// Detect XSS in input.
 pub fn detect_xss(input: &str) -> DetectionResult {
+    detect_xss_bytes(input.as_bytes())
+}
+
+/// Inspect original bytes, including text surrounding invalid UTF-8.
+pub fn detect_xss_bytes(input: &[u8]) -> DetectionResult {
     // Fast path: quick check for any potential XSS indicators
     if !QUICK_CHECK_AC.is_match(input) {
         return DetectionResult::safe();
@@ -316,7 +321,7 @@ pub fn detect_xss(input: &str) -> DetectionResult {
 
 /// Check all XSS patterns against input.
 #[inline]
-fn check_patterns(input: &str) -> Option<DetectionResult> {
+fn check_patterns(input: &[u8]) -> Option<DetectionResult> {
     // RegexSet check - single pass through all patterns
     if XSS_REGEX_SET.is_match(input) {
         return Some(DetectionResult::detected("XSS pattern match".to_string()));
@@ -342,35 +347,27 @@ fn check_patterns(input: &str) -> Option<DetectionResult> {
 
 /// Normalize input by decoding common encodings.
 /// Only called when the fast path doesn't match.
-fn normalize_input(input: &str) -> String {
-    let mut result = input.to_string();
-
-    // Decode HTML entities
-    let decoded = html_escape::decode_html_entities(&result);
-    if decoded != result {
-        result = decoded.into_owned();
+fn normalize_input(input: &[u8]) -> Vec<u8> {
+    // HTML entities are text. Decode complete UTF-8 runs and copy intervening
+    // opaque bytes verbatim so neither side can be joined or discarded.
+    let mut result = Vec::with_capacity(input.len());
+    for chunk in input.utf8_chunks() {
+        result.extend_from_slice(html_escape::decode_html_entities(chunk.valid()).as_bytes());
+        result.extend_from_slice(chunk.invalid());
     }
-
-    // Decode URL encoding
-    if let Ok(decoded) = percent_encoding::percent_decode_str(&result).decode_utf8() {
-        if decoded != result {
-            result = decoded.into_owned();
-        }
+    if result.contains(&b'%') {
+        result = percent_encoding::percent_decode(&result).collect();
     }
-
-    // Remove null bytes (used for filter evasion)
-    if result.contains('\0') {
-        result = result.replace('\0', "");
+    result.retain(|&byte| byte != 0);
+    if result.windows(2).any(|s| s == b"< ") {
+        result = NORMALIZE_TAG_WS
+            .replace_all(&result, &b"<"[..])
+            .into_owned();
     }
-
-    // Normalize whitespace in tags: "< script" -> "<script"
-    if result.contains("< ") {
-        result = NORMALIZE_TAG_WS.replace_all(&result, "<").into_owned();
-    }
-
-    // Normalize attribute spacing: "on click = " -> "onclick="
-    if result.contains(" =") || result.contains("= ") {
-        result = NORMALIZE_ATTR_WS.replace_all(&result, "=").into_owned();
+    if result.windows(2).any(|s| s == b" =" || s == b"= ") {
+        result = NORMALIZE_ATTR_WS
+            .replace_all(&result, &b"="[..])
+            .into_owned();
     }
 
     result

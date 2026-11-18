@@ -22,12 +22,16 @@ name = "zentinel-modsec"
 path = "src/main.rs"
 
 [dependencies]
+# Safe Rust libinjection port qualified against the vendored C reference.
+libinjectionrs = { package = "barbacane-libinjection", version = "=0.1.3" }
+
 # Pattern matching
 regex = "1.10"
 # Syntax validation without building the automaton, so an invalid pattern is a
 # load error while compilation itself stays lazy.
 regex-syntax = "0.8"
 aho-corasick = "1.1"
+memchr = "2"
 
 # IP address matching
 ipnetwork = "0.21"
@@ -83,9 +87,14 @@ phf = { version = "0.13", features = ["macros"] }
 # Optional: geolocation
 maxminddb = { version = "0.27", optional = true }
 
+[build-dependencies]
+cc = { version = "1", optional = true }
+
 [features]
 default = []
 geo = ["maxminddb"]
+# Upstream BSD-3-Clause C libinjection; pure Rust remains the default.
+libinjection-ffi = ["dep:cc"]
 # Enable comparison benchmarks against libmodsecurity (requires libmodsecurity installed)
 libmodsec-compare = []
 
@@ -105,3 +114,7 @@ harness = false
 name = "libmodsec_compare"
 harness = false
 required-features = ["libmodsec-compare"]
+
+[[example]]
+name = "libinjection_cost"
+required-features = ["libinjection-ffi"]

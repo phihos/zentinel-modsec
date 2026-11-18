@@ -1,10 +1,10 @@
 //! # zentinel-modsec
 //!
-//! Pure Rust ModSecurity rule engine, measured against the OWASP CRS
+//! Rust ModSecurity rule engine, measured against the OWASP CRS
 //! regression suite.
 //!
-//! This crate provides a ModSecurity rule engine without any C/C++
-//! dependencies, making it easier to deploy, audit, and maintain.
+//! The default build has no C/C++ dependency. The optional `libinjection-ffi`
+//! feature compiles vendored upstream C libinjection for SQLi and XSS detection.
 //!
 //! CRS compatibility is reported as a number rather than asserted: the upstream
 //! regression corpus runs in CI on every push, and the README carries the
@@ -14,9 +14,9 @@
 //!
 //! - SecLang rule parsing and evaluation
 //! - Loads the stock OWASP CRS rule set
-//! - Pure Rust libinjection for @detectSQLi/@detectXSS
+//! - Rust port or optional upstream C libinjection for @detectSQLi/@detectXSS
 //! - Thread-safe, async-ready transaction processing
-//! - Zero external C/C++ dependencies
+//! - Zero external C/C++ dependencies in the default build
 //!
 //! ## Quick Start
 //!

@@ -1,13 +1,55 @@
-//! Pure Rust implementation of libinjection for SQLi and XSS detection.
+//! SQLi and XSS detection with selectable backends.
 //!
-//! This module provides SQL injection and XSS detection using fingerprint-based
-//! analysis, similar to the original libinjection library.
+//! The default backend uses the Rust libinjection port. The optional
+//! `libinjection-ffi` feature selects vendored upstream C for the root API and
+//! engine operators. The `sqli` and `xss` submodules expose the legacy heuristics.
 
+pub mod rust;
 pub mod sqli;
 pub mod xss;
 
-pub use sqli::{is_sqli, sqli_fingerprint};
-pub use xss::is_xss;
+#[cfg(feature = "libinjection-ffi")]
+#[allow(unsafe_code)] // Audited, length-aware C bridge.
+mod ffi;
+#[cfg(feature = "libinjection-ffi")]
+use ffi as selected;
+#[cfg(not(feature = "libinjection-ffi"))]
+use rust as selected;
+
+/// Detect SQL injection in a UTF-8 string.
+pub fn detect_sqli(input: &str) -> DetectionResult {
+    selected::detect_sqli_bytes(input.as_bytes())
+}
+
+/// Detect SQL injection in the original bytes, including embedded NULs.
+pub fn detect_sqli_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
+    Ok(selected::detect_sqli_bytes(input))
+}
+
+/// Detect XSS in a UTF-8 string.
+pub fn detect_xss(input: &str) -> DetectionResult {
+    selected::detect_xss_bytes(input.as_bytes())
+}
+
+/// Detect XSS in the original bytes, including embedded NULs.
+pub fn detect_xss_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
+    Ok(selected::detect_xss_bytes(input))
+}
+
+/// Check for SQL injection using the selected backend.
+pub fn is_sqli(input: &str) -> bool {
+    selected::is_sqli_bytes(input.as_bytes())
+}
+
+/// Return the selected SQLi backend's detection fingerprint.
+pub fn sqli_fingerprint(input: &str) -> Option<String> {
+    detect_sqli(input).fingerprint
+}
+
+/// Check for XSS using the selected backend.
+pub fn is_xss(input: &str) -> bool {
+    selected::is_xss_bytes(input.as_bytes())
+}
 
 /// Result of injection detection.
 #[derive(Debug, Clone)]
@@ -38,7 +80,8 @@ impl DetectionResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // These expectations document the original Rust heuristic backend.
+    use super::{sqli::is_sqli, xss::is_xss};
 
     #[test]
     fn test_sqli_detection() {

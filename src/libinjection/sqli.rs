@@ -5,8 +5,9 @@
 //! in user input that may be injected into SQL queries.
 
 use super::DetectionResult;
+use aho_corasick::AhoCorasick;
 use once_cell::sync::Lazy;
-use regex::Regex;
+use regex::bytes::Regex;
 use std::collections::HashSet;
 
 /// SQL token types.
@@ -71,7 +72,7 @@ impl TokenType {
 #[derive(Debug, Clone)]
 struct Token {
     token_type: TokenType,
-    value: String,
+    value: Vec<u8>,
 }
 
 /// SQL keywords that indicate potential injection.
@@ -409,8 +410,29 @@ pub fn sqli_fingerprint(input: &str) -> Option<String> {
 
 /// Detect SQL injection in input.
 pub fn detect_sqli(input: &str) -> DetectionResult {
+    detect_sqli_bytes(input.as_bytes())
+}
+
+/// Inspect original bytes. SQL syntax is ASCII, and quoted token values keep
+/// their exact spelling, even when the surrounding text is not UTF-8.
+pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
+    use std::borrow::Cow;
+    let lower = if input.is_ascii() {
+        if input.iter().any(u8::is_ascii_uppercase) {
+            Cow::Owned(input.to_ascii_lowercase())
+        } else {
+            Cow::Borrowed(input)
+        }
+    } else {
+        let mut folded = Vec::with_capacity(input.len());
+        for chunk in input.utf8_chunks() {
+            folded.extend_from_slice(chunk.valid().to_lowercase().as_bytes());
+            folded.extend_from_slice(chunk.invalid());
+        }
+        Cow::Owned(folded)
+    };
     // Quick check for common SQLi indicators
-    if !has_sqli_indicators(input) {
+    if !has_sqli_indicators(&lower) {
         return DetectionResult::safe();
     }
 
@@ -418,7 +440,7 @@ pub fn detect_sqli(input: &str) -> DetectionResult {
     for pattern in SQLI_PATTERNS.iter() {
         if pattern.is_match(input) {
             // Generate a simple fingerprint based on what we found
-            let fingerprint = generate_simple_fingerprint(input);
+            let fingerprint = generate_simple_fingerprint(&lower);
             return DetectionResult::detected(fingerprint);
         }
     }
@@ -459,23 +481,26 @@ pub fn detect_sqli(input: &str) -> DetectionResult {
 }
 
 /// Generate a simple fingerprint based on input characteristics.
-fn generate_simple_fingerprint(input: &str) -> String {
-    let lower = input.to_lowercase();
+fn generate_simple_fingerprint(lower: &[u8]) -> String {
     let mut fp = String::new();
 
-    if lower.contains('\'') || lower.contains('"') {
+    if lower.contains(&b'\'') || lower.contains(&b'"') {
         fp.push('s');
     }
-    if lower.contains("or") || lower.contains("and") {
+    if memchr::memmem::find(lower, b"or").is_some() || memchr::memmem::find(lower, b"and").is_some()
+    {
         fp.push('&');
     }
-    if lower.contains("union") || lower.contains("select") {
+    if memchr::memmem::find(lower, b"union").is_some()
+        || memchr::memmem::find(lower, b"select").is_some()
+    {
         fp.push('k');
     }
-    if lower.contains("--") || lower.contains("/*") {
+    if memchr::memmem::find(lower, b"--").is_some() || memchr::memmem::find(lower, b"/*").is_some()
+    {
         fp.push('c');
     }
-    if lower.chars().any(|c| c.is_ascii_digit()) {
+    if lower.iter().any(u8::is_ascii_digit) {
         fp.push('1');
     }
 
@@ -487,57 +512,59 @@ fn generate_simple_fingerprint(input: &str) -> String {
 }
 
 /// Quick check for SQLi indicators.
-fn has_sqli_indicators(input: &str) -> bool {
-    let lower = input.to_lowercase();
-
-    // Check for common SQLi patterns
-    lower.contains('\'')
-        || lower.contains('"')
-        || lower.contains("--")
-        || lower.contains("/*")
-        || lower.contains("union")
-        || lower.contains("select")
-        || lower.contains(" or ")
-        || lower.contains(" and ")
-        || lower.contains("1=1")
-        || lower.contains("'='")
-        || lower.contains(";")
-        || lower.contains("exec")
-        || lower.contains("drop")
-        || lower.contains("insert")
-        || lower.contains("update")
-        || lower.contains("delete")
-        || lower.contains("benchmark")
-        || lower.contains("sleep")
-        || lower.contains("waitfor")
+fn has_sqli_indicators(lower: &[u8]) -> bool {
+    static INDICATORS: Lazy<AhoCorasick> = Lazy::new(|| {
+        AhoCorasick::new([
+            "'",
+            "\"",
+            "--",
+            "/*",
+            "union",
+            "select",
+            " or ",
+            " and ",
+            "1=1",
+            "'='",
+            ";",
+            "exec",
+            "drop",
+            "insert",
+            "update",
+            "delete",
+            "benchmark",
+            "sleep",
+            "waitfor",
+        ])
+        .expect("literal SQL indicator patterns")
+    });
+    INDICATORS.is_match(lower)
 }
 
 /// Tokenize SQL-like input.
-fn tokenize(input: &str) -> Vec<Token> {
+fn tokenize(input: &[u8]) -> Vec<Token> {
     let mut tokens = Vec::new();
-    let chars: Vec<char> = input.chars().collect();
     let mut i = 0;
 
-    while i < chars.len() {
-        let c = chars[i];
+    while i < input.len() {
+        let c = input[i];
 
         // Skip whitespace
-        if c.is_whitespace() {
+        if c.is_ascii_whitespace() {
             i += 1;
             continue;
         }
 
         // String literal
-        if c == '\'' || c == '"' {
+        if c == b'\'' || c == b'"' {
             let quote = c;
-            let mut value = String::new();
+            let mut value = Vec::new();
             i += 1;
-            while i < chars.len() && chars[i] != quote {
-                if chars[i] == '\\' && i + 1 < chars.len() {
-                    value.push(chars[i + 1]);
+            while i < input.len() && input[i] != quote {
+                if input[i] == b'\\' && i + 1 < input.len() {
+                    value.push(input[i + 1]);
                     i += 2;
                 } else {
-                    value.push(chars[i]);
+                    value.push(input[i]);
                     i += 1;
                 }
             }
@@ -550,11 +577,11 @@ fn tokenize(input: &str) -> Vec<Token> {
         }
 
         // Comment
-        if c == '-' && i + 1 < chars.len() && chars[i + 1] == '-' {
-            let mut value = String::from("--");
+        if c == b'-' && i + 1 < input.len() && input[i + 1] == b'-' {
+            let mut value = b"--".to_vec();
             i += 2;
-            while i < chars.len() && chars[i] != '\n' {
-                value.push(chars[i]);
+            while i < input.len() && input[i] != b'\n' {
+                value.push(input[i]);
                 i += 1;
             }
             tokens.push(Token {
@@ -564,15 +591,15 @@ fn tokenize(input: &str) -> Vec<Token> {
             continue;
         }
 
-        if c == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
-            let mut value = String::from("/*");
+        if c == b'/' && i + 1 < input.len() && input[i + 1] == b'*' {
+            let mut value = b"/*".to_vec();
             i += 2;
-            while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
-                value.push(chars[i]);
+            while i + 1 < input.len() && !(input[i] == b'*' && input[i + 1] == b'/') {
+                value.push(input[i]);
                 i += 1;
             }
-            if i + 1 < chars.len() {
-                value.push_str("*/");
+            if i + 1 < input.len() {
+                value.extend_from_slice(b"*/");
                 i += 2;
             }
             tokens.push(Token {
@@ -583,19 +610,19 @@ fn tokenize(input: &str) -> Vec<Token> {
         }
 
         // Number
-        if c.is_ascii_digit() || (c == '0' && i + 1 < chars.len() && chars[i + 1] == 'x') {
-            let mut value = String::new();
+        if c.is_ascii_digit() || (c == b'0' && i + 1 < input.len() && input[i + 1] == b'x') {
+            let mut value = Vec::new();
             // Handle hex
-            if c == '0' && i + 1 < chars.len() && chars[i + 1] == 'x' {
-                value.push_str("0x");
+            if c == b'0' && i + 1 < input.len() && input[i + 1] == b'x' {
+                value.extend_from_slice(b"0x");
                 i += 2;
-                while i < chars.len() && chars[i].is_ascii_hexdigit() {
-                    value.push(chars[i]);
+                while i < input.len() && input[i].is_ascii_hexdigit() {
+                    value.push(input[i]);
                     i += 1;
                 }
             } else {
-                while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-                    value.push(chars[i]);
+                while i < input.len() && (input[i].is_ascii_digit() || input[i] == b'.') {
+                    value.push(input[i]);
                     i += 1;
                 }
             }
@@ -607,17 +634,20 @@ fn tokenize(input: &str) -> Vec<Token> {
         }
 
         // Word (keyword, function, identifier)
-        if c.is_ascii_alphabetic() || c == '_' || c == '@' {
-            let mut value = String::new();
-            while i < chars.len()
-                && (chars[i].is_ascii_alphanumeric() || chars[i] == '_' || chars[i] == '@')
+        if c.is_ascii_alphabetic() || c == b'_' || c == b'@' {
+            let mut value = Vec::new();
+            while i < input.len()
+                && (input[i].is_ascii_alphanumeric() || input[i] == b'_' || input[i] == b'@')
             {
-                value.push(chars[i]);
+                value.push(input[i]);
                 i += 1;
             }
 
-            let upper = value.to_uppercase();
-            let token_type = if value.starts_with('@') {
+            // Only ASCII bytes can enter a word token.
+            let upper = std::str::from_utf8(&value)
+                .expect("ASCII word")
+                .to_ascii_uppercase();
+            let token_type = if value.starts_with(b"@") {
                 TokenType::Variable
             } else if upper == "AND" || upper == "OR" || upper == "NOT" || upper == "XOR" {
                 TokenType::Logic
@@ -634,18 +664,18 @@ fn tokenize(input: &str) -> Vec<Token> {
         }
 
         // Operators
-        if "=<>!+-*/%&|^~".contains(c) {
-            let mut value = String::new();
+        if b"=<>!+-*/%&|^~".contains(&c) {
+            let mut value = Vec::new();
             value.push(c);
             i += 1;
             // Check for multi-char operators
-            if i < chars.len() {
-                let next = chars[i];
-                if (c == '<' && (next == '=' || next == '>'))
-                    || (c == '>' && next == '=')
-                    || (c == '!' && next == '=')
-                    || (c == '|' && next == '|')
-                    || (c == '&' && next == '&')
+            if i < input.len() {
+                let next = input[i];
+                if (c == b'<' && (next == b'=' || next == b'>'))
+                    || (c == b'>' && next == b'=')
+                    || (c == b'!' && next == b'=')
+                    || (c == b'|' && next == b'|')
+                    || (c == b'&' && next == b'&')
                 {
                     value.push(next);
                     i += 1;
@@ -659,20 +689,20 @@ fn tokenize(input: &str) -> Vec<Token> {
         }
 
         // Parentheses
-        if c == '(' || c == ')' {
+        if c == b'(' || c == b')' {
             tokens.push(Token {
                 token_type: TokenType::Expression,
-                value: c.to_string(),
+                value: vec![c],
             });
             i += 1;
             continue;
         }
 
         // Semicolon (statement separator)
-        if c == ';' {
+        if c == b';' {
             tokens.push(Token {
                 token_type: TokenType::Operator,
-                value: ";".to_string(),
+                value: vec![b';'],
             });
             i += 1;
             continue;
@@ -695,16 +725,11 @@ fn generate_fingerprint(tokens: &[Token]) -> String {
 
 /// Check for dangerous patterns in tokens.
 fn has_dangerous_patterns(tokens: &[Token]) -> bool {
-    let values: Vec<&str> = tokens.iter().map(|t| t.value.as_str()).collect();
-    let upper_values: Vec<String> = values.iter().map(|v| v.to_uppercase()).collect();
-
-    // Check for UNION SELECT
-    for i in 0..upper_values.len().saturating_sub(1) {
-        if upper_values[i] == "UNION"
-            && upper_values.get(i + 1).map(|s| s.as_str()) == Some("SELECT")
-        {
-            return true;
-        }
+    if tokens.windows(2).any(|pair| {
+        pair[0].value.eq_ignore_ascii_case(b"UNION")
+            && pair[1].value.eq_ignore_ascii_case(b"SELECT")
+    }) {
+        return true;
     }
 
     // Check for comment followed by keyword
@@ -729,7 +754,7 @@ fn has_dangerous_patterns(tokens: &[Token]) -> bool {
     for window in tokens.windows(3) {
         let (left, op, right) = (&window[0], &window[1], &window[2]);
         if op.token_type == TokenType::Operator
-            && op.value == "="
+            && op.value == b"="
             && ((left.token_type == TokenType::Number
                 && right.token_type == TokenType::Number
                 && left.value == right.value)

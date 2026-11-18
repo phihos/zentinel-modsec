@@ -24,16 +24,50 @@
 </p>
 
 `zentinel-modsec` parses ModSecurity `.conf` rule files and evaluates them
-against requests and responses, with no C or C++ dependency and no FFI
-(`#![deny(unsafe_code)]`). SQL injection and XSS detection (`@detectSQLi`,
-`@detectXSS`) are a pure Rust port of libinjection. CRS compatibility is
-reported as a number, not asserted: CI runs the CRS regression corpus on every
-push and fails if the pass count changes (see [CRS conformance](#crs-conformance)).
+against requests and responses. The default build has no C or C++ dependency
+and no FFI (`#![deny(unsafe_code)]`). SQL injection and XSS detection
+(`@detectSQLi`, `@detectXSS`) use the Rust port of libinjection by default. The optional
+`libinjection-ffi` feature selects upstream C libinjection. CI checks the default backend against the pinned CRS regression corpus.
+See [CRS conformance](#crs-conformance).
 
 It is the engine behind Zentinel's
 [ZentinelSec agent](https://registry.zentinelproxy.io/zentinelsec/). The
 [ModSecurity agent](https://github.com/zentinelproxy/zentinel-agent-modsec) is
 a different thing: it wraps the C++ libmodsecurity.
+
+### Optional upstream libinjection
+
+Enable `libinjection-ffi` to use upstream C libinjection v4.0.2 for
+`@detectSQLi`, `@detectXSS`, and the root `libinjection` API:
+
+```sh
+cargo build --features libinjection-ffi
+```
+
+This feature requires a C compiler, compiles the vendored BSD-3-Clause source
+locally, and adds no Go runtime or dynamic library dependency. The default
+remains pure Rust. The original Rust heuristic backend is also always available
+explicitly through `libinjection::sqli` and `libinjection::xss`; its detection
+semantics differ from upstream. Native parser errors are logged and reported
+as matches rather than silently allowing the input. Source provenance and the
+third-party license are in [vendor/libinjection](vendor/libinjection/README.md).
+
+The default backend uses `barbacane-libinjection` 0.1.3 and returns upstream-style
+SQL fingerprints and the `XSS` label for HTML matches. To compare both
+implementations on the v4.0.2 upstream data files, point `LIBINJECTION_DATA_DIR`
+at the upstream checkout’s `data` directory and run
+`cargo test --release --features libinjection-ffi --test libinjection_conformance upstream_dataset -- --ignored`.
+
+To compare per-call cost, run
+`cargo run --release --features libinjection-ffi --example libinjection_cost`.
+The example reports raw FFI, the selected API including result conversion,
+the Rust port, and the original heuristic. A standalone native C control is provided in
+`examples/libinjection_native_cost.c`; compile with `cc -O3 -Ivendor/libinjection
+examples/libinjection_native_cost.c vendor/libinjection/libinjection_sqli.c
+vendor/libinjection/libinjection_xss.c vendor/libinjection/libinjection_html5.c
+-o /tmp/libinjection-native-cost`. Alternate repeated runs on a quiet host:
+subtracting raw FFI and native C timings estimates crossing overhead but is
+sensitive to scheduling and clock noise.
 
 ## Quick start
 
@@ -226,7 +260,7 @@ naming the rule IDs that must, or must not, appear in the log for a request.
 | | |
 |---|---|
 | Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **4,947 of 5,184 runnable cases (95.4%)** (`MIN_PASSING`) |
+| Passing | **4,952 of 5,184 runnable cases (95.5%)** (`MIN_PASSING`) |
 
 ```bash
 mkdir -p test-rules
