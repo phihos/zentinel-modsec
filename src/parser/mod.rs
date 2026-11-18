@@ -157,8 +157,6 @@ impl Parser {
             "secruleupdatetargetbyid" => self.parse_secruleupdatetargetbyid(lexer),
             "secruleupdatetargetbytag" => self.parse_secruleupdatetargetbytag(lexer),
             "secruleupdateactionbyid" => {
-                // Preserve the target ID for the load diagnostic. Applying the
-                // action update remains unsupported.
                 let id_text = self.expect_argument(lexer, "SecRuleUpdateActionById id")?;
                 let id = id_text
                     .trim_matches(|c| c == '\'' || c == '"')
@@ -169,8 +167,27 @@ impl Parser {
                             self.location.to_string(),
                         )
                     })?;
-                let actions =
-                    self.expect_quoted_argument(lexer, "SecRuleUpdateActionById actions")?;
+                let actions = self.expect_argument(lexer, "SecRuleUpdateActionById actions")?;
+                // Coraza tokenizes this directive on whitespace before parsing
+                // actions, so a space within a list can discard earlier actions.
+                // Accept only an unambiguous, comma-separated list here.
+                if id == 0
+                    || self.peek_more_arguments(lexer)
+                    || actions.chars().any(char::is_whitespace)
+                    || actions.split(',').any(|item| {
+                        item.is_empty()
+                            || item.split_once(':').is_some_and(|(name, value)| {
+                                !value.is_empty()
+                                    && (name.eq_ignore_ascii_case("pass")
+                                        || name.eq_ignore_ascii_case("deny"))
+                            })
+                    })
+                {
+                    return Err(Error::parse(
+                        format!("SecRuleUpdateActionById {id} expects one positive rule ID and a comma-separated list of deny, pass or status without spaces"),
+                        self.location.to_string(),
+                    ));
+                }
                 Ok(Directive::SecRuleUpdateActionById {
                     id,
                     actions: action::parse_actions(&actions)?,

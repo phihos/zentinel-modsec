@@ -220,17 +220,14 @@ fn known_unsupported_controls_warn_only_during_loading() {
 }
 
 #[test]
-fn unsupported_action_update_retains_the_targeted_rule_id() {
+fn supported_action_update_does_not_warn() {
     let (_, log) = load_logs(
         r#"
 SecRule ARGS "@contains attack" "id:112,phase:2,pass"
 SecRuleUpdateActionById 112 "deny,status:403"
 "#,
     );
-    assert!(
-        log.contains("SecRuleUpdateActionById") && log.contains("rule_ids=112"),
-        "{log}"
-    );
+    assert!(log.is_empty(), "{log}");
 }
 
 #[test]

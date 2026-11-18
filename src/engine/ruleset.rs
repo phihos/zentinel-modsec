@@ -1,10 +1,10 @@
 //! Compiled ruleset for efficient rule matching.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::operators::{compile_operator, Operator};
 use crate::parser::{
-    Action, Directive, FlowAction, MetadataAction, OperatorName, OperatorSpec, Parser,
-    RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection, UpdateTargetById,
+    Action, Directive, DisruptiveAction, FlowAction, MetadataAction, OperatorName, OperatorSpec,
+    Parser, RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection, UpdateTargetById,
     VariableSpec,
 };
 use crate::transformations::TransformationPipeline;
@@ -159,7 +159,8 @@ impl CompiledRuleset {
     }
 
     /// Compile parsed directives into a ruleset.
-    pub fn compile(directives: Vec<Directive>) -> Result<Self> {
+    pub fn compile(mut directives: Vec<Directive>) -> Result<Self> {
+        apply_action_updates(&mut directives)?;
         let mut ruleset = Self::new();
         let mut pending_chain: Option<(Phase, usize)> = None;
 
@@ -421,6 +422,113 @@ fn id_is_removed(id: &Option<String>, removals: &[RuleIdSelector]) -> bool {
     removals.iter().any(|selector| selector.matches(numeric))
 }
 
+/// Apply updates to previously declared logical rules before compiling their
+/// actions. Keep only IDs named by updates, and preserve directive order even
+/// when a later SecRuleRemoveById removes the entire chain during compilation.
+fn apply_action_updates(directives: &mut [Directive]) -> Result<()> {
+    let mut targets: HashMap<u64, Option<usize>> = directives
+        .iter()
+        .filter_map(|directive| {
+            if let Directive::SecRuleUpdateActionById { id, .. } = directive {
+                Some((*id, None))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if targets.is_empty() {
+        return Ok(());
+    }
+
+    let mut in_chain = false;
+    let mut chain_id = None;
+    for index in 0..directives.len() {
+        let (earlier, current) = directives.split_at_mut(index);
+        let (actions, unconditional) = match &current[0] {
+            Directive::SecRule(rule) => (&rule.actions, false),
+            Directive::SecAction(rule) => (&rule.actions, true),
+            Directive::SecRuleRemoveById(ids) => {
+                // Removals apply to this ID throughout the compiled ruleset.
+                // A redeclaration cannot restore an explicitly removed ID.
+                targets.retain(|id, _| !ids.iter().any(|range| range.matches(*id)));
+                continue;
+            }
+            Directive::SecRuleUpdateActionById { id, actions } => {
+                let slot = targets
+                    .get(id)
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| Error::Config {
+                        message: format!(
+                            "SecRuleUpdateActionById: rule {id} not found before this directive"
+                        ),
+                    })?;
+                let original = match &mut earlier[slot] {
+                    Directive::SecRule(rule) => &mut rule.actions,
+                    Directive::SecAction(rule) => &mut rule.actions,
+                    _ => unreachable!("only logical rule declarations are indexed"),
+                };
+                update_disruption(*id, original, actions)?;
+                continue;
+            }
+            _ => continue,
+        };
+        let child = in_chain;
+        in_chain = has_chain(actions);
+        if !child {
+            chain_id = numeric_id(actions);
+        }
+        if let Some(id) = chain_id {
+            if let Some(slot) = targets.get_mut(&id) {
+                if unconditional && (child || in_chain) {
+                    return Err(Error::Config {
+                        message: format!("SecRuleUpdateActionById {id} does not support a chain containing SecAction"),
+                    });
+                }
+                if !child && slot.replace(index).is_some() {
+                    return Err(Error::DuplicateRuleId { id });
+                }
+            }
+        }
+    }
+    if in_chain && chain_id.is_some_and(|id| targets.contains_key(&id)) {
+        return Err(Error::IncompleteChain);
+    }
+    Ok(())
+}
+
+/// An update can replace either field independently. Resolve the entire list
+/// first so an unsupported action cannot partially change the target.
+fn update_disruption(id: u64, original: &mut Vec<Action>, actions: &[Action]) -> Result<()> {
+    let invalid = || {
+        Error::Config {
+        message: format!("SecRuleUpdateActionById {id} supports only deny, pass and status on a positive rule ID"),
+    }
+    };
+    if id == 0 || actions.is_empty() {
+        return Err(invalid());
+    }
+    let mut disruptive = None;
+    let mut status = None;
+    for action in actions {
+        match action {
+            Action::Disruptive(DisruptiveAction::Pass | DisruptiveAction::Deny) => {
+                disruptive = Some(action)
+            }
+            Action::Metadata(MetadataAction::Status(_)) => status = Some(action),
+            _ => return Err(invalid()),
+        }
+    }
+    original.retain(|action| match action {
+        Action::Disruptive(_) => disruptive.is_none(),
+        Action::Metadata(MetadataAction::Status(_)) => status.is_none(),
+        _ => true,
+    });
+    original.extend(disruptive.cloned());
+    original.extend(status.cloned());
+    Ok(())
+}
+
 /// Apply `SecRuleUpdateTargetById` directives to the compiled rules.
 ///
 /// ModSecurity semantics, as CRS exclusion files rely on them:
@@ -622,9 +730,13 @@ fn report_unsupported_controls(directives: &[Directive]) {
 }
 
 fn extract_id(actions: &[Action]) -> Option<String> {
+    numeric_id(actions).map(|id| id.to_string())
+}
+
+fn numeric_id(actions: &[Action]) -> Option<u64> {
     for action in actions {
         if let Action::Metadata(MetadataAction::Id(id)) = action {
-            return Some(id.to_string());
+            return Some(*id);
         }
     }
     None
