@@ -2,6 +2,22 @@
 
 ## Current local checkpoint
 
+Engine commit `e6b3518baa37cebe30a1e1e625082ac89f73b0cf` on
+`spike/crs-parity` fixes configuration loading around comments, whitespace
+and includes. Failed appends to a reusable parser restore its previous rules
+and phase defaults. The loader now enforces Coraza's limit of 100 cumulative
+`Include` directives per configuration.
+
+The `compressWhitespace` transformation matches Coraza on 350 text and
+binary fixtures. Static count rules delay creating the target name until a
+match needs it. On warmed full-CRS requests, allocator-requested bytes fell
+from 70,431 to 59,120 per GET and from 80,469 to 68,354 per form POST.
+Both backends reproduced the baseline native stages and the external Coraza
+corpus outcomes and blocking traces. The [local qualification report](../zentinel-eval/results/engine-cfa97fe/RESULTS.md)
+contains the comparison inputs, performance measurements and limits.
+
+## Rule updates and validators checkpoint at `8692a95`
+
 Engine commit `8692a953e2bc51c672391bd720be95bef4c661fb` on
 `spike/crs-parity` implements single-ID `deny`, `pass` and `status` rule
 updates, checks byte-range declarations, and fixes response-length and
