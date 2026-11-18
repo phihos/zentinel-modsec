@@ -647,8 +647,14 @@ impl CompiledRuleset {
         });
         ruleset.width_sources = Phase::ALL.map(|phase| {
             let mut sources = super::target_indices::WidthSources::default();
-            for rule in ruleset.dispatch_for_phase(phase) {
-                rule.targets.add_width_sources(&mut sources);
+            for (rule, plan) in ruleset
+                .rules
+                .for_phase(phase)
+                .iter()
+                .zip(ruleset.dispatch_for_phase(phase))
+            {
+                plan.targets
+                    .add_width_sources(&mut sources, &rule.variables);
             }
             sources
         });
