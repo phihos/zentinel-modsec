@@ -266,7 +266,7 @@ fn report_macros(found: &mut Diagnostics, value: &str, id: &str) {
             None => {
                 matches!(
                     lower.as_str(),
-                    "matched_var" | "matched_var_name" | "unique_id"
+                    "matched_var" | "matched_var_name" | "unique_id" | "arguments_limit_reached"
                 ) || VariableName::from_str(name).is_none()
             }
         };
