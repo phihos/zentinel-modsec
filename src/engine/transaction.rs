@@ -1568,7 +1568,15 @@ impl Transaction {
                 tx.matched_vars.push((name.clone(), value));
             }
             if capture {
-                tx.store_captures(portion, result.captures);
+                if rule.operator_spec.name == crate::parser::OperatorName::ValidateNid {
+                    for (slot, candidate) in result.captures.into_iter().enumerate() {
+                        if !candidate.is_empty() {
+                            tx.tx.set_bytes(vec![b'0' + slot as u8], candidate);
+                        }
+                    }
+                } else {
+                    tx.store_captures(portion, result.captures);
+                }
             }
             // SecLang runs all setvars before the controls for each
             // matching value. The parsed operations belong to the ruleset.

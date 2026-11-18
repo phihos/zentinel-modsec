@@ -4,6 +4,7 @@ mod byte_argument;
 pub use byte_argument::compile_operator_bytes;
 mod comparison;
 mod detection;
+mod national_id;
 mod network;
 mod pattern;
 pub(crate) mod schema;
@@ -82,6 +83,7 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         OperatorName::VerifyCc | OperatorName::VerifySsn | OperatorName::VerifyCpf => {
             Ok(Arc::new(NoMatchOperator))
         }
+        OperatorName::ValidateNid => Ok(Arc::new(national_id::NationalId::new(argument)?)),
         OperatorName::ValidateSchema => Ok(Arc::new(schema::SchemaOperator::load(
             argument,
             std::path::Path::new("."),

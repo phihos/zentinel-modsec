@@ -72,6 +72,8 @@ pub enum OperatorName {
     ValidateUtf8Encoding,
     /// Validate byte range.
     ValidateByteRange,
+    /// Validate national identifiers selected by a country-specific pattern.
+    ValidateNid,
     /// Validate hash.
     ValidateHash,
     /// Validate DTD.
@@ -142,6 +144,7 @@ static OPERATOR_MAP: phf::Map<&'static str, OperatorName> = phf_map! {
     "validateurlencoding" => OperatorName::ValidateUrlEncoding,
     "validateutf8encoding" => OperatorName::ValidateUtf8Encoding,
     "validatebyterange" => OperatorName::ValidateByteRange,
+    "validatenid" => OperatorName::ValidateNid,
     "validatehash" => OperatorName::ValidateHash,
     "validatedtd" => OperatorName::ValidateDtd,
     "validateschema" => OperatorName::ValidateSchema,

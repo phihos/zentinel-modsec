@@ -314,6 +314,10 @@ case-sensitive substring matching, including macro-expanded operands. Neither
 `@strmatch` nor `@geoLookup` writes capture slots. As in Coraza 3.8.1,
 `@geoLookup` always matches and leaves GEO empty.
 
+`@validateNid` accepts `cl` or `us` followed by a regular expression. It
+checks the first ten matching candidates and captures valid identifiers in the
+TX slots corresponding to their original positions.
+
 `@validateByteRange` accepts decimal bytes and inclusive ranges, for example
 `9,13,32-126`. Rules with an invalid static entry fail at load. A macro-supplied
 list is checked after expansion. An omitted range matches every input, including

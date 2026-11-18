@@ -161,8 +161,9 @@ impl RuleDispatch {
         removed_tags: &HashSet<&str>,
         target_tags: &HashSet<&str>,
     ) -> Self {
-        let dynamic =
-            rule.operator_spec.argument.contains("%{") && !rule.operator_spec.name.uses_data_file();
+        let dynamic = rule.operator_spec.argument.contains("%{")
+            && !rule.operator_spec.name.uses_data_file()
+            && rule.operator_spec.name != OperatorName::ValidateNid;
         let minimum = if !dynamic
             && !rule.operator_negated
             && rule.transformations.preserves_alphanumeric_width_bounds()
