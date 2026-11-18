@@ -2,6 +2,26 @@
 
 ## Current checkpoint
 
+Engine `8aba31c` caches argument widths across phases, precomputes fixed rule
+target masks and accelerates simple anchored TX key selectors. Compared with
+`d872a35`, eight paired runs on the full 698-rule CRS 4.25.0 configuration
+measured 5.4% lower GET latency, 5.1% lower form POST latency
+and 5.2% lower nested JSON POST latency. A 129-field form fell from
+701 to 296 µs and a 257-field form from
+1,315 to 581 µs. On the separate mixed workload,
+median process p99 moved from 148.8 to 150.6 µs with the Rust detector
+and from 142.0 to 139.4 µs with the optional C detector.
+
+Both backends preserved corpus outcomes, blocking decisions and audit data.
+The 698-rule heap and request allocation counts held steady. The inline
+transaction grew by 112 bytes on x86-64. A custom single-rule lookup across
+an 8,192-field request retained its indexed lookup speed, while the complete
+request including parsing took 2.4–2.6% longer. The
+[benchmark report and raw samples](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round7/RESULTS.md)
+cover all 18 full-CRS fixtures, both mixed-traffic detectors and the custom rule.
+
+## Argument budget checkpoint at `93870ea`
+
 Engine `93870ea` includes the rule-selection and allocation changes from
 `ece387f` and replaces the 32-field cutoff with a 4 KiB argument scan budget.
 GET and POST share the budget, with a minimum charge of 32 bytes per member.
