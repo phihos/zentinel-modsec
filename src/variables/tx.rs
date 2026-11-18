@@ -47,7 +47,8 @@ impl TxCollection {
         self.data.delete_bytes(&key.to_ascii_lowercase());
     }
 
-    /// Increment a numeric byte value; a nonnumeric value starts at zero.
+    /// Increment a numeric byte value with signed 64-bit wrapping, matching
+    /// Coraza on 64-bit targets. A nonnumeric value starts at zero.
     pub fn increment_bytes(&mut self, key: &[u8], amount: i64) {
         let current = self
             .get_bytes(key)
@@ -56,7 +57,7 @@ impl TxCollection {
                     .and_then(|v| std::str::from_utf8(v).ok()?.parse::<i64>().ok())
             })
             .unwrap_or(0);
-        self.set_bytes(key.to_vec(), (current + amount).to_string());
+        self.set_bytes(key.to_vec(), current.wrapping_add(amount).to_string());
     }
 
     /// Clear all data.

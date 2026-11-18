@@ -91,7 +91,6 @@ pub(super) fn report(directives: &[Directive]) {
                 OperatorName::StrMatch => Some("operator is approximated by substring matching"),
                 OperatorName::Pmf => Some("file loading is not implemented for this alias; its argument is treated as inline phrases; use @pmFromFile"),
                 OperatorName::IpMatchF => Some("file loading is not implemented for this alias; its argument is treated as inline addresses; use @ipMatchFromFile"),
-                OperatorName::Within => Some("operator is approximated by whitespace-token equality rather than substring containment"),
                 _ => None,
             };
             if let Some(reason) = reason {

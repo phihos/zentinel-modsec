@@ -1,6 +1,6 @@
 //! Pattern matching operators (@rx, @pm).
 //!
-//! Compiled regexes are shared across live rulesets in the process.
+//! Compiled regexes and phrase automata are shared across live rulesets.
 
 use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 use crate::error::{Error, Result};
@@ -200,11 +200,55 @@ impl Operator for RxOperator {
 
 /// Phrase match operator (@pm).
 pub struct PmOperator {
+    program: Arc<PhraseProgram>,
+}
+
+struct PhraseProgram {
     automaton: AhoCorasick,
     patterns: Vec<String>,
 }
 
+/// Exact parsed phrases, including order and case, identify the program.
+/// Paths are deliberately absent: edited files must compile their new content.
+/// Weak values release automata with the last live ruleset, like the RX cache.
+#[derive(Default)]
+struct PhraseCache {
+    entries: Mutex<HashMap<Vec<String>, Weak<PhraseProgram>>>,
+}
+
+impl PhraseCache {
+    fn get(&self, patterns: Vec<String>) -> Result<Arc<PhraseProgram>> {
+        // Serialize compilation with insertion so simultaneous configuration
+        // loads do not briefly allocate duplicate large automata. Searches
+        // access only the immutable program and never lock this cache.
+        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(program) = entries.get(patterns.as_slice()).and_then(Weak::upgrade) {
+            return Ok(program);
+        }
+        entries.retain(|_, program| program.strong_count() > 0);
+        let automaton = AhoCorasick::builder()
+            .ascii_case_insensitive(true)
+            .build(&patterns)
+            .map_err(|error| Error::PatternSet {
+                message: error.to_string(),
+            })?;
+        let program = Arc::new(PhraseProgram {
+            automaton,
+            patterns,
+        });
+        entries.insert(program.patterns.clone(), Arc::downgrade(&program));
+        Ok(program)
+    }
+}
+
+static PHRASE_CACHE: Lazy<PhraseCache> = Lazy::new(PhraseCache::default);
+
 impl PmOperator {
+    #[cfg(test)]
+    fn automaton_address(&self) -> *const AhoCorasick {
+        &self.program.automaton
+    }
+
     /// Create a new phrase match operator from space-separated patterns.
     pub fn new(patterns_str: &str) -> Result<Self> {
         let patterns: Vec<String> = patterns_str
@@ -218,16 +262,8 @@ impl PmOperator {
             });
         }
 
-        let automaton = AhoCorasick::builder()
-            .ascii_case_insensitive(true)
-            .build(&patterns)
-            .map_err(|e| Error::PatternSet {
-                message: e.to_string(),
-            })?;
-
         Ok(Self {
-            automaton,
-            patterns,
+            program: PHRASE_CACHE.get(patterns)?,
         })
     }
 
@@ -273,25 +309,17 @@ impl PmOperator {
             });
         }
 
-        let automaton = AhoCorasick::builder()
-            .ascii_case_insensitive(true)
-            .build(&patterns)
-            .map_err(|e| Error::PatternSet {
-                message: e.to_string(),
-            })?;
-
         Ok(Self {
-            automaton,
-            patterns,
+            program: PHRASE_CACHE.get(patterns)?,
         })
     }
 }
 
 impl Operator for PmOperator {
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
-        Ok(match self.automaton.find(value) {
+        Ok(match self.program.automaton.find(value) {
             Some(found) => ByteOperatorResult::matched(
-                self.patterns[found.pattern().as_usize()]
+                self.program.patterns[found.pattern().as_usize()]
                     .as_bytes()
                     .to_vec(),
             ),
@@ -300,8 +328,8 @@ impl Operator for PmOperator {
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(mat) = self.automaton.find(value) {
-            let matched = &self.patterns[mat.pattern().as_usize()];
+        if let Some(mat) = self.program.automaton.find(value) {
+            let matched = &self.program.patterns[mat.pattern().as_usize()];
             OperatorResult::matched(matched.clone())
         } else {
             OperatorResult::no_match()
@@ -413,6 +441,120 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
         // Valid syntax, but the default regex compiler cannot build the
         // expanded Unicode repetitions within its program size limit.
         assert!(RxOperator::new(r"\w{100000}").is_err());
+    }
+
+    #[test]
+    fn phrase_cache_shares_exact_parsed_content_and_retains_match_portions() {
+        let first = PmOperator::new("ADMIN root").unwrap();
+        let second = PmOperator::new("  ADMIN\n root  ").unwrap();
+        assert_eq!(first.automaton_address(), second.automaton_address());
+        let different_case = PmOperator::new("admin root").unwrap();
+        assert_ne!(
+            first.automaton_address(),
+            different_case.automaton_address()
+        );
+        assert_eq!(
+            first.execute_bytes(b"xxadmin\xff").unwrap().matched_value,
+            Some(b"ADMIN".to_vec())
+        );
+        assert_eq!(
+            different_case
+                .execute_bytes(b"xxadmin\xff")
+                .unwrap()
+                .matched_value,
+            Some(b"admin".to_vec())
+        );
+        let different_order = PmOperator::new("root ADMIN").unwrap();
+        assert_ne!(
+            first.automaton_address(),
+            different_order.automaton_address()
+        );
+    }
+
+    #[test]
+    fn phrase_cache_uses_file_content_instead_of_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let first_path = directory.path().join("first.data");
+        let second_path = directory.path().join("second.data");
+        std::fs::write(&first_path, "# comment\n ADMIN \nroot\n").unwrap();
+        std::fs::write(&second_path, "ADMIN\nroot\n").unwrap();
+        let first = PmOperator::from_file(first_path.to_str().unwrap()).unwrap();
+        let second = PmOperator::from_file(second_path.to_str().unwrap()).unwrap();
+        assert_eq!(first.automaton_address(), second.automaton_address());
+        std::fs::write(&first_path, "changed\n").unwrap();
+        let replacement = PmOperator::from_file(first_path.to_str().unwrap()).unwrap();
+        assert_ne!(first.automaton_address(), replacement.automaton_address());
+        assert!(!replacement.execute("ADMIN").matched);
+        assert!(replacement.execute("changed").matched);
+        assert!(first.execute("ADMIN").matched);
+    }
+
+    #[test]
+    fn concurrent_phrase_loads_share_a_single_compiled_automaton() {
+        let barrier = Arc::new(std::sync::Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    PmOperator::new("concurrent-phrase-cache FIRST Second").unwrap()
+                })
+            })
+            .collect();
+        let operators: Vec<_> = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect();
+        for operator in &operators[1..] {
+            assert_eq!(
+                operators[0].automaton_address(),
+                operator.automaton_address()
+            );
+        }
+    }
+
+    #[test]
+    fn shared_phrase_programs_do_not_share_target_exclusions() {
+        use crate::ModSecurity;
+        let original = ModSecurity::from_string(
+            r#"SecRule ARGS "@pm shared-phrase-rule-target" "id:1,phase:2,deny,status:403""#,
+        )
+        .unwrap();
+        let excluded = ModSecurity::from_string(
+            r#"SecRule ARGS "@pm shared-phrase-rule-target" "id:1,phase:2,deny,status:403"
+SecRuleUpdateTargetById 1 "!ARGS:skip""#,
+        )
+        .unwrap();
+        assert_eq!(
+            PHRASE_CACHE.entries.lock().unwrap()[&vec!["shared-phrase-rule-target".into()]]
+                .strong_count(),
+            2
+        );
+        for (engine, should_block) in [(&original, true), (&excluded, false)] {
+            let mut transaction = engine.new_transaction();
+            transaction
+                .process_uri("/?skip=shared-phrase-rule-target", "GET", "HTTP/1.1")
+                .unwrap();
+            transaction.process_request_headers().unwrap();
+            transaction.process_request_body().unwrap();
+            assert_eq!(transaction.has_intervention(), should_block);
+        }
+    }
+
+    #[test]
+    fn dropped_phrase_programs_release_automata_and_prune_stale_keys() {
+        let cache = PhraseCache::default();
+        let program = cache.get(vec!["retired-phrase".into()]).unwrap();
+        let weak = Arc::downgrade(&program);
+        drop(program);
+        assert!(weak.upgrade().is_none(), "the cache must not own programs");
+        let live = cache.get(vec!["live-phrase".into()]).unwrap();
+        let entries = cache.entries.lock().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(Arc::ptr_eq(
+            &live,
+            &entries[&vec!["live-phrase".into()]].upgrade().unwrap()
+        ));
     }
 
     #[test]

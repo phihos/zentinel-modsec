@@ -65,7 +65,9 @@ use zentinel_modsec::ModSecurity;
 /// 30cb436, the commit CI fetches). The corpus upstream keeps moving, so a
 /// change after bumping that commit is worth reading as new tests before
 /// reading it as a regression.
-const MIN_PASSING: u32 = 5094;
+// CRS 920430-5 supplies an empty protocol. The corrected @within rejects an
+// empty input; the native runner passes that protocol through unchanged.
+const MIN_PASSING: u32 = 5093;
 
 /// Corpus stages that cannot be driven from here: an `encoded_request` payload,
 /// or an expectation that is not about rule IDs (`status`, `match_regex`).

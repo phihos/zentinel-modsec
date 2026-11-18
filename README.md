@@ -160,6 +160,11 @@ then resolves access and the pending limit decision; no body phase runs early.
 Each header/body phase executes at most once; failed callbacks remain errors
 on retries. After a body callback seals an ordinary body,
 new bytes produce a visible error; tails after a limit consume zero bytes.
+`status` applies to deny/block and drop actions. Redirects accept status
+301, 302, 303 or 307 and otherwise use 302, matching Coraza. A drop has
+`drop_connection=true` and status zero by default; check the intervention itself,
+not only a nonzero HTTP status. Status arguments retain the public `u16` domain.
+
 Response headers can be supplied with `process_response_headers_with_status()`;
 `process_response_body()` runs phase 4 after MIME/access checks.
 
@@ -167,7 +172,10 @@ Response headers can be supplied with `process_response_headers_with_status()`;
 
 Under `SecRuleEngine DetectionOnly` rules match but never intervene;
 `tx.matched_rules()` lists what matched. `setvar` on `TX` works as in CRS, and
-`tx.anomaly_score()` returns the accumulated score:
+`tx.anomaly_score()` reads `TX:anomaly_score`. CRS versions with per-paranoia
+scores compute separate aggregates; read `TX:blocking_inbound_anomaly_score`
+through `tx.tx()` for the score used by inbound blocking. Rules own these
+variables, and phase completion preserves their values:
 
 ```rust
 let modsec = ModSecurity::from_string(r#"
@@ -258,12 +266,11 @@ allowed. An unreadable match fails the load. Each configuration accepts up to
 retains the configuration it held before the call.
 
 **Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@beginsWith`,
-`@endsWith`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
+`@endsWith`, `@within`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
 `@unconditionalMatch`, `@noMatch`. `@containsWord` and `@strmatch` are
-approximated by `@contains`. `@within` uses whitespace-token equality instead
-of substring containment. The `@pmf` and `@ipMatchF` aliases interpret their
+approximated by `@contains`. The `@pmf` and `@ipMatchF` aliases interpret their
 arguments as inline phrases/addresses; use `@pmFromFile` and `@ipMatchFromFile`
 for files. These approximations produce load-time warnings with rule IDs.
 
@@ -351,7 +358,7 @@ naming the rule IDs that must, or must not, appear in the log for a request.
 | | |
 |---|---|
 | Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **5,094 of 5,184 runnable cases (98.3%)** (`MIN_PASSING`) |
+| Passing | **5,093 of 5,184 runnable cases (98.2%)** (`MIN_PASSING`) |
 
 ```bash
 mkdir -p test-rules

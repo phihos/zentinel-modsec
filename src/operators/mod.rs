@@ -179,23 +179,31 @@ impl Operator for ValidateByteRangeOperator {
     }
 }
 
-/// Within operator - checks if value is within a list of values.
+/// Tests whether the argument contains the input as a byte substring.
 pub struct WithinOperator {
-    values: Vec<String>,
+    haystack: Vec<u8>,
 }
 
 impl WithinOperator {
     /// Create a new within operator.
     pub fn new(values: &str) -> Self {
         Self {
-            values: values.split_whitespace().map(|s| s.to_string()).collect(),
+            haystack: values.as_bytes().to_vec(),
         }
+    }
+
+    fn matches(&self, needle: &[u8]) -> bool {
+        needle.is_empty()
+            || self
+                .haystack
+                .windows(needle.len())
+                .any(|part| part == needle)
     }
 }
 
 impl Operator for WithinOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(if self.values.iter().any(|v| v.as_bytes() == value) {
+        Ok(if self.matches(value) {
             ByteOperatorResult::matched(value.to_vec())
         } else {
             ByteOperatorResult::no_match()
@@ -203,7 +211,7 @@ impl Operator for WithinOperator {
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if self.values.iter().any(|v| v == value) {
+        if self.matches(value.as_bytes()) {
             OperatorResult::matched(value.to_string())
         } else {
             OperatorResult::no_match()
