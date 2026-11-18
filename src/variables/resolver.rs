@@ -17,7 +17,6 @@ pub struct VariableResolver<'a> {
     /// reads it yet (`TX:0`..`TX:9` are served from the TX collection).
     #[allow(dead_code)]
     captures: &'a [String],
-    programs: Option<&'a super::SelectorPrograms>,
     matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
 }
 
@@ -39,7 +38,6 @@ impl<'a> VariableResolver<'a> {
             matched_vars,
             captures,
             matched_bytes: None,
-            programs: None,
         }
     }
 
