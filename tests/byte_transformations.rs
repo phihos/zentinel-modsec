@@ -125,3 +125,26 @@ fn url_decoders_preserve_the_prefix_before_the_first_escape() {
         assert_eq!(matches!(output, Cow::Borrowed(_)), input == expected);
     }
 }
+
+#[test]
+fn url_encode_uses_coraza_form_encoding_on_text_and_original_bytes() {
+    let encode = create_transformation("urlEncode").unwrap();
+    let decode = create_transformation("urlDecode").unwrap();
+    for (input, encoded) in [
+        ("A z+*.,_-", "A+z%2b*%2e%2c%5f%2d"),
+        ("café", "caf%c3%a9"),
+        ("", ""),
+    ] {
+        assert_eq!(encode.transform(input), encoded);
+        assert_eq!(
+            encode.transform_bytes(input.as_bytes()).unwrap().as_ref(),
+            encoded.as_bytes()
+        );
+        assert_eq!(decode.transform(encoded), input);
+    }
+    let input: Vec<u8> = (0..=255).collect();
+    let encoded = encode.transform_bytes(&input).unwrap();
+    assert!(encoded.ends_with(b"%fd%fe%ff"));
+    assert_eq!(decode.transform_bytes(&encoded).unwrap(), input);
+    assert!(matches!(encode.transform("Az09*"), Cow::Borrowed(_)));
+}

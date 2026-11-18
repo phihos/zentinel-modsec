@@ -12,15 +12,11 @@ impl Transformation for UrlDecode {
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        match percent_encoding::percent_decode_str(input).decode_utf8() {
-            Ok(decoded) => {
-                if decoded == input {
-                    Cow::Borrowed(input)
-                } else {
-                    Cow::Owned(decoded.into_owned())
-                }
-            }
-            Err(_) => Cow::Borrowed(input),
+        match super::bytes::url_decode_stage(input.as_bytes(), false) {
+            Cow::Borrowed(_) => Cow::Borrowed(input),
+            Cow::Owned(bytes) => String::from_utf8(bytes)
+                .map(Cow::Owned)
+                .unwrap_or(Cow::Borrowed(input)),
         }
     }
 

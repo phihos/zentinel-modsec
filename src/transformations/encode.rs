@@ -42,19 +42,40 @@ impl Transformation for HexEncode {
 /// URL encode transformation.
 pub struct UrlEncode;
 
+impl UrlEncode {
+    fn encode(input: &[u8]) -> Option<String> {
+        let literal = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'*';
+        if input.iter().all(|&byte| literal(byte)) {
+            return None;
+        }
+
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut encoded = String::with_capacity(input.len());
+        for &byte in input {
+            match byte {
+                b' ' => encoded.push('+'),
+                byte if literal(byte) => encoded.push(char::from(byte)),
+                byte => {
+                    encoded.push('%');
+                    encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+                    encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+                }
+            }
+        }
+        Some(encoded)
+    }
+}
+
 impl Transformation for UrlEncode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(match Self::encode(input) {
+            Some(text) => Cow::Owned(text.into_bytes()),
+            None => Cow::Borrowed(input),
+        })
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
-        let encoded = utf8_percent_encode(input, NON_ALPHANUMERIC).to_string();
-        if encoded == input {
-            Cow::Borrowed(input)
-        } else {
-            Cow::Owned(encoded)
-        }
+        Self::encode(input.as_bytes()).map_or(Cow::Borrowed(input), Cow::Owned)
     }
 
     fn name(&self) -> &'static str {

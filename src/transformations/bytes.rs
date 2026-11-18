@@ -318,9 +318,6 @@ pub(super) fn apply<'a>(
             .encode(input)
             .into_bytes(),
         "hexEncode" => ::hex::encode(input).into_bytes(),
-        "urlEncode" => percent_encoding::percent_encode(input, percent_encoding::NON_ALPHANUMERIC)
-            .to_string()
-            .into_bytes(),
         "md5" => {
             use md5::Digest;
             md5::Md5::digest(input).to_vec()
