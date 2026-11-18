@@ -1,7 +1,7 @@
 //! Precompute leading TX defaults whose only input is the initially empty collection.
 use super::ruleset::{CompiledFlow, CompiledRule, RuleDispatch};
 use crate::parser::{Action, DataAction, OperatorName, SetVarValue};
-use crate::variables::{folded_key, ByteValue, MemberSelector};
+use crate::variables::{folded_key, ByteValue, MemberSelector, TxCollection};
 use indexmap::IndexMap;
 
 // Bound both the planner's work and the per-ruleset defaults it retains.
@@ -13,6 +13,7 @@ pub(super) struct TxDefaults {
     pub end: usize,
     // Final literal assignments, in first-insertion order.
     pub assignments: Box<[(ByteValue, ByteValue)]>,
+    pub capture_limit: u8,
     pub ids: Box<[u8]>,
     pub counts: Box<[(u8, u8)]>,
     pub last_count: Option<(u8, u8)>,
@@ -97,6 +98,11 @@ impl TxDefaults {
         (assignments.len() >= MIN_DEFAULTS).then(|| {
             Box::new(Self {
                 end,
+                capture_limit: assignments
+                    .keys()
+                    .map(|key| TxCollection::capture_slot_end(key.as_bytes()))
+                    .max()
+                    .unwrap_or(0),
                 assignments: assignments.into_iter().collect(),
                 ids: ids.into_boxed_slice(),
                 counts: counts.into_boxed_slice(),
@@ -198,6 +204,23 @@ SecRule TX:k2 "@eq 1" "id:11,phase:5,pass""#,
             assert_eq!(fast.matched_rules(), reference.matched_rules());
             assert_eq!(fast.matched_data(), reference.matched_data());
             assert_eq!(fast.matched_data().len(), 11);
+        }
+    }
+
+    #[test]
+    fn clearing_a_seeded_capture_does_not_change_another_transaction() {
+        let config = r#"SecAction "id:1,phase:1,pass,setvar:tx.9=old,setvar:tx.a=1,setvar:tx.b=2,setvar:tx.c=3,setvar:tx.d=4,setvar:tx.e=5,setvar:tx.f=6,setvar:tx.g=7"
+SecRule REQUEST_URI "@rx ^/(blue)$" "id:2,phase:2,pass,capture""#;
+        let engine = ModSecurity::from_string(config).unwrap();
+        assert!(engine.ruleset().tx_defaults.is_some());
+        for _ in 0..2 {
+            let mut tx = engine.new_transaction();
+            tx.process_uri("/blue", "GET", "HTTP/1.1").unwrap();
+            tx.process_request_headers().unwrap();
+            assert_eq!(tx.tx().get_bytes(b"9").unwrap()[0], b"old");
+            tx.process_request_body().unwrap();
+            assert!(tx.tx().get_bytes(b"9").is_none());
+            assert_eq!(tx.tx().get_bytes(b"1").unwrap()[0], b"blue");
         }
     }
 
