@@ -27,9 +27,8 @@
 against requests and responses. The default build has no C or C++ dependency
 and no FFI (`#![deny(unsafe_code)]`). SQL injection and XSS detection
 (`@detectSQLi`, `@detectXSS`) use Rust heuristics by default; the optional
-`libinjection-ffi` feature selects upstream C libinjection. CRS compatibility is
-reported as a number, not asserted: CI runs the CRS regression corpus on every
-push and fails if the pass count changes (see [CRS conformance](#crs-conformance)).
+`libinjection-ffi` feature selects upstream C libinjection. CI checks individual CRS regression stages on both backends for pull requests and pushes to `main`.
+See [CRS conformance](#crs-conformance).
 
 It is the engine behind Zentinel's
 [ZentinelSec agent](https://registry.zentinelproxy.io/zentinelsec/). The
@@ -339,28 +338,29 @@ escapes these bytes for its output format. Supply actual response metadata via
 
 ## CRS conformance
 
-The OWASP CRS ships a regression suite of request/expectation pairs, each
-naming the rule IDs that must, or must not, appear in the log for a request.
-`tests/crs_conformance.rs` runs that corpus against this engine, and the CI
-`OWASP CRS conformance` job fails if the pass count differs from
-`MIN_PASSING` in either direction.
+The native runner checks the rule IDs listed in each regression stage under
+`tests/regression/tests` of CRS commit `30cb436` (4.31.0-dev). It reads 327
+YAML files, including one comment-only file. Of the 5,263 stages, 5,187 have
+structured input and rule-ID expectations. The other 76 use encoded requests
+or have no rule-ID assertion.
 
-| | |
-|---|---|
-| Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **4,900 of 5,184 runnable cases (94.5%)** (`MIN_PASSING`) |
+On this pin the default Rust heuristic backend passes 5,091 of the 5,187
+executed stages, and `libinjection-ffi` passes 5,096. CI runs both.
+[The reviewed outcome manifest](tests/fixtures/crs-native-outcomes.tsv)
+records each stage by file, test ID and stage number. A changed outcome,
+missing or new stage, fixture error, or incomplete engine callback fails CI.
+Set `CRS_STAGE_REPORT` to a new file path to save all observed outcomes.
 
 ```bash
 mkdir -p test-rules
 git clone https://github.com/coreruleset/coreruleset.git test-rules/crs
-git -C test-rules/crs checkout 30cb436   # the commit CI pins
+git -C test-rules/crs checkout 30cb436
 cp test-rules/crs/crs-setup.conf.example test-rules/crs/crs-setup.conf
 cargo test --release --test crs_conformance -- --nocapture
+cargo test --release --features libinjection-ffi --test crs_conformance -- --nocapture
 ```
 
-Against another CRS checkout the count differs from CI.
-
-### What that number does and does not tell you
+### Detection and blocking coverage
 
 The corpus runs in the configuration CRS documents for it: `DetectionOnly` at
 paranoia level 4. In that mode `block` never blocks, the paranoia gates never
