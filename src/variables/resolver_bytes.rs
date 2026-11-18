@@ -5,6 +5,9 @@ use crate::variables::{
     TargetSelection,
 };
 
+// Keep at most one common-size request line alive between rule evaluations.
+pub(super) const MAX_CACHED_REQUEST_LINE: usize = 4096;
+
 impl<'a> VariableResolver<'a> {
     /// Construct a resolver over original matched-value bytes.
     pub fn new_bytes(
@@ -187,12 +190,28 @@ impl<'a> VariableResolver<'a> {
                 scalar("REQUEST_BASENAME", basename);
             }
             RequestLine => {
-                let mut line = request.method_bytes().to_vec();
-                line.push(b' ');
-                line.extend_from_slice(request.uri_bytes());
-                line.push(b' ');
-                line.extend_from_slice(request.protocol_bytes());
-                scalar("REQUEST_LINE", &line);
+                if let Some(line) = self.request_line.and_then(OnceLock::get) {
+                    return scalar("REQUEST_LINE", line);
+                }
+                let line = [
+                    request.method_bytes(),
+                    b" ",
+                    request.uri_bytes(),
+                    b" ",
+                    request.protocol_bytes(),
+                ]
+                .concat();
+                if let Some(cache) = self
+                    .request_line
+                    .filter(|_| line.len() <= MAX_CACHED_REQUEST_LINE)
+                {
+                    scalar(
+                        "REQUEST_LINE",
+                        cache.get_or_init(|| line.into_boxed_slice()),
+                    );
+                } else {
+                    scalar("REQUEST_LINE", &line);
+                }
             }
             RequestBody => scalar("REQUEST_BODY", request.request_body_bytes_variable()),
             ResponseBody => scalar("RESPONSE_BODY", self.response.body_variable_bytes()),
