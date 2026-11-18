@@ -36,18 +36,29 @@ impl IpMatchOperator {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(|s| {
-                s.parse::<IpNetwork>().map_err(|err| Error::InvalidIp {
-                    value: source.to_owned(),
-                    message: format!("{s}: {err}"),
-                })
+                s.parse::<IpNetwork>()
+                    .and_then(|net| match (net, net.network().to_canonical()) {
+                        // Go net.IPNet.Contains tests the masked network number. For
+                        // example ::ffff:192.0.2.8/95 has an IPv6 network number,
+                        // while /96 and longer retain the full mapped prefix.
+                        (IpNetwork::V6(v6), IpAddr::V4(ip)) => {
+                            IpNetwork::new(IpAddr::V4(ip), v6.prefix() - 96)
+                        }
+                        _ => Ok(net),
+                    })
+                    .map_err(|err| Error::InvalidIp {
+                        value: source.to_owned(),
+                        message: format!("{s}: {err}"),
+                    })
             })
             .collect::<Result<_>>()?;
         Ok(Self { networks })
     }
 
     /// Check if an IP is in any of the networks.
-    fn contains(&self, ip: &IpAddr) -> bool {
-        self.networks.iter().any(|net| net.contains(*ip))
+    fn contains(&self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        self.networks.iter().any(|net| net.contains(ip))
     }
 }
 
@@ -61,7 +72,7 @@ impl Operator for IpMatchOperator {
 
     fn execute(&self, value: &str) -> OperatorResult {
         if let Ok(ip) = value.parse::<IpAddr>() {
-            if self.contains(&ip) {
+            if self.contains(ip) {
                 return OperatorResult::matched(value.to_string());
             }
         }
@@ -82,6 +93,55 @@ mod tests {
         let op = IpMatchOperator::new("192.168.1.1").unwrap();
         assert!(op.execute("192.168.1.1").matched);
         assert!(!op.execute("192.168.1.2").matched);
+    }
+
+    #[test]
+    fn ipv4_mapped_networks_and_addresses_use_the_ipv4_mask() {
+        for prefix in ["192.0.2.8/24", "::ffff:192.0.2.8/120"] {
+            let op = IpMatchOperator::new(prefix).unwrap();
+            for addr in ["192.0.2.7", "::ffff:c000:207"] {
+                let result = op.execute_bytes(addr.as_bytes()).unwrap();
+                assert_eq!(result.matched_value.as_deref(), Some(addr.as_bytes()));
+            }
+            for addr in ["198.51.100.2", "::ffff:198.51.100.2", "::192.0.2.7"] {
+                assert!(!op.execute(addr).matched, "{prefix} {addr}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_masked_network_number_determines_the_address_family() {
+        // /95 clears one bit in the mapping prefix. The resulting network
+        // and ::/0 match only native IPv6. /96 maps to IPv4's default route.
+        let addresses = ["192.0.2.8", "::ffff:c000:208", "::fffe:c000:208", "::1"];
+        for (prefix, expected) in [
+            ("::ffff:192.0.2.8/95", [false, false, true, false]),
+            ("::ffff:192.0.2.8/96", [true, true, false, false]),
+            ("::/0", [false, false, true, true]),
+        ] {
+            let op = IpMatchOperator::new(prefix).unwrap();
+            assert_eq!(
+                addresses.map(|ip| op.execute(ip).matched),
+                expected,
+                "{prefix}"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_mapped_prefix_rejects_an_otherwise_valid_list() {
+        let entries = "::ffff:192.0.2.8/120,::ffff:192.0.2.8/129";
+        assert!(matches!(
+            IpMatchOperator::new(entries),
+            Err(Error::InvalidIp { .. })
+        ));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("list.data");
+        std::fs::write(&path, entries).unwrap();
+        assert!(matches!(
+            IpMatchOperator::from_file(path.to_str().unwrap()),
+            Err(Error::InvalidIp { .. })
+        ));
     }
 
     #[test]
