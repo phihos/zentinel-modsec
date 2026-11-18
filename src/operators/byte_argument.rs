@@ -72,10 +72,7 @@ impl Operator for ByteArgument {
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         let matched = match self.kind {
             OperatorName::Contains | OperatorName::StrMatch => {
-                self.argument.is_empty()
-                    || value
-                        .windows(self.argument.len())
-                        .any(|part| part == self.argument)
+                memchr::memmem::find(value, &self.argument).is_some()
             }
             OperatorName::BeginsWith => value.starts_with(&self.argument),
             OperatorName::EndsWith => value.ends_with(&self.argument),

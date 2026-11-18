@@ -19,11 +19,7 @@ impl ContainsOperator {
 impl Operator for ContainsOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
         Ok(
-            if self.needle.is_empty()
-                || value
-                    .windows(self.needle.len())
-                    .any(|w| w == self.needle.as_bytes())
-            {
+            if memchr::memmem::find(value, self.needle.as_bytes()).is_some() {
                 ByteOperatorResult::matched(self.needle.as_bytes().to_vec())
             } else {
                 ByteOperatorResult::no_match()

@@ -271,8 +271,8 @@ chain starter selects its entire chain. Untagged rules continue to execute.
 `@unconditionalMatch`, `@noMatch`. The file-backed aliases `@pmf` and
 `@ipMatchF` read the same files as `@pmFromFile` and `@ipMatchFromFile`.
 With `capture`, phrase matches populate `TX:0` through `TX:9` in input order
-using the original bytes. Overlapping phrases select the longest match at the
-earliest position.
+using the original bytes. If phrases overlap, each capture takes the longest phrase at
+the next matching start, including starts inside an earlier match.
 
 `@containsWord` follows ModSecurity v3. It matches case-sensitive bytes bounded
 by the input edges or bytes outside ASCII A–Z and a–z. An empty operand matches

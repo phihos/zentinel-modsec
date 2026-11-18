@@ -291,13 +291,16 @@ impl PmOperator {
             source,
         })?;
 
-        Self::from_patterns(
-            content
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(str::as_bytes),
-        )
+        let patterns = content
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|line| line.as_bytes().to_vec())
+            .collect();
+        // An empty data file is a valid list with no matching phrases.
+        Ok(Self {
+            program: PHRASE_CACHE.get(patterns)?,
+        })
     }
 }
 
@@ -307,13 +310,22 @@ impl Operator for PmOperator {
     }
 
     fn execute_rule_bytes(&self, value: &[u8], capture: bool) -> Result<ByteOperatorResult> {
-        let mut matches = self.program.find_iter(value);
-        let Some(first) = matches.next() else {
+        let Some(first) = self.program.find(value) else {
             return Ok(ByteOperatorResult::no_match());
         };
         let mut result = ByteOperatorResult::matched(&value[first.range()]);
         if capture {
-            result.captures = matches.take(9).map(|m| value[m.range()].to_vec()).collect();
+            // Coraza selects the longest phrase at each successive start.
+            // A later capture may begin inside the preceding one.
+            let mut start = first.start() + 1;
+            while result.captures.len() < 9 {
+                let input = aho_corasick::Input::new(value).span(start..value.len());
+                let Some(next) = self.program.find(input) else {
+                    break;
+                };
+                result.captures.push(value[next.range()].to_vec());
+                start = next.start() + 1;
+            }
         }
         Ok(result)
     }
