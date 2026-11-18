@@ -10,6 +10,8 @@ use crate::parser::{
 use crate::transformations::TransformationPipeline;
 
 use super::phase::Phase;
+use crate::parser::SetVarValue;
+use crate::variables::{folded_key, ByteValue};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -106,6 +108,13 @@ impl Default for Rules {
     }
 }
 
+pub(super) struct CompiledSetVar {
+    pub action_index: usize,
+    /// Literal TX keys can be folded once, when configuration updates are final.
+    pub key: Option<ByteValue>,
+    pub value: Option<ByteValue>,
+}
+
 /// Execution metadata for a finalized rule. The public parsed rule and its ordered
 /// actions remain the source for captures, control arguments and audit messages.
 #[derive(Default)]
@@ -117,8 +126,9 @@ pub(super) struct RuleDispatch {
     pub dynamic: bool,
     pub capture: bool,
     pub multi_match: bool,
-    /// Start of the suffix containing every setvar and control, or the action count.
-    pub effects_from: usize,
+    /// Start of the suffix containing every control, or the action count.
+    pub controls_from: usize,
+    pub setvars: Box<[CompiledSetVar]>,
     pub removable_by_tag: bool,
     pub target_removable_by_tag: bool,
     pub flow: CompiledFlow,
@@ -157,16 +167,30 @@ impl RuleDispatch {
             } else {
                 rule.operator.numeric_comparison()
             },
-            effects_from: rule.actions.len(),
+            controls_from: rule.actions.len(),
             disruptive: rule.actions.len(),
             dynamic,
             ..Self::default()
         };
+        let mut setvars = Vec::new();
         for (index, action) in rule.actions.iter().enumerate() {
             match action {
                 Action::Data(DataAction::Capture) => dispatch.capture = true,
-                Action::Data(DataAction::SetVar(_)) | Action::Control(_) => {
-                    dispatch.effects_from = dispatch.effects_from.min(index);
+                Action::Data(DataAction::SetVar(op)) => {
+                    setvars.push(CompiledSetVar {
+                        action_index: index,
+                        value: match &op.value {
+                            SetVarValue::Int(n) => Some(ByteValue::decimal(*n)),
+                            SetVarValue::String(text) => Some(text.as_str().into()),
+                            _ => None,
+                        },
+                        key: (!op.key.contains("%{")).then(|| {
+                            ByteValue::from(crate::variables::folded_key(op.key.as_bytes()))
+                        }),
+                    });
+                }
+                Action::Control(_) => {
+                    dispatch.controls_from = dispatch.controls_from.min(index);
                 }
                 Action::Metadata(MetadataAction::Tag(tag)) => {
                     dispatch.removable_by_tag |= removed_tags.contains(tag.as_str());
@@ -188,6 +212,7 @@ impl RuleDispatch {
                 _ => {}
             }
         }
+        dispatch.setvars = setvars.into_boxed_slice();
         dispatch
     }
 
