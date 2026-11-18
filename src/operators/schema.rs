@@ -1,4 +1,6 @@
 //! JSON Schema files are trusted configuration, loaded once with their rule.
+mod arena;
+
 use super::{ByteOperatorResult, Operator, OperatorResult};
 use crate::{Error, Result};
 use serde_json::Value;
@@ -258,6 +260,9 @@ fn intern_subtree(mut bytes: &[u8], ids: &mut HashMap<Value, usize>) -> Option<u
     while let Some((&byte, rest)) = bytes.split_first() {
         let mut node = match byte {
             b'{' | b'[' => {
+                if frames.len() >= 10_000 {
+                    return None;
+                }
                 let container = if byte == b'{' {
                     Value::Object(Default::default())
                 } else {
