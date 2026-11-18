@@ -261,20 +261,17 @@ impl Parser {
     /// against the directory of the file currently being parsed, matching how
     /// ModSecurity/CRS reference their `.data` files.
     fn resolve_operator_file_path(&self, operator: &mut OperatorSpec) {
-        if !matches!(
-            operator.name,
-            OperatorName::PmFromFile | OperatorName::IpMatchFromFile
-        ) {
+        if !operator.name.uses_data_file() {
             return;
         }
         if std::path::Path::new(&operator.argument).is_absolute() {
             return;
         }
         if let Some(parent) = self.location.file.as_ref().and_then(|f| f.parent()) {
-            let joined = parent.join(&operator.argument);
-            if joined.exists() {
-                operator.argument = joined.to_string_lossy().into_owned();
-            }
+            operator.argument = parent
+                .join(&operator.argument)
+                .to_string_lossy()
+                .into_owned();
         }
     }
 
@@ -545,26 +542,22 @@ impl Parser {
     fn parse_include(&mut self, lexer: &mut Lexer) -> Result<Directive> {
         let path = self.expect_argument(lexer, "Include path")?;
 
-        // Resolve relative paths (including globs) against the including file's
-        // directory. A glob pattern never `exists()` as a literal path, so it is
-        // detected explicitly rather than falling back to a CWD-relative path.
-        let resolved_path =
-            if let Some(parent) = self.location.file.as_ref().and_then(|f| f.parent()) {
-                let candidate = parent.join(&path);
-                let is_glob = path.contains(['*', '?', '[']);
-                if candidate.exists() || is_glob {
-                    candidate.to_string_lossy().to_string()
-                } else {
-                    path
-                }
-            } else {
-                path
-            };
+        let is_glob = path.contains(['*', '?', '[']);
+        let path = std::path::Path::new(&path);
+        let resolved_path = match self.location.file.as_ref().and_then(|f| f.parent()) {
+            Some(parent) => parent.join(path),
+            None => path.to_path_buf(),
+        };
+        let including_location = self.location.clone();
+        let parsed = if is_glob {
+            self.parse_glob(&resolved_path.to_string_lossy())
+        } else {
+            self.parse_file(&resolved_path)
+        };
+        self.location = including_location;
+        parsed?;
 
-        // Parse the included file(s)
-        self.parse_glob(&resolved_path)?;
-
-        Ok(Directive::Include(resolved_path.into()))
+        Ok(Directive::Include(resolved_path))
     }
 
     /// Expect an unquoted argument.

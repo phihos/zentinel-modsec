@@ -13,37 +13,8 @@ pub struct IpMatchOperator {
 impl IpMatchOperator {
     /// Create from a comma- and/or whitespace-separated IP/CIDR list.
     pub fn new(ips: &str) -> Result<Self> {
-        let networks = ips
-            .split(|c: char| c == ',' || c.is_whitespace())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| {
-                // Handle bare IPs (add /32 or /128)
-                if s.contains('/') {
-                    s.parse::<IpNetwork>()
-                } else {
-                    // Try as IP address first
-                    if let Ok(ip) = s.parse::<IpAddr>() {
-                        match ip {
-                            IpAddr::V4(v4) => {
-                                Ok(IpNetwork::V4(ipnetwork::Ipv4Network::new(v4, 32).unwrap()))
-                            }
-                            IpAddr::V6(v6) => {
-                                Ok(IpNetwork::V6(ipnetwork::Ipv6Network::new(v6, 128).unwrap()))
-                            }
-                        }
-                    } else {
-                        s.parse::<IpNetwork>()
-                    }
-                }
-            })
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| Error::InvalidIp {
-                value: ips.to_string(),
-                message: e.to_string(),
-            })?;
-
-        Ok(Self { networks })
+        let entries = ips.split(|c: char| c == ',' || c.is_whitespace());
+        Self::from_entries(entries, ips)
     }
 
     /// Create from a file containing IPs/CIDRs.
@@ -52,35 +23,25 @@ impl IpMatchOperator {
             path: path.into(),
             source: e,
         })?;
-
-        let networks = content
+        let entries = content
             .lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .map(|s| {
-                if s.contains('/') {
-                    s.parse::<IpNetwork>()
-                } else {
-                    if let Ok(ip) = s.parse::<IpAddr>() {
-                        match ip {
-                            IpAddr::V4(v4) => {
-                                Ok(IpNetwork::V4(ipnetwork::Ipv4Network::new(v4, 32).unwrap()))
-                            }
-                            IpAddr::V6(v6) => {
-                                Ok(IpNetwork::V6(ipnetwork::Ipv6Network::new(v6, 128).unwrap()))
-                            }
-                        }
-                    } else {
-                        s.parse::<IpNetwork>()
-                    }
-                }
-            })
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| Error::InvalidIp {
-                value: path.to_string(),
-                message: e.to_string(),
-            })?;
+            .map(str::trim)
+            .filter(|line| !line.starts_with('#'))
+            .flat_map(|line| line.split(','));
+        Self::from_entries(entries, path)
+    }
 
+    fn from_entries<'a>(entries: impl Iterator<Item = &'a str>, source: &str) -> Result<Self> {
+        let networks = entries
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                s.parse::<IpNetwork>().map_err(|err| Error::InvalidIp {
+                    value: source.to_owned(),
+                    message: format!("{s}: {err}"),
+                })
+            })
+            .collect::<Result<_>>()?;
         Ok(Self { networks })
     }
 

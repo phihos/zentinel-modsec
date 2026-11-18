@@ -183,6 +183,13 @@ impl OperatorName {
         OPERATOR_MAP.get(lower).copied()
     }
 
+    pub(crate) fn uses_data_file(self) -> bool {
+        matches!(
+            self,
+            Self::PmFromFile | Self::Pmf | Self::IpMatchFromFile | Self::IpMatchF
+        )
+    }
+
     /// Check if this operator requires an argument.
     #[inline]
     pub fn requires_argument(&self) -> bool {

@@ -41,8 +41,10 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
     let argument = &spec.argument;
     match name {
         OperatorName::Rx => Ok(Arc::new(RxOperator::new(argument)?)),
-        OperatorName::Pm | OperatorName::Pmf => Ok(Arc::new(PmOperator::new(argument)?)),
-        OperatorName::PmFromFile => Ok(Arc::new(PmOperator::from_file(argument)?)),
+        OperatorName::Pm => Ok(Arc::new(PmOperator::new(argument)?)),
+        OperatorName::PmFromFile | OperatorName::Pmf => {
+            Ok(Arc::new(PmOperator::from_file(argument)?))
+        }
         OperatorName::Contains => Ok(Arc::new(ContainsOperator::new(argument))),
         OperatorName::BeginsWith => Ok(Arc::new(BeginsWithOperator::new(argument))),
         OperatorName::EndsWith => Ok(Arc::new(EndsWithOperator::new(argument))),
@@ -56,10 +58,10 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         OperatorName::DetectXss => Ok(Arc::new(DetectXssOperator)),
         OperatorName::ValidateUrlEncoding => Ok(Arc::new(ValidateUrlEncodingOperator)),
         OperatorName::ValidateUtf8Encoding => Ok(Arc::new(ValidateUtf8EncodingOperator)),
-        OperatorName::IpMatch | OperatorName::IpMatchF => {
-            Ok(Arc::new(IpMatchOperator::new(argument)?))
+        OperatorName::IpMatch => Ok(Arc::new(IpMatchOperator::new(argument)?)),
+        OperatorName::IpMatchFromFile | OperatorName::IpMatchF => {
+            Ok(Arc::new(IpMatchOperator::from_file(argument)?))
         }
-        OperatorName::IpMatchFromFile => Ok(Arc::new(IpMatchOperator::from_file(argument)?)),
         OperatorName::NoMatch => Ok(Arc::new(NoMatchOperator)),
         OperatorName::UnconditionalMatch => Ok(Arc::new(UnconditionalMatchOperator)),
         OperatorName::ValidateByteRange => Ok(Arc::new(ValidateByteRangeOperator::new(argument))),
