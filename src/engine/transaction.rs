@@ -10,7 +10,7 @@ use std::sync::{Arc, OnceLock};
 use super::body::{BodyState, RequestSpool};
 use super::control::{TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
-use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
+use super::match_log::{MatchLog, MatchedFields, MatchedRules, RawMatch, RuleLocation};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
 use super::target_indices::{ActiveTargets, RequestCollections};
@@ -53,13 +53,14 @@ pub struct Transaction {
     matched_vars: Vec<(ByteValue, ByteValue)>,
     /// Per-transaction `ctl:` overrides.
     controls: TransactionControls,
-    /// Every variable that caused a rule to match, in order.
+    /// The first variable matched by each completed rule link, in order.
     ///
     /// Separate from `matched_vars`, which ModSecurity scopes to the current
     /// rule so that `MATCHED_VARS` reads correctly. This accumulates for the
     /// whole transaction, because audit logging wants to answer "what did
     /// rule 942100 actually see" after the fact.
     matched_data: MatchLog<(RuleLocation, RawMatch)>,
+    matched_fields: Option<Box<MatchedFields>>,
     /// What each `setvar` that ran did, in order. See [`SetVarEffect`].
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
@@ -274,6 +275,7 @@ impl Transaction {
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
             matched_data: MatchLog::default(),
+            matched_fields: None,
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
             rule_messages: Vec::new(),
@@ -358,12 +360,33 @@ impl Transaction {
         self.request.server_name = name.to_string();
     }
 
-    /// Every variable that caused a rule to match, in order.
+    /// The first variable matched by each completed rule link, in order.
     ///
     /// Pairs with [`matched_rules`](Self::matched_rules): that says which
     /// rules fired, this says what they saw.
     pub fn matched_data(&self) -> &[MatchedData] {
         self.matched_data.as_slice(&self.ruleset, self.phase)
+    }
+
+    /// Collect up to `limit` distinct field names per completed logical rule.
+    /// Call before processing starts. The selector may discard or shorten a
+    /// displayed variable name. Matching values are never copied into this log.
+    pub fn record_matched_fields(&mut self, limit: usize, select: fn(&str) -> Option<&str>) {
+        self.matched_fields = Some(Box::new(MatchedFields {
+            select,
+            limit,
+            records: Vec::new(),
+        }));
+    }
+
+    /// Selected field names in match order, associated with the chain starter.
+    pub fn matched_fields(&self) -> impl Iterator<Item = (Option<&str>, &str)> {
+        self.matched_fields.iter().flat_map(|fields| {
+            fields
+                .records
+                .iter()
+                .map(|(rule, name)| (rule.id(&self.ruleset), name.as_str()))
+        })
     }
 
     /// Record what every `setvar` does, for [`setvar_effects`](Self::setvar_effects).
@@ -543,6 +566,7 @@ impl Transaction {
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data = Vec::new();
+        let mut pending_fields = Vec::new();
         let mut skip_count: u32 = 0;
         let mut skip_after: Option<usize> = None;
 
@@ -652,6 +676,9 @@ impl Transaction {
                     }
                 }
 
+                if let Some(fields) = &self.matched_fields {
+                    fields.collect(&mut pending_fields, &self.matched_vars);
+                }
                 if rule.is_chain {
                     // A link that expects more links after it. Hold the
                     // starter's remaining actions: nothing else may fire until
@@ -674,6 +701,12 @@ impl Transaction {
                     if let (Some(history), Some(id)) = (&mut self.chain_history, &starter.id) {
                         history.complete(id);
                     }
+                }
+                if let Some(fields) = &mut self.matched_fields {
+                    let location = RuleLocation::new(phase, starter_index);
+                    fields
+                        .records
+                        .extend(pending_fields.drain(..).map(|name| (location, name)));
                 }
                 if starter.id.is_some() {
                     self.matched_rules
@@ -753,6 +786,7 @@ impl Transaction {
                 // their own.
                 if chain_start.take().is_some() || rule.is_chain {
                     pending_chain_data.clear();
+                    pending_fields.clear();
                     while idx < rules.len() && rules[idx].is_chain {
                         idx += 1;
                     }
@@ -780,6 +814,22 @@ impl Transaction {
         // already contains their IDs and count results in execution order.
         self.matched_rules = MatchedRules::from_defaults(&defaults.ids);
         self.matched_data = MatchLog::with_default_prefix(!defaults.counts.is_empty());
+        if let Some(fields) = &mut self.matched_fields {
+            if fields.limit > 0 {
+                for &(index, _) in &defaults.counts {
+                    let name = dispatch[usize::from(index)].selections[0]
+                        .match_name
+                        .as_ref()
+                        .unwrap();
+                    if let Some(name) = (fields.select)(name.display_text()) {
+                        fields.records.push((
+                            RuleLocation::new(phase, usize::from(index)),
+                            name.to_owned(),
+                        ));
+                    }
+                }
+            }
+        }
         self.matched_vars.clear();
         self.matched_vars.extend(
             defaults

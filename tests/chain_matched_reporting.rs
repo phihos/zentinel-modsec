@@ -108,3 +108,36 @@ SecRule REQUEST_METHOD "@streq GET" "id:099,phase:2,pass"
         Some("99")
     );
 }
+
+#[test]
+fn selected_fields_span_a_completed_chain_and_keep_the_first_audit_value_per_link() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass,chain"
+SecRule REQUEST_URI "@streq /missing" "t:none"
+SecRule ARGS:a|ARGS:b "@streq green" "id:2,phase:1,pass,chain"
+SecRule ARGS:b|ARGS:c|ARGS:d "@streq green" "t:none"
+"#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.record_matched_fields(3, |name| Some(name));
+    tx.process_uri("/?a=green&b=green&c=green&d=green", "GET", "HTTP/1.1")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(
+        tx.matched_fields().collect::<Vec<_>>(),
+        [
+            (Some("2"), "ARGS:a"),
+            (Some("2"), "ARGS:b"),
+            (Some("2"), "ARGS:c")
+        ]
+    );
+    assert_eq!(
+        tx.matched_data()
+            .iter()
+            .map(|m| m.variable.as_str())
+            .collect::<Vec<_>>(),
+        ["ARGS:a", "ARGS:b"]
+    );
+}

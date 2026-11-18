@@ -31,8 +31,30 @@ impl RuleLocation {
         &ruleset.rules_for_phase(Phase::ALL[self.0 & 7])[self.0 >> 3]
     }
 
-    fn id(self, ruleset: &CompiledRuleset) -> Option<&str> {
+    pub(super) fn id(self, ruleset: &CompiledRuleset) -> Option<&str> {
         self.rule(ruleset).id.as_deref()
+    }
+}
+
+/// Connector-selected names for matched logical rules. Values remain in the link audit.
+pub(super) struct MatchedFields {
+    pub select: fn(&str) -> Option<&str>,
+    pub limit: usize,
+    pub records: Vec<(RuleLocation, String)>,
+}
+
+impl MatchedFields {
+    pub fn collect(&self, pending: &mut Vec<String>, matches: &[(ByteValue, ByteValue)]) {
+        for (name, _) in matches {
+            if pending.len() == self.limit {
+                break;
+            }
+            if let Some(name) = (self.select)(name.display_text()) {
+                if !pending.iter().any(|prev| prev == name) {
+                    pending.push(name.to_owned());
+                }
+            }
+        }
     }
 }
 
