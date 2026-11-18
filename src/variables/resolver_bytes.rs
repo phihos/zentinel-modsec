@@ -4,6 +4,7 @@ use crate::variables::{
     folded_key, qualified_name, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms,
     TargetSelection,
 };
+use std::borrow::Cow;
 
 // Keep at most one common-size request line alive between rule evaluations.
 pub(super) const MAX_CACHED_REQUEST_LINE: usize = 4096;
@@ -168,38 +169,38 @@ impl<'a> VariableResolver<'a> {
                     }
                 }
             }
-            _ if !selection.excludes(None) => self.visit_scalar(name, |prefix, value| {
-                debug_assert_eq!(prefix, super::super::selectors::emitted_name(name));
-                visit(prefix, None, value);
-            }),
+            _ if !selection.excludes(None) => {
+                if let Some(value) = self.scalar_value(name) {
+                    visit(super::super::selectors::emitted_name(name), None, &value);
+                }
+            }
             _ => (),
         }
     }
 
-    fn visit_scalar(&self, name: VariableName, mut scalar: impl FnMut(&str, &[u8])) {
+    pub(crate) fn scalar_value(&self, name: VariableName) -> Option<Cow<'a, [u8]>> {
         let request = self.request;
+        let response = self.response;
         use VariableName::*;
-        match name {
-            UniqueId => scalar("UNIQUE_ID", request.unique_id().as_bytes()),
-            RequestUri => scalar("REQUEST_URI", request.uri_bytes()),
-            RequestUriRaw => scalar("REQUEST_URI_RAW", request.uri_bytes()),
-            RequestFilename => scalar("REQUEST_FILENAME", request.path_bytes()),
-            QueryString => scalar("QUERY_STRING", request.query_bytes()),
-            RequestMethod => scalar("REQUEST_METHOD", request.method_bytes()),
-            RequestProtocol => scalar("REQUEST_PROTOCOL", request.protocol_bytes()),
+        let bytes: &[u8] = match name {
+            UniqueId => request.unique_id().as_bytes(),
+            RequestUri | RequestUriRaw => request.uri_bytes(),
+            RequestFilename => request.path_bytes(),
+            QueryString => request.query_bytes(),
+            RequestMethod => request.method_bytes(),
+            RequestProtocol => request.protocol_bytes(),
             RequestBasename => {
                 let path = request.path_bytes();
                 // Coraza keeps the entire decoded path for a directory target.
-                let basename = path
-                    .rsplit(|&b| b == b'/' || b == b'\\')
+                path.rsplit(|&b| b == b'/' || b == b'\\')
                     .next()
                     .filter(|last| !last.is_empty())
-                    .unwrap_or(path);
-                scalar("REQUEST_BASENAME", basename);
+                    .unwrap_or(path)
             }
+            RequestLine if !self.connector_metadata.request_line => b"",
             RequestLine => {
                 if let Some(line) = self.request_line.and_then(OnceLock::get) {
-                    return scalar("REQUEST_LINE", line);
+                    return Some(Cow::Borrowed(line));
                 }
                 let line = [
                     request.method_bytes(),
@@ -213,156 +214,125 @@ impl<'a> VariableResolver<'a> {
                     .request_line
                     .filter(|_| line.len() <= MAX_CACHED_REQUEST_LINE)
                 {
-                    scalar(
-                        "REQUEST_LINE",
-                        cache.get_or_init(|| line.into_boxed_slice()),
-                    );
+                    cache.get_or_init(|| line.into_boxed_slice())
                 } else {
-                    scalar("REQUEST_LINE", &line);
+                    return Some(Cow::Owned(line));
                 }
             }
-            RequestBody => scalar("REQUEST_BODY", request.request_body_bytes_variable()),
-            ResBodyProcessor => scalar(
-                "RES_BODY_PROCESSOR",
-                if self.response.json.is_some() {
+            RequestBody => request.request_body_bytes_variable(),
+            ResBodyProcessor => {
+                if response.json.is_some() {
                     b"JSON"
                 } else {
                     b""
-                },
-            ),
+                }
+            }
             ResBodyError | ResBodyProcessorError | ResBodyErrorMsg | ResBodyProcessorErrorMsg => {
-                let error = self
-                    .response
+                let error = response
                     .json
                     .as_ref()
                     .and_then(|json| json.error.as_deref());
-                let prefix = name.seclang_name();
                 match (name, error) {
-                    (_, None) => scalar(prefix, b""),
+                    (_, None) => b"",
                     (ResBodyErrorMsg, Some(error)) => {
-                        scalar(prefix, format!("JSON: {error}").as_bytes())
+                        return Some(Cow::Owned(format!("JSON: {error}").into_bytes()))
                     }
-                    (ResBodyProcessorErrorMsg, Some(error)) => scalar(prefix, error.as_bytes()),
-                    _ => scalar(prefix, b"1"),
+                    (ResBodyProcessorErrorMsg, Some(error)) => error.as_bytes(),
+                    _ => b"1",
                 }
             }
-            ResponseBody => scalar("RESPONSE_BODY", self.response.body_variable_bytes()),
-            ResponseContentLength => {
-                // An inspected empty body exposes "0"; an uninspected body
-                // retains the initial empty scalar, even with a length header.
-                let length = if self.response.body_inspected && self.response.json.is_none() {
-                    self.response.body_length().to_string()
-                } else {
-                    String::new()
-                };
-                scalar("RESPONSE_CONTENT_LENGTH", length.as_bytes());
+            ResponseBody => response.body_variable_bytes(),
+            // An inspected empty body exposes "0"; an uninspected body retains
+            // its initial empty scalar, even with a length header.
+            ResponseContentLength if response.body_inspected && response.json.is_none() => {
+                return Some(Cow::Owned(response.body_length().to_string().into_bytes()));
             }
-            ResponseContentType => {
-                scalar("RESPONSE_CONTENT_TYPE", self.response.content_type_bytes())
-            }
+            ResponseContentLength => b"",
+            ResponseContentType => response.content_type_bytes(),
             ArgsCombinedSize => {
                 let mut size = 0;
                 for map in [&request.args_get, &request.args_post] {
                     map.visit(None, |_, key, value| size += key.len() + value.len());
                 }
-                scalar("ARGS_COMBINED_SIZE", size.to_string().as_bytes());
+                return Some(Cow::Owned(size.to_string().into_bytes()));
             }
             MatchedVar | MatchedVarName if self.matched_bytes.is_some() => {
-                if let Some((key, value)) = self.matched_bytes.and_then(|values| values.last()) {
-                    if name == MatchedVar {
-                        scalar("MATCHED_VAR", value.as_bytes());
-                    } else {
-                        scalar("MATCHED_VAR_NAME", key.as_bytes());
-                    }
+                let (key, value) = self.matched_bytes?.last()?;
+                if name == MatchedVar {
+                    value.as_bytes()
+                } else {
+                    key.as_bytes()
                 }
             }
-            RequestBodyLength => scalar(
-                "REQUEST_BODY_LENGTH",
-                request.request_body_length_variable().as_bytes(),
-            ),
-            ArgumentsLimitReached => {
-                scalar("ARGUMENTS_LIMIT_REACHED", request.argument_limit_flag())
+            RequestBodyLength => {
+                return Some(Cow::Owned(
+                    request.request_body_length_variable().into_bytes(),
+                ))
             }
-            InboundDataError => scalar(
-                "INBOUND_DATA_ERROR",
+            ArgumentsLimitReached => request.argument_limit_flag(),
+            InboundDataError => {
                 if request.inbound_data_error {
                     b"1"
                 } else {
                     b""
-                },
-            ),
-            OutboundDataError => scalar(
-                "OUTBOUND_DATA_ERROR",
-                if self.response.outbound_data_error {
+                }
+            }
+            OutboundDataError => {
+                if response.outbound_data_error {
                     b"1"
                 } else {
-                    b""
-                },
-            ),
-            FilesCombinedSize => scalar(
-                "FILES_COMBINED_SIZE",
-                request.files_combined_size.to_string().as_bytes(),
-            ),
-            MultipartStrictCheck | MultipartStrictError => scalar(
-                "MULTIPART_STRICT_ERROR",
+                    b"0"
+                }
+            }
+            FilesCombinedSize => {
+                return Some(Cow::Owned(
+                    request.files_combined_size.to_string().into_bytes(),
+                ))
+            }
+            MultipartStrictCheck | MultipartStrictError => {
                 if request.multipart_strict_error {
                     b"1"
                 } else {
                     b""
-                },
-            ),
-            MultipartDuplicatePartHeader => scalar(
-                "MULTIPART_DUPLICATE_PART_HEADER",
+                }
+            }
+            MultipartDuplicatePartHeader => {
                 if request.multipart_duplicate_part_header {
                     b"1"
                 } else {
                     b"0"
-                },
-            ),
-            MultipartInvalidQuoting => scalar(
-                "MULTIPART_INVALID_QUOTING",
+                }
+            }
+            MultipartInvalidQuoting => {
                 if request.multipart_invalid_quoting {
                     b"1"
                 } else {
                     b"0"
-                },
-            ),
-            ReqBodyProcessor => scalar("REQBODY_PROCESSOR", request.body_processor.as_bytes()),
-            // The error flag is always present. The message exists only after a processor error.
-            ReqBodyError | ReqBodyProcessorError => scalar(
-                "REQBODY_ERROR",
+                }
+            }
+            ReqBodyProcessor => request.body_processor.as_bytes(),
+            ReqBodyError | ReqBodyProcessorError => {
                 if request.body_error.is_some() {
                     b"1"
                 } else {
                     b"0"
-                },
-            ),
-            ReqBodyErrorMsg | ReqBodyProcessorErrorMsg => {
-                if let Some(message) = &request.body_error {
-                    scalar("REQBODY_ERROR_MSG", message.as_bytes());
                 }
             }
-            ResponseProtocol => scalar("RESPONSE_PROTOCOL", self.response.protocol.as_bytes()),
-            ResponseStatus => scalar(
-                "RESPONSE_STATUS",
-                self.response.status.to_string().as_bytes(),
-            ),
-            RemoteAddr => scalar("REMOTE_ADDR", request.client_ip.as_bytes()),
-            RemotePort => scalar("REMOTE_PORT", request.client_port.to_string().as_bytes()),
-            ServerName => scalar("SERVER_NAME", request.server_name.as_bytes()),
-            ServerAddr => scalar("SERVER_ADDR", request.server_addr.as_bytes()),
-            ServerPort => scalar("SERVER_PORT", request.server_port.to_string().as_bytes()),
-            MatchedVar => {
-                if let Some(value) = self.matched_var {
-                    scalar("MATCHED_VAR", value.as_bytes());
-                }
-            }
-            MatchedVarName => {
-                if let Some((key, _)) = self.matched_vars.last() {
-                    scalar("MATCHED_VAR_NAME", key.as_bytes());
-                }
-            }
-            _ => (),
-        }
+            ReqBodyErrorMsg | ReqBodyProcessorErrorMsg => request.body_error.as_deref()?.as_bytes(),
+            ResponseProtocol => response.protocol.as_bytes(),
+            ResponseStatus if !self.connector_metadata.response_status => b"",
+            ResponseStatus => return Some(Cow::Owned(response.status.to_string().into_bytes())),
+            RemoteAddr => request.client_ip.as_bytes(),
+            RemotePort if !self.connector_metadata.client_port => b"",
+            RemotePort => return Some(Cow::Owned(request.client_port.to_string().into_bytes())),
+            ServerName => request.server_name.as_bytes(),
+            ServerAddr => request.server_addr.as_bytes(),
+            ServerPort if !self.connector_metadata.server_port => b"",
+            ServerPort => return Some(Cow::Owned(request.server_port.to_string().into_bytes())),
+            MatchedVar => self.matched_var?.as_bytes(),
+            MatchedVarName => self.matched_vars.last()?.0.as_bytes(),
+            _ => return None,
+        };
+        Some(Cow::Borrowed(bytes))
     }
 }

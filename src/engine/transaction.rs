@@ -15,10 +15,11 @@ use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
 use crate::parser::{
     Action, BodyLimitAction, DataAction, DisruptiveAction, MetadataAction, SetVarSpec, SetVarValue,
-    VariableSpec,
+    VariableName, VariableSpec,
 };
 use crate::variables::{
-    ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
+    ByteCollection, ByteValue, ConnectorMetadata, RequestData, ResponseData, TxCollection,
+    VariableResolver,
 };
 
 /// Recognize the two media types for this processor and its structured suffix.
@@ -38,6 +39,7 @@ pub struct Transaction {
     request: RequestData,
     request_spool: Option<Box<RequestSpool>>,
     request_line: OnceLock<Box<[u8]>>,
+    connector_metadata: ConnectorMetadata,
     /// Response data.
     response: ResponseData,
     /// TX collection (mutable variables).
@@ -264,6 +266,7 @@ impl Transaction {
             ruleset,
             request_spool: None,
             request_line: OnceLock::new(),
+            connector_metadata: ConnectorMetadata::default(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
             numeric_tx_indices: [usize::MAX; super::ruleset::NUMERIC_TX_SLOTS],
@@ -339,12 +342,14 @@ impl Transaction {
     pub fn set_client_addr(&mut self, ip: &str, port: u16) {
         self.request.client_ip = ip.to_string();
         self.request.client_port = port;
+        self.connector_metadata.client_port = true;
     }
 
     /// Set the local address, backing `SERVER_ADDR` and `SERVER_PORT`.
     pub fn set_server_addr(&mut self, ip: &str, port: u16) {
         self.request.server_addr = ip.to_string();
         self.request.server_port = port;
+        self.connector_metadata.server_port = true;
     }
 
     /// Set the server name, backing `SERVER_NAME`.
@@ -392,6 +397,7 @@ impl Transaction {
     /// Process the request URI.
     pub fn process_uri(&mut self, uri: &str, method: &str, protocol: &str) -> Result<()> {
         self.request_line.take();
+        self.connector_metadata.request_line = true;
         self.request.set_uri_bytes(uri.as_bytes());
         self.request.set_method(method);
         self.request.set_protocol(protocol);
@@ -401,6 +407,7 @@ impl Transaction {
     /// Process an original request line without replacing invalid UTF-8.
     pub fn process_uri_bytes(&mut self, uri: &[u8], method: &[u8], protocol: &[u8]) -> Result<()> {
         self.request_line.take();
+        self.connector_metadata.request_line = true;
         self.request.set_uri_bytes(uri);
         self.request.set_method_bytes(method);
         self.request.set_protocol_bytes(protocol);
@@ -599,6 +606,7 @@ impl Transaction {
             return Ok(());
         }
         self.response.set_status(status);
+        self.connector_metadata.response_status = true;
         self.response.set_protocol(protocol);
         self.process_response_headers()
     }
@@ -1348,6 +1356,12 @@ impl Transaction {
         );
     }
 
+    fn variable_resolver(&self) -> VariableResolver<'_> {
+        VariableResolver::new_bytes(&self.request, &self.response, &self.tx, &self.matched_vars)
+            .with_request_line(&self.request_line)
+            .with_connector_metadata(self.connector_metadata)
+    }
+
     /// A target's values are snapshotted together. The next target is
     /// resolved after this target's actions, so it sees updated TX state.
     fn resolve_rule_target(
@@ -1359,13 +1373,7 @@ impl Transaction {
         search: Option<&StaticSearch<'_>>,
         target: &mut ResolvedTarget,
     ) -> Result<()> {
-        let resolver = VariableResolver::new_bytes(
-            &self.request,
-            &self.response,
-            &self.tx,
-            &self.matched_vars,
-        )
-        .with_request_line(&self.request_line);
+        let resolver = self.variable_resolver();
         let by_id = self.controls.has_target_removals(logical_id);
         let by_tag = if tag_actions.is_empty() {
             TagTargetRemoval::None
@@ -1715,11 +1723,11 @@ impl Transaction {
         while let Some((prefix, name, suffix)) = super::split_operator_macro(rest) {
             let value = self.macro_value_bytes(name);
             if prefix.is_empty() && output.is_empty() && suffix.is_empty() {
-                return Cow::Borrowed(value);
+                return value;
             }
             output.reserve(prefix.len() + value.len());
             output.extend_from_slice(prefix.as_bytes());
-            output.extend_from_slice(value);
+            output.extend_from_slice(&value);
             rest = suffix;
         }
         if output.is_empty() {
@@ -1730,64 +1738,70 @@ impl Transaction {
         }
     }
 
-    fn macro_value_bytes<'a>(&'a self, name: &'a str) -> &'a [u8] {
-        let Some((collection, key)) = name.split_once('.') else {
-            if name.eq_ignore_ascii_case("unique_id") {
-                return self.id().as_bytes();
-            }
-            if name.eq_ignore_ascii_case("res_body_processor") {
-                return if self.response.json.is_some() {
-                    b"JSON"
-                } else {
-                    b""
-                };
-            }
-            if name.eq_ignore_ascii_case("arguments_limit_reached") {
-                return self.request.argument_limit_flag();
-            }
-            if name.eq_ignore_ascii_case("matched_var") {
-                return self
-                    .matched_vars
-                    .last()
-                    .map(|(_, v)| v.as_bytes())
-                    .unwrap_or_default();
-            }
-            if name.eq_ignore_ascii_case("matched_var_name") {
-                return self
-                    .matched_vars
-                    .last()
-                    .map(|(k, _)| k.as_bytes())
-                    .unwrap_or_default();
-            }
-            return self
-                .tx
-                .first_value_bytes(name.as_bytes())
-                .unwrap_or_default();
-        };
+    fn macro_value_bytes<'a>(&'a self, name: &'a str) -> Cow<'a, [u8]> {
+        let (collection, key) = name.split_once('.').unwrap_or((name, ""));
         let key = key.as_bytes();
-        let value = if collection.eq_ignore_ascii_case("tx") {
-            self.tx.first_value_bytes(key)
-        } else if collection.eq_ignore_ascii_case("request_headers") {
-            self.request.headers.first_value_bytes(key)
-        } else if collection.eq_ignore_ascii_case("args") {
-            self.request
+        // TX is the most frequent operand in CRS and needs no variable-name lookup.
+        if collection.eq_ignore_ascii_case("tx") {
+            return Cow::Borrowed(self.tx.first_value_bytes(key).unwrap_or(name.as_bytes()));
+        }
+        let Some(variable) = VariableName::from_str(collection) else {
+            // Legacy bare placeholders can address TX variables directly.
+            return Cow::Borrowed(if collection == name {
+                self.tx
+                    .first_value_bytes(name.as_bytes())
+                    .unwrap_or_default()
+            } else {
+                b""
+            });
+        };
+
+        // Coraza's keyed name collections use the same Get(key) as their value
+        // collections; only rule targeting (FindAll/FindString) yields names.
+        use VariableName::*;
+        let request = &self.request;
+        let value = match variable {
+            Args | ArgsNames => request
                 .args_get
                 .first_value_bytes(key)
-                .or_else(|| self.request.args_post.first_value_bytes(key))
-        } else if collection.eq_ignore_ascii_case("args_get") {
-            self.request.args_get.first_value_bytes(key)
-        } else if collection.eq_ignore_ascii_case("args_post") {
-            self.request.args_post.first_value_bytes(key)
-        } else if collection.eq_ignore_ascii_case("response_args") {
-            self.response
+                .or_else(|| request.args_post.first_value_bytes(key)),
+            ArgsGet | ArgsGetNames => request.args_get.first_value_bytes(key),
+            ArgsPost | ArgsPostNames => request.args_post.first_value_bytes(key),
+            RequestHeaders | RequestHeadersNames => request.headers.first_value_bytes(key),
+            RequestCookies | RequestCookiesNames => request.cookies.first_value_bytes(key),
+            ResponseHeaders | ResponseHeadersNames => self
+                .response
+                .headers
+                .first_value_bytes(&crate::variables::folded_key(key)),
+            ResponseArgs => self
+                .response
                 .json
-                .as_deref()
-                .and_then(|json| json.args.first_value_bytes(key))
-        } else {
-            return &[];
+                .as_ref()
+                .and_then(|json| json.args.first_value_bytes(key)),
+            Files => request.files.first_value_bytes(key),
+            FilesNames => request.files_names.first_value_bytes(key),
+            FilesSizes => request.files_sizes.first_value_bytes(key),
+            MultipartName => request.multipart_names.first_value_bytes(key),
+            MultipartFilename => request.multipart_filenames.first_value_bytes(key),
+            MultipartFilenameCharset => request.multipart_filename_charsets.first_value_bytes(key),
+            MultipartFilenameLanguage => {
+                request.multipart_filename_languages.first_value_bytes(key)
+            }
+            MultipartPartHeaders => request.multipart_part_headers.first_value_bytes(key),
+            Xml => request.xml.first_value_bytes(key),
+            MatchedVars | MatchedVarsNames => self
+                .matched_vars
+                .iter()
+                .find(|(k, _)| k.as_bytes().eq_ignore_ascii_case(key))
+                .map(|(_, v)| v.as_bytes()),
+            _ => {
+                return self
+                    .variable_resolver()
+                    .scalar_value(variable)
+                    .unwrap_or(Cow::Borrowed(b""))
+            }
         };
-        // Coraza returns the original collection.key spelling for a missing member.
-        value.unwrap_or(name.as_bytes())
+        Cow::Borrowed(value.unwrap_or(name.as_bytes()))
     }
 
     /// Publish the captures of a `capture` rule as `TX:0`..`TX:9`.
@@ -1955,6 +1969,30 @@ SecAction "id:4,phase:4,pass,ctl:responseBodyLimit=1""#).unwrap();
         ] {
             assert_eq!(tx.expand_macros_bytes(template).as_ref(), expected);
         }
+    }
+
+    #[test]
+    fn scalar_macros_borrow_available_bytes_and_own_uncached_lines() {
+        let mut tx = Transaction::new(make_ruleset(""), 403);
+        assert_eq!(tx.expand_macros_bytes("%{REQUEST_LINE}").as_ref(), b"");
+        tx.process_uri("", "", "").unwrap();
+        assert_eq!(tx.expand_macros_bytes("%{REQUEST_LINE}").as_ref(), b"  ");
+        tx.process_uri("/short", "GET", "HTTP/1.1").unwrap();
+        assert!(matches!(
+            tx.expand_macros_bytes("%{REQUEST_METHOD}"),
+            Cow::Borrowed(b"GET")
+        ));
+        assert!(matches!(
+            tx.expand_macros_bytes("%{REQUEST_LINE}"),
+            Cow::Borrowed(b"GET /short HTTP/1.1")
+        ));
+        let path = format!("/{}", "x".repeat(5000));
+        tx.process_uri(&path, "GET", "HTTP/1.1").unwrap();
+        let line = format!("GET {path} HTTP/1.1");
+        assert!(
+            matches!(tx.expand_macros_bytes("%{REQUEST_LINE}"), Cow::Owned(bytes) if bytes == line.as_bytes())
+        );
+        assert!(tx.request_line.get().is_none());
     }
 
     #[test]

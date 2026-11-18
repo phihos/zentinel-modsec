@@ -6,6 +6,15 @@ use super::{ByteValue, RequestData, ResponseData, TxCollection};
 #[path = "resolver_bytes.rs"]
 mod byte_resolution;
 use crate::parser::{Selection, VariableName, VariableSpec, XmlTarget};
+/// Connector fields distinguish an omitted callback from empty or zero inputs.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct ConnectorMetadata {
+    pub request_line: bool,
+    pub client_port: bool,
+    pub server_port: bool,
+    pub response_status: bool,
+}
+
 /// Variable resolver for transaction context.
 #[derive(Clone, Copy)]
 pub struct VariableResolver<'a> {
@@ -20,6 +29,7 @@ pub struct VariableResolver<'a> {
     captures: &'a [String],
     matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
     request_line: Option<&'a OnceLock<Box<[u8]>>>,
+    connector_metadata: ConnectorMetadata,
 }
 
 impl<'a> VariableResolver<'a> {
@@ -41,11 +51,23 @@ impl<'a> VariableResolver<'a> {
             captures,
             matched_bytes: None,
             request_line: None,
+            // Standalone resolver inputs supply their public numeric fields directly.
+            connector_metadata: ConnectorMetadata {
+                request_line: true,
+                client_port: true,
+                server_port: true,
+                response_status: true,
+            },
         }
     }
 
     pub(crate) fn with_request_line(mut self, line: &'a OnceLock<Box<[u8]>>) -> Self {
         self.request_line = Some(line);
+        self
+    }
+
+    pub(crate) fn with_connector_metadata(mut self, metadata: ConnectorMetadata) -> Self {
+        self.connector_metadata = metadata;
         self
     }
 
