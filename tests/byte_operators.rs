@@ -68,3 +68,40 @@ fn detection_operators_inspect_binary_values() {
             .matched
     );
 }
+
+#[test]
+fn static_regex_keeps_match_evidence_across_negation_and_changed_stages() {
+    use zentinel_modsec::{variables::ByteCollection, ModSecurity};
+
+    for negated in [false, true] {
+        let operator = if negated { "!@rx" } else { "@rx" };
+        let rules = format!(
+            r#"SecRuleEngine DetectionOnly
+SecRule REQUEST_HEADERS:Mode "@rx (sample)" "id:11,phase:1,pass,capture"
+SecRule REQUEST_HEADERS:Value "{operator} (draft)(-(42))?" "id:12,phase:1,pass,capture,multiMatch,t:lowercase""#
+        );
+        let engine = ModSecurity::from_string(&rules).unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/catalog", "GET", "HTTP/1.1").unwrap();
+        tx.add_request_header("Mode", "sample").unwrap();
+        tx.add_request_header_bytes(b"Value", b"\xffDRAFT-42")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.matched_rules(), ["11", "12"]);
+        let data = &tx.matched_data()[1];
+        if negated {
+            assert_eq!(data.value_bytes, b"\xffDRAFT-42");
+            assert_eq!(data.matched_portion_bytes, None);
+            assert_eq!(tx.tx().get_bytes(b"0"), None);
+            assert_eq!(tx.tx().get_bytes(b"1"), None);
+        } else {
+            assert_eq!(data.value_bytes, b"\xffdraft-42");
+            assert_eq!(
+                data.matched_portion_bytes.as_deref(),
+                Some(b"draft-42".as_slice())
+            );
+            assert_eq!(tx.tx().get_bytes(b"0"), Some(vec![b"draft-42".as_slice()]));
+            assert_eq!(tx.tx().get_bytes(b"3"), Some(vec![b"42".as_slice()]));
+        }
+    }
+}

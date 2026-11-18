@@ -107,12 +107,13 @@ struct ResolvedTarget {
 struct StaticSearch<'a> {
     rule: &'a CompiledRule,
     numeric: Option<crate::operators::NumericComparison>,
+    regex: Option<&'a crate::operators::RxOperator>,
     capture: bool,
     multi_match: bool,
 }
 
 impl StaticSearch<'_> {
-    fn first_match(&self, raw: &[u8]) -> Result<Option<PreparedStage>> {
+    fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
             if let Some(numeric) = self.numeric {
                 let matched = numeric.matches(value);
@@ -123,6 +124,9 @@ impl StaticSearch<'_> {
                     }),
                 );
             }
+            if let Some(regex) = self.regex {
+                return Ok(regex.rule_match(value, self.capture, self.rule.operator_negated));
+            }
             let result = self.rule.operator.execute_rule_bytes(value, self.capture)?;
             Ok((result.matched != self.rule.operator_negated).then_some(result))
         };
@@ -130,20 +134,25 @@ impl StaticSearch<'_> {
             self.rule
                 .transformations
                 .visit_byte_stages(raw, None, |stage, value| {
-                    Ok(execute(value)?.map(|result| PreparedStage {
-                        value: ByteValue::from(value),
-                        result,
-                        resume_after: Some(stage),
+                    Ok(execute(value)?.map(|result| {
+                        record(PreparedStage {
+                            value: ByteValue::from(value),
+                            result,
+                            resume_after: Some(stage),
+                        });
                     }))
-                })
+                })?;
         } else {
             let transformed = self.rule.transformations.apply_bytes(raw)?;
-            Ok(execute(&transformed)?.map(|result| PreparedStage {
-                value: ByteValue::from(transformed),
-                result,
-                resume_after: None,
-            }))
+            if let Some(result) = execute(&transformed)? {
+                record(PreparedStage {
+                    value: ByteValue::from(transformed),
+                    result,
+                    resume_after: None,
+                });
+            }
         }
+        Ok(())
     }
 }
 
@@ -1246,12 +1255,10 @@ impl Transaction {
                     return;
                 }
                 if let Some(search) = search.filter(|_| target.first.is_none()) {
-                    match search.first_match(value) {
-                        Ok(None) => (),
-                        Ok(Some(stage)) => {
-                            target.first = Some((match_name(prefix, member), stage));
-                        }
-                        Err(e) => error = Some(e),
+                    if let Err(e) = search.first_match(value, |stage| {
+                        target.first = Some((match_name(prefix, member), stage));
+                    }) {
+                        error = Some(e);
                     }
                 } else {
                     // A match can change selection controls or mutate the collection.
@@ -1277,9 +1284,7 @@ impl Transaction {
                 _ => Cow::Owned(count.to_string().into_bytes()),
             };
             if let Some(search) = search {
-                target.first = search
-                    .first_match(&value)?
-                    .map(|stage| (name.clone(), stage));
+                search.first_match(&value, |stage| target.first = Some((name.clone(), stage)))?;
             } else {
                 target.remaining.push((name.clone(), value.into_owned()));
             }
@@ -1302,8 +1307,13 @@ impl Transaction {
         let capture = dispatch.capture;
         let multi_match = dispatch.multi_match;
 
-        let search = (!dynamic).then_some(StaticSearch {
+        let search = (!dynamic).then(|| StaticSearch {
             numeric: dispatch.numeric,
+            regex: if rule.operator_spec.name == crate::parser::OperatorName::Rx {
+                rule.operator.compiled_regex()
+            } else {
+                None
+            },
             rule,
             capture,
             multi_match,

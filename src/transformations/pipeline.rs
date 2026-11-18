@@ -129,10 +129,15 @@ impl TransformationPipeline {
     }
 
     /// Apply each transformation without converting binary values into text.
+    #[inline]
     pub fn apply_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-        if self.transformations.is_empty() || self.input_is_unchanged(input) {
+        if self.input_is_unchanged(input) {
             return Ok(Cow::Borrowed(input));
         }
+        self.apply_byte_stages(input)
+    }
+
+    fn apply_byte_stages<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
         if let [only] = self.transformations.as_slice() {
             return only.transform_bytes(input);
         }
@@ -218,15 +223,17 @@ impl TransformationPipeline {
         Ok(None)
     }
 
+    #[inline]
     fn input_is_unchanged(&self, input: &[u8]) -> bool {
         // Above a short header or argument, the stages' vectorized searches
         // are faster than scanning a byte classification table.
-        input.len() <= 64
-            && self.byte_triggers.is_some_and(|flags| {
-                input
-                    .iter()
-                    .all(|&byte| BYTE_FLAGS[usize::from(byte)] & flags == 0)
-            })
+        self.transformations.is_empty()
+            || input.len() <= 64
+                && self.byte_triggers.is_some_and(|flags| {
+                    input
+                        .iter()
+                        .all(|&byte| BYTE_FLAGS[usize::from(byte)] & flags == 0)
+                })
     }
 
     /// Check if the pipeline is empty.
