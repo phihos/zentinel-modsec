@@ -2,6 +2,26 @@
 
 ## Current local checkpoint
 
+Engine commit `df9f095d9a804fc68ab7f259218899b0d2e90c19` on
+`spike/crs-parity` prepares collection selectors after configuration updates,
+skips empty collection resolution, visits scalar values directly and builds
+public audit records on first access. Raw matched evidence remains available
+across phases.
+
+Compared with `0895015` on the full CRS, default-backend GET p50 fell from
+114.35 to 88.37 µs and form POST p50 from 215.69 to 188.46 µs. P50 and p99
+improved in all eight rounds alternating warmed workers every 64 requests,
+including when every request read its audit data. In a separate 24-request
+mix of GET, form POST and nested JSON, p50 fell from 300.23 to 270.18 µs
+and p99 from 524.67 to 487.42 µs. Whole-process p99 was more variable on
+the shared host. Both backends reproduced the pinned corpus outcomes, all
+22 blocking traces and complete mixed-request audit evidence. The
+[local latency report](../zentinel-eval/results/latency-841b4eb/RESULTS.md)
+contains the measurements, allocation counts, ruleset memory cost and
+source-bound verification.
+
+## Request latency checkpoint at `0895015`
+
 Engine commit `08950153e71fbb68e03c57fca5acec6643bddf73` on
 `spike/crs-parity` moves static rule decisions to configuration loading and
 avoids reprocessing short inputs when all built-in transformations preserve
