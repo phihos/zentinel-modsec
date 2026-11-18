@@ -1,4 +1,23 @@
-# Coraza parity handoff — 2026-11-18
+# Coraza parity handoff — 2026-11-19
+
+## HAPTIC SPOA plugin compatibility
+
+The Rust plugin at `993a588` pins engine `b206f2f` and selects
+`CompileOptions::CORAZA_SPOA`. This profile follows Go Coraza v3.8.1's
+multiphase target order, separate query and body argument counts, chain and
+marker behavior, and regex flags. The standalone engine keeps its existing
+defaults. The plugin uses the Rust libinjection port.
+
+Both release libraries loaded all 35 policies in hub v0.13.0. All 99 request
+and response replies agreed on every compared field. The test excludes
+independently generated transaction IDs and uses each ID to correlate its
+response. The previous Rust build rejected one policy and differed on 31 of
+the 97 replies available for comparison.
+[Plugin comparison and replay instructions](https://github.com/phihos/haproxy-spoa-hub-plugin-coraza/blob/993a58863147860d2803c3003940ec6eb5902440/benches/backend/README.md)
+
+On the full CRS 4.25.0 detection corpus, both engines passed the same 4,649
+stages and failed the same 23. The client rejected one additional fixture
+before it reached either engine. [Detection comparison](benches/coraza-spoa-ftw.md)
 
 ## Engine refactoring
 
