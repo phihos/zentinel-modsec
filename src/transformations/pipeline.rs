@@ -114,16 +114,42 @@ impl TransformationPipeline {
         input: &[u8],
         mut visit: impl FnMut(&[u8]) -> Result<()>,
     ) -> Result<()> {
+        self.visit_byte_stages(input, None, |_, value| {
+            visit(value)?;
+            Ok(None::<()>)
+        })?;
+        Ok(())
+    }
+
+    /// Stop at a changed stage and resume after it without repeating the
+    /// transformation or operator. Stage zero denotes the original value.
+    pub(crate) fn visit_byte_stages<B>(
+        &self,
+        input: &[u8],
+        after: Option<usize>,
+        mut visit: impl FnMut(usize, &[u8]) -> Result<Option<B>>,
+    ) -> Result<Option<B>> {
+        if after.is_none() {
+            if let Some(done) = visit(0, input)? {
+                return Ok(Some(done));
+            }
+        }
         let mut current: Cow<'_, [u8]> = Cow::Borrowed(input);
-        visit(&current)?;
-        for transformation in &self.transformations {
+        for (index, transformation) in self
+            .transformations
+            .iter()
+            .enumerate()
+            .skip(after.unwrap_or(0))
+        {
             let next = transformation.transform_bytes(&current)?;
             if next.as_ref() != current.as_ref() {
-                visit(&next)?;
+                if let Some(done) = visit(index + 1, &next)? {
+                    return Ok(Some(done));
+                }
                 current = Cow::Owned(next.into_owned());
             }
         }
-        Ok(())
+        Ok(None)
     }
 
     /// Check if the pipeline is empty.

@@ -13,7 +13,7 @@ use crate::actions::{
     SetVarOperation,
 };
 use crate::error::Result;
-use crate::operators::{compile_operator_bytes, Operator};
+use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
 use crate::parser::{Action, BodyLimitAction, DataAction, FlowAction, VariableSpec};
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
@@ -86,6 +86,53 @@ struct RuleOutcome {
     actions: ActionResult,
     first_data: Option<MatchedData>,
     first_message: Option<RuleMessage>,
+}
+
+/// The first static match ends the read-only scan. Only this stage is
+/// prepared before actions run; later members retain their raw target values.
+struct PreparedStage {
+    value: Vec<u8>,
+    result: ByteOperatorResult,
+    resume_after: Option<usize>,
+}
+
+#[derive(Default)]
+struct ResolvedTarget {
+    first: Option<(ByteValue, PreparedStage)>,
+    remaining: Vec<(ByteValue, Vec<u8>)>,
+}
+
+struct StaticSearch<'a> {
+    rule: &'a CompiledRule,
+    capture: bool,
+    multi_match: bool,
+}
+
+impl StaticSearch<'_> {
+    fn first_match(&self, raw: &[u8]) -> Result<Option<PreparedStage>> {
+        let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
+            let result = self.rule.operator.execute_rule_bytes(value, self.capture)?;
+            Ok((result.matched != self.rule.operator_negated).then_some(result))
+        };
+        if self.multi_match {
+            self.rule
+                .transformations
+                .visit_byte_stages(raw, None, |stage, value| {
+                    Ok(execute(value)?.map(|result| PreparedStage {
+                        value: value.to_vec(),
+                        result,
+                        resume_after: Some(stage),
+                    }))
+                })
+        } else {
+            let transformed = self.rule.transformations.apply_bytes(raw)?;
+            Ok(execute(&transformed)?.map(|result| PreparedStage {
+                value: transformed.into_owned(),
+                result,
+                resume_after: None,
+            }))
+        }
+    }
 }
 
 /// What a rule matched on.
@@ -1169,7 +1216,8 @@ impl Transaction {
         spec: &VariableSpec,
         logical_id: Option<&str>,
         tag_actions: &[Action],
-    ) -> Vec<(ByteValue, ByteValue)> {
+        search: Option<&StaticSearch<'_>>,
+    ) -> Result<ResolvedTarget> {
         let resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
@@ -1179,7 +1227,7 @@ impl Transaction {
         .with_selectors(&self.ruleset.selectors);
         let by_id = self.controls.has_target_removals(logical_id);
         let by_tag = self.controls.has_tag_target_removals(tag_actions);
-        let mut values = Vec::new();
+        let mut resolved = Ok(ResolvedTarget::default());
         let mut count = 0usize;
         resolver.visit_values(spec, |prefix, member, value| {
             if (by_id && self.controls.removed_member(logical_id, spec, member))
@@ -1189,20 +1237,37 @@ impl Transaction {
             }
             if spec.count_mode {
                 count += 1;
+                return;
+            }
+            let Ok(target) = &mut resolved else {
+                return;
+            };
+            if let Some(search) = search.filter(|_| target.first.is_none()) {
+                match search.first_match(value) {
+                    Ok(None) => (),
+                    Ok(Some(stage)) => {
+                        target.first =
+                            Some((crate::variables::qualified_name(prefix, member), stage));
+                    }
+                    Err(error) => resolved = Err(error),
+                }
             } else {
-                values.push((
+                // A match can change selection controls or mutate the collection.
+                // Snapshot remaining members before running the first match's actions.
+                target.remaining.push((
                     crate::variables::qualified_name(prefix, member),
-                    ByteValue::from(value),
+                    value.to_vec(),
                 ));
             }
         });
+        let mut target = resolved?;
         if spec.count_mode {
-            values.push((
+            target.remaining.push((
                 crate::variables::count_name(spec),
-                ByteValue::from(count.to_string()),
+                count.to_string().into_bytes(),
             ));
         }
-        values
+        Ok(target)
     }
 
     fn evaluate_rule(
@@ -1224,17 +1289,32 @@ impl Transaction {
             .iter()
             .any(|a| matches!(a, Action::Flow(FlowAction::MultiMatch)));
 
-        let mut evaluate = |tx: &mut Self, name: Option<&ByteValue>, value: &[u8]| -> Result<()> {
-            let operator: &dyn Operator = if dynamic {
-                if bound_operator.is_none() {
-                    let expanded = tx.expand_operator_macros_bytes(&rule.operator_spec.argument);
-                    bound_operator = Some(compile_operator_bytes(&rule.operator_spec, &expanded)?);
-                }
-                bound_operator.as_deref().expect("bound just above")
+        let search = (!dynamic).then_some(StaticSearch {
+            rule,
+            capture,
+            multi_match,
+        });
+        let mut evaluate = |tx: &mut Self,
+                            name: Option<&ByteValue>,
+                            value: &[u8],
+                            prepared: Option<ByteOperatorResult>|
+         -> Result<()> {
+            let result = if let Some(result) = prepared {
+                result
             } else {
-                rule.operator.as_ref()
+                let operator: &dyn Operator = if dynamic {
+                    if bound_operator.is_none() {
+                        let expanded =
+                            tx.expand_operator_macros_bytes(&rule.operator_spec.argument);
+                        bound_operator =
+                            Some(compile_operator_bytes(&rule.operator_spec, &expanded)?);
+                    }
+                    bound_operator.as_deref().expect("bound just above")
+                } else {
+                    rule.operator.as_ref()
+                };
+                operator.execute_rule_bytes(value, capture)?
             };
-            let result = operator.execute_rule_bytes(value, capture)?;
             if result.matched == rule.operator_negated {
                 return Ok(());
             }
@@ -1298,18 +1378,32 @@ impl Transaction {
 
         if rule.variables.is_empty() {
             // SecAction has no target and matches exactly once.
-            evaluate(self, None, b"")?;
+            evaluate(self, None, b"", None)?;
         }
         for spec in &rule.variables {
-            for (name, value) in self.resolve_rule_target(spec, logical_id, tag_actions) {
+            let target =
+                self.resolve_rule_target(spec, logical_id, tag_actions, search.as_ref())?;
+            if let Some((name, stage)) = target.first {
+                evaluate(self, Some(&name), &stage.value, Some(stage.result))?;
+                if let Some(after) = stage.resume_after {
+                    rule.transformations.visit_byte_stages(
+                        &stage.value,
+                        Some(after),
+                        |_, value| {
+                            evaluate(self, Some(&name), value, None)?;
+                            Ok(None::<()>)
+                        },
+                    )?;
+                }
+            }
+            for (name, value) in target.remaining {
                 if multi_match {
-                    rule.transformations
-                        .for_each_byte_stage(value.as_bytes(), |stage| {
-                            evaluate(self, Some(&name), stage)
-                        })?;
+                    rule.transformations.for_each_byte_stage(&value, |stage| {
+                        evaluate(self, Some(&name), stage, None)
+                    })?;
                 } else {
-                    let transformed = rule.transformations.apply_bytes(value.as_bytes())?;
-                    evaluate(self, Some(&name), &transformed)?;
+                    let transformed = rule.transformations.apply_bytes(&value)?;
+                    evaluate(self, Some(&name), &transformed, None)?;
                 }
             }
         }
@@ -1527,6 +1621,76 @@ mod tests {
 
     fn make_ruleset(rules: &str) -> Arc<CompiledRuleset> {
         Arc::new(CompiledRuleset::from_string(rules).unwrap())
+    }
+
+    #[test]
+    fn first_static_hit_resumes_once_and_preserves_effects_before_a_callback_error() {
+        use crate::operators::OperatorResult;
+        use std::sync::Mutex;
+
+        struct Recorder(Mutex<Vec<Vec<u8>>>);
+        impl Operator for Recorder {
+            fn name(&self) -> &'static str {
+                "recorder"
+            }
+            fn execute(&self, _: &str) -> OperatorResult {
+                unreachable!("byte evaluation required")
+            }
+            fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
+                self.0.lock().unwrap().push(value.to_vec());
+                if value == b"tail" {
+                    return Err(crate::Error::Config {
+                        message: "test callback stopped".into(),
+                    });
+                }
+                if value.ends_with(&[0xff]) {
+                    Ok(ByteOperatorResult {
+                        matched: true,
+                        matched_value: Some(value.to_vec()),
+                        captures: vec![value.to_vec()],
+                    })
+                } else {
+                    Ok(ByteOperatorResult::no_match())
+                }
+            }
+        }
+        let rules = make_ruleset(
+            r#"SecRule ARGS_GET:k "@rx ." "id:77,phase:1,pass,capture,multiMatch,t:lowercase,t:uppercase,setvar:tx.hits=+1,setvar:tx.last=%{MATCHED_VAR}""#,
+        );
+        let mut rule = rules.rules_for_phase(Phase::RequestHeaders)[0].clone();
+        let recorder = Arc::new(Recorder(Mutex::new(Vec::new())));
+        rule.operator = recorder.clone();
+        for (query, expected) in [
+            (
+                "/?k=skip&k=MiXeD%FF&k=tail&k=never",
+                vec![
+                    &b"skip"[..],
+                    b"SKIP",
+                    b"MiXeD\xff",
+                    b"mixed\xff",
+                    b"MIXED\xff",
+                    b"tail",
+                ],
+            ),
+            ("/?k=tail&k=never", vec![&b"tail"[..]]),
+        ] {
+            recorder.0.lock().unwrap().clear();
+            let mut tx = Transaction::new(rules.clone(), 403);
+            tx.process_uri(query, "GET", "HTTP/1.1").unwrap();
+            let error = tx
+                .evaluate_rule(&rule, Some("77"), &rule.actions, true)
+                .err()
+                .unwrap();
+            assert!(error.to_string().contains("test callback stopped"));
+            assert_eq!(*recorder.0.lock().unwrap(), expected);
+            if expected.len() == 1 {
+                assert!(tx.tx().get("hits").is_none());
+            } else {
+                assert_eq!(tx.tx().get("hits"), Some(vec!["3"]));
+                assert_eq!(tx.tx().get_bytes(b"last"), Some(vec![&b"MIXED\xff"[..]]));
+                assert_eq!(tx.tx().get_bytes(b"1"), Some(vec![&b"MIXED\xff"[..]]));
+            }
+        }
     }
 
     #[test]
