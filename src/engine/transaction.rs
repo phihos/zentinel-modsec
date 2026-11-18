@@ -292,6 +292,17 @@ impl Transaction {
         self.request.unique_id()
     }
 
+    /// Report the backing collection for matches on members of ARGS and ARGS_NAMES.
+    ///
+    /// By default the match name uses the rule target (for example, `ARGS:Order`).
+    /// A connector may opt into `ARGS_GET:Order`, `ARGS_POST:Order` or
+    /// `ARGS_PATH:Order`. Name targets report `ARGS_GET_NAMES` and `ARGS_POST_NAMES`
+    /// for query and body fields. These names are also visible in MATCHED_VAR_NAME.
+    /// Count targets continue to describe the count over the complete collection.
+    pub fn set_source_qualified_argument_names(&mut self, enabled: bool) {
+        self.connector_metadata.source_qualified_arguments = enabled;
+    }
+
     /// Enable expanded rule message snapshots for a connector or audit consumer.
     /// Disabled by default; this does not change rule evaluation or log policy.
     pub fn set_record_rule_messages(&mut self, enabled: bool) {

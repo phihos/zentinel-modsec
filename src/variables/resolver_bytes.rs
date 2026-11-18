@@ -144,11 +144,17 @@ impl<'a> VariableResolver<'a> {
         match name {
             Args | ArgsNames => {
                 let names = name == ArgsNames;
-                let prefix = if names { "ARGS_NAMES" } else { "ARGS" };
-                visit(&request.args_get, prefix, names);
-                visit(&request.args_post, prefix, names);
-                if let Some(path) = request.path_arguments() {
-                    visit(path, prefix, names);
+                let (get, post, path) =
+                    match (self.connector_metadata.source_qualified_arguments, names) {
+                        (true, false) => ("ARGS_GET", "ARGS_POST", "ARGS_PATH"),
+                        (true, true) => ("ARGS_GET_NAMES", "ARGS_POST_NAMES", "ARGS_PATH"),
+                        (false, false) => ("ARGS", "ARGS", "ARGS"),
+                        (false, true) => ("ARGS_NAMES", "ARGS_NAMES", "ARGS_NAMES"),
+                    };
+                visit(&request.args_get, get, names);
+                visit(&request.args_post, post, names);
+                if let Some(arguments) = request.path_arguments() {
+                    visit(arguments, path, names);
                 }
             }
             ArgsPath => {

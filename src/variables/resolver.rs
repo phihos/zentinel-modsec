@@ -13,6 +13,7 @@ pub(crate) struct ConnectorMetadata {
     pub client_port: bool,
     pub server_port: bool,
     pub response_status: bool,
+    pub source_qualified_arguments: bool,
 }
 
 /// Variable resolver for transaction context.
@@ -52,6 +53,7 @@ impl<'a> VariableResolver<'a> {
                 client_port: true,
                 server_port: true,
                 response_status: true,
+                source_qualified_arguments: false,
             },
         }
     }
