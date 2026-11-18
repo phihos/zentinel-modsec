@@ -1,35 +1,100 @@
-//! Validation operators (@validateUrlEncoding, @validateUtf8Encoding).
+//! SecLang byte-range, URL-encoding and UTF-8 validation operators.
 
 use super::traits::{ByteOperatorResult, Operator, OperatorResult};
+use crate::error::{Error, Result};
+
+/// Validates each input byte against a compiled allowlist.
+pub struct ValidateByteRangeOperator {
+    allowed: [bool; 256],
+    empty_operand: bool,
+}
+
+impl ValidateByteRangeOperator {
+    /// Construct a validator, ignoring unparseable entries for compatibility.
+    /// Rule loading uses [`Self::try_new`] to report malformed configuration.
+    pub fn new(spec: &str) -> Self {
+        Self::parse(spec, false).expect("permissive range parsing skips invalid entries")
+    }
+
+    /// Construct a validator, rejecting malformed or out-of-bounds byte values.
+    pub fn try_new(spec: &str) -> Result<Self> {
+        Self::parse(spec, true)
+    }
+
+    fn parse(spec: &str, strict: bool) -> Result<Self> {
+        let mut allowed = [false; 256];
+        if !spec.is_empty() {
+            for part in spec.split(',').map(str::trim) {
+                let (lo, hi) = part.split_once('-').unwrap_or((part, part));
+                match (lo.parse::<u8>(), hi.parse::<u8>()) {
+                    (Ok(lo), Ok(hi)) => {
+                        // As in Coraza, a descending range contributes no bytes.
+                        if lo <= hi {
+                            allowed[usize::from(lo)..=usize::from(hi)].fill(true);
+                        }
+                    }
+                    _ if strict => return Err(Error::Config {
+                        message: format!("invalid @validateByteRange entry '{part}' in '{spec}': expected a decimal byte or two bytes separated by '-'"),
+                    }),
+                    _ => {}
+                }
+            }
+        }
+        Ok(Self {
+            allowed,
+            empty_operand: spec.is_empty(),
+        })
+    }
+
+    fn first_invalid(&self, input: &[u8]) -> Option<u8> {
+        input
+            .iter()
+            .copied()
+            .find(|&byte| !self.allowed[usize::from(byte)])
+    }
+}
+
+impl Operator for ValidateByteRangeOperator {
+    fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
+        Ok(
+            if self.empty_operand || self.first_invalid(value).is_some() {
+                ByteOperatorResult::matched(value)
+            } else {
+                ByteOperatorResult::no_match()
+            },
+        )
+    }
+    fn execute(&self, value: &str) -> OperatorResult {
+        if let Some(byte) = self.first_invalid(value.as_bytes()) {
+            OperatorResult::matched(format!("invalid byte: {byte}"))
+        } else if self.empty_operand {
+            OperatorResult::matched(String::new())
+        } else {
+            OperatorResult::no_match()
+        }
+    }
+    fn name(&self) -> &'static str {
+        "validateByteRange"
+    }
+}
 
 /// URL encoding validation operator (@validateUrlEncoding).
 pub struct ValidateUrlEncodingOperator;
 
 impl Operator for ValidateUrlEncodingOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        let mut i = 0;
-        while i < value.len() {
-            if value[i] == b'%' {
-                if i + 2 >= value.len()
-                    || !value[i + 1].is_ascii_hexdigit()
-                    || !value[i + 2].is_ascii_hexdigit()
-                {
-                    return Ok(ByteOperatorResult::matched(
-                        b"invalid URL encoding".to_vec(),
-                    ));
-                }
-                i += 2;
-            }
-            i += 1;
-        }
-        Ok(ByteOperatorResult::no_match())
+    fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
+        Ok(if is_valid_url_encoding(value) {
+            ByteOperatorResult::no_match()
+        } else {
+            ByteOperatorResult::matched(b"invalid URL encoding".as_slice())
+        })
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if is_valid_url_encoding(value) {
-            OperatorResult::no_match() // Valid encoding = no match (not an attack)
+        if is_valid_url_encoding(value.as_bytes()) {
+            OperatorResult::no_match()
         } else {
-            OperatorResult::matched("invalid URL encoding".to_string())
+            OperatorResult::matched("invalid URL encoding".to_owned())
         }
     }
 
@@ -38,82 +103,39 @@ impl Operator for ValidateUrlEncodingOperator {
     }
 }
 
+fn is_valid_url_encoding(mut input: &[u8]) -> bool {
+    while let Some(percent) = memchr::memchr(b'%', input) {
+        let Some([hi, lo, rest @ ..]) = input.get(percent + 1..) else {
+            return false;
+        };
+        if !hi.is_ascii_hexdigit() || !lo.is_ascii_hexdigit() {
+            return false;
+        }
+        input = rest;
+    }
+    true
+}
+
 /// UTF-8 encoding validation operator (@validateUtf8Encoding).
 pub struct ValidateUtf8EncodingOperator;
 
 impl Operator for ValidateUtf8EncodingOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+    fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         Ok(if std::str::from_utf8(value).is_err() {
-            ByteOperatorResult::matched(b"invalid UTF-8 encoding".to_vec())
+            ByteOperatorResult::matched(b"invalid UTF-8 encoding".as_slice())
         } else {
             ByteOperatorResult::no_match()
         })
     }
 
-    fn execute(&self, value: &str) -> OperatorResult {
-        // In Rust, &str is always valid UTF-8, so we check for overlong encodings
-        // and other invalid sequences that might have been decoded
-        if is_valid_utf8_sequence(value) {
-            OperatorResult::no_match()
-        } else {
-            OperatorResult::matched("invalid UTF-8 encoding".to_string())
-        }
+    fn execute(&self, _: &str) -> OperatorResult {
+        // Rust's str invariant includes embedded NUL and all Unicode scalars.
+        OperatorResult::no_match()
     }
 
     fn name(&self) -> &'static str {
         "validateUtf8Encoding"
     }
-}
-
-/// Check if a string has valid URL encoding.
-fn is_valid_url_encoding(s: &str) -> bool {
-    let mut chars = s.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            // Must be followed by exactly 2 hex digits
-            let hex1 = chars.next();
-            let hex2 = chars.next();
-
-            match (hex1, hex2) {
-                (Some(h1), Some(h2)) => {
-                    if !h1.is_ascii_hexdigit() || !h2.is_ascii_hexdigit() {
-                        return false;
-                    }
-                }
-                _ => return false,
-            }
-        }
-    }
-
-    true
-}
-
-/// Check for valid UTF-8 sequences (no overlong encodings, etc.).
-fn is_valid_utf8_sequence(s: &str) -> bool {
-    // Since Rust strings are always valid UTF-8, we mainly check for
-    // suspicious patterns that might indicate encoding attacks
-
-    // Check for null bytes
-    if s.contains('\0') {
-        return false;
-    }
-
-    // Check for overlong encoded sequences by looking for specific patterns
-    // that would have been decoded incorrectly
-    for &byte in s.as_bytes() {
-        // Check for sequences that look like they were overlong encoded
-        if byte == 0xC0 || byte == 0xC1 {
-            // These lead bytes are always overlong
-            return false;
-        }
-        if byte >= 0xF5 {
-            // Invalid lead bytes
-            return false;
-        }
-    }
-
-    true
 }
 
 #[cfg(test)]
@@ -122,10 +144,10 @@ mod tests {
 
     #[test]
     fn test_valid_url_encoding() {
-        assert!(is_valid_url_encoding("hello%20world"));
-        assert!(is_valid_url_encoding("test%2Fpath"));
-        assert!(!is_valid_url_encoding("hello%2"));
-        assert!(!is_valid_url_encoding("hello%GG"));
+        assert!(is_valid_url_encoding(b"hello%20world"));
+        assert!(is_valid_url_encoding(b"test%2Fpath"));
+        assert!(!is_valid_url_encoding(b"hello%2"));
+        assert!(!is_valid_url_encoding(b"hello%GG"));
     }
 
     #[test]

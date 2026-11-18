@@ -536,6 +536,20 @@ fn compile_operator_reporting(
     spec: &OperatorSpec,
     rule_id: &Option<String>,
 ) -> Result<(Arc<dyn Operator>, bool)> {
+    // A byte range supplied by a transaction macro is validated after expansion.
+    if spec.name == OperatorName::ValidateByteRange
+        && spec
+            .argument
+            .split_once("%{")
+            .is_some_and(|(_, rest)| rest.contains('}'))
+    {
+        return Ok((
+            Arc::new(crate::operators::ValidateByteRangeOperator::new(
+                &spec.argument,
+            )),
+            spec.negated,
+        ));
+    }
     match compile_operator(spec) {
         Ok(operator) => Ok((operator, spec.negated)),
         Err(e) if spec.name == OperatorName::Rx => {
