@@ -32,6 +32,7 @@ fn numeric_operators_use_pinned_integer_conversion_on_both_sides() {
             (Box::new(LeOperator::new(&target)), true),
         ];
         for (op, expected) in ops {
+            assert_eq!(op.numeric_comparison().unwrap().matches(raw), expected);
             let result = op.execute_bytes(raw).unwrap();
             assert_eq!(result.matched, expected, "{} {:?}", op.name(), raw);
             if expected {
@@ -110,6 +111,51 @@ fn expanded_operands_use_the_same_conversion_as_values() {
         for expanded in [&b"invalid"[..], &b"\xff"[..]] {
             let op = compile_operator_bytes(&spec, expanded).unwrap();
             assert_eq!(op.execute(input).matched, expected);
+        }
+    }
+}
+
+#[test]
+fn numeric_audit_and_capture_preserve_each_original_or_transformed_operand() {
+    use zentinel_modsec::variables::ByteCollection;
+
+    for target in ["0", "%{tx.limit}"] {
+        let rules = format!(
+            r#"SecRuleEngine DetectionOnly
+SecAction "id:1,phase:1,pass,setvar:tx.limit=0"
+SecRule ARGS:x "@eq {target}" "id:2,phase:1,pass,t:lowercase,multiMatch,capture,setvar:tx.count=+1"
+SecRule ARGS:x "!@eq 9" "id:3,phase:1,pass""#
+        );
+        let engine = ModSecurity::from_string(&rules).unwrap();
+        for (encoded, original) in [
+            ("%FFCAT".to_owned(), b"\xffCAT".to_vec()),
+            ("MixedCase".repeat(512), b"MixedCase".repeat(512)),
+        ] {
+            let mut tx = engine.new_transaction();
+            tx.process_uri(&format!("/?x={encoded}"), "GET", "HTTP/1.1")
+                .unwrap();
+            tx.process_request_headers().unwrap();
+            let records = tx.matched_data();
+            let positive = records
+                .iter()
+                .find(|r| r.rule_id.as_deref() == Some("2"))
+                .unwrap();
+            let negated = records
+                .iter()
+                .find(|r| r.rule_id.as_deref() == Some("3"))
+                .unwrap();
+            assert_eq!(positive.value_bytes, original);
+            assert_eq!(
+                positive.matched_portion_bytes.as_deref(),
+                Some(original.as_slice())
+            );
+            assert_eq!(negated.value_bytes, original);
+            assert_eq!(negated.matched_portion_bytes, None);
+            assert_eq!(tx.tx().get_bytes(b"count"), Some(vec![b"2".as_slice()]));
+            assert_eq!(
+                tx.tx().get_bytes(b"0"),
+                Some(vec![original.to_ascii_lowercase().as_slice()])
+            );
         }
     }
 }

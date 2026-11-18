@@ -120,6 +120,12 @@ pub trait Operator: Send + Sync {
         self.execute_bytes(value)
     }
 
+    /// Return a static numeric predicate when a successful match always
+    /// covers the entire input and has no subgroups.
+    fn numeric_comparison(&self) -> Option<super::NumericComparison> {
+        None
+    }
+
     /// Get the operator name.
     fn name(&self) -> &'static str;
 

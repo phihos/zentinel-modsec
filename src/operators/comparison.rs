@@ -199,6 +199,10 @@ impl Operator for StreqOperator {
 // Syntax errors become zero; signed 64-bit overflows retain the clamped value.
 // Work on original bytes: invalid UTF-8 is a syntax error, not absent input.
 fn numeric_value(bytes: &[u8]) -> i64 {
+    if let [byte] = bytes {
+        let digit = byte.wrapping_sub(b'0');
+        return if digit < 10 { i64::from(digit) } else { 0 };
+    }
     let (negative, digits) = match bytes.first() {
         Some(b'-') => (true, &bytes[1..]),
         Some(b'+') => (false, &bytes[1..]),
@@ -231,6 +235,20 @@ fn numeric_value(bytes: &[u8]) -> i64 {
     }
 }
 
+/// A built-in numeric comparison with an immutable, already parsed operand.
+#[derive(Clone, Copy, Debug)]
+pub struct NumericComparison {
+    target: i64,
+    compare: fn(i64, i64) -> bool,
+}
+
+impl NumericComparison {
+    /// Test an input with the same signed byte conversion as the numeric operators.
+    pub fn matches(self, value: &[u8]) -> bool {
+        (self.compare)(numeric_value(value), self.target)
+    }
+}
+
 // A numeric target is parsed once. Values and expanded arguments use the
 // same original-byte conversion, including Go's overflow behavior.
 macro_rules! numeric_operator {
@@ -252,12 +270,23 @@ macro_rules! numeric_operator {
                 Self { target: Some(numeric_value(argument)) }
             }
 
+            fn compare(left: i64, right: i64) -> bool {
+                left $comparison right
+            }
+
             fn matches(&self, value: &[u8]) -> bool {
-                self.target.is_some_and(|target| numeric_value(value) $comparison target)
+                self.target.is_some_and(|target| Self::compare(numeric_value(value), target))
             }
         }
 
         impl Operator for $operator {
+            fn numeric_comparison(&self) -> Option<NumericComparison> {
+                self.target.map(|target| NumericComparison {
+                    target,
+                    compare: Self::compare,
+                })
+            }
+
             fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
                 Ok(if self.matches(value) {
                     ByteOperatorResult::matched(value.to_vec())

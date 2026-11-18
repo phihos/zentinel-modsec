@@ -93,7 +93,7 @@ struct RuleOutcome {
 /// The first static match ends the read-only scan. Only this stage is
 /// prepared before actions run; later members retain their raw target values.
 struct PreparedStage {
-    value: Vec<u8>,
+    value: ByteValue,
     result: ByteOperatorResult,
     resume_after: Option<usize>,
 }
@@ -106,6 +106,7 @@ struct ResolvedTarget {
 
 struct StaticSearch<'a> {
     rule: &'a CompiledRule,
+    numeric: Option<crate::operators::NumericComparison>,
     capture: bool,
     multi_match: bool,
 }
@@ -113,6 +114,15 @@ struct StaticSearch<'a> {
 impl StaticSearch<'_> {
     fn first_match(&self, raw: &[u8]) -> Result<Option<PreparedStage>> {
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
+            if let Some(numeric) = self.numeric {
+                let matched = numeric.matches(value);
+                return Ok(
+                    (matched != self.rule.operator_negated).then(|| ByteOperatorResult {
+                        matched,
+                        ..Default::default()
+                    }),
+                );
+            }
             let result = self.rule.operator.execute_rule_bytes(value, self.capture)?;
             Ok((result.matched != self.rule.operator_negated).then_some(result))
         };
@@ -121,7 +131,7 @@ impl StaticSearch<'_> {
                 .transformations
                 .visit_byte_stages(raw, None, |stage, value| {
                     Ok(execute(value)?.map(|result| PreparedStage {
-                        value: value.to_vec(),
+                        value: ByteValue::from(value),
                         result,
                         resume_after: Some(stage),
                     }))
@@ -129,7 +139,10 @@ impl StaticSearch<'_> {
         } else {
             let transformed = self.rule.transformations.apply_bytes(raw)?;
             Ok(execute(&transformed)?.map(|result| PreparedStage {
-                value: transformed.into_owned(),
+                value: match transformed {
+                    Cow::Borrowed(bytes) => ByteValue::from(bytes),
+                    Cow::Owned(bytes) => ByteValue::from(bytes),
+                },
                 result,
                 resume_after: None,
             }))
@@ -156,8 +169,8 @@ pub struct MatchedData {
     /// The portion of the value the operator matched, when it reports one.
     ///
     /// `@contains evil` against `something-evil-here` gives `evil` here and
-    /// the full string in `value`. Operators that match the whole value, or
-    /// do not report a portion, leave this `None`.
+    /// the full string in `value`. Numeric operators report the whole input
+    /// on a positive match. A negated numeric match leaves this `None`.
     pub matched_portion: Option<String>,
     /// Original variable-name bytes, before display escaping.
     pub variable_bytes: Vec<u8>,
@@ -1293,6 +1306,7 @@ impl Transaction {
         let multi_match = dispatch.multi_match;
 
         let search = (!dynamic).then_some(StaticSearch {
+            numeric: dispatch.numeric,
             rule,
             capture,
             multi_match,
@@ -1300,10 +1314,16 @@ impl Transaction {
         let mut evaluate = |tx: &mut Self,
                             name: Option<&ByteValue>,
                             value: &[u8],
-                            prepared: Option<ByteOperatorResult>|
+                            prepared: Option<(&ByteValue, ByteOperatorResult)>|
          -> Result<()> {
-            let result = if let Some(result) = prepared {
+            let snapshot = prepared.as_ref().map(|(snapshot, _)| *snapshot);
+            let result = if let Some((_, result)) = prepared {
                 result
+            } else if let Some(numeric) = dispatch.numeric {
+                ByteOperatorResult {
+                    matched: numeric.matches(value),
+                    ..Default::default()
+                }
             } else {
                 let operator: &dyn Operator = if dynamic {
                     if bound_operator.is_none() {
@@ -1330,12 +1350,24 @@ impl Transaction {
                     first_message: None,
                 }
             });
-            let mut portion = result
-                .matched_value
-                .filter(|_| capture || (first && name.is_some()))
-                .map(ByteValue::from);
-            if let Some(name) = name {
-                let value = ByteValue::from(value);
+            let matched_value =
+                name.map(|_| snapshot.cloned().unwrap_or_else(|| ByteValue::from(value)));
+            let need_portion = capture || (first && name.is_some());
+            // A positive static comparison reuses the input; a negated one
+            // has no matched portion. Other operators report their own bytes.
+            let mut portion = if dispatch.numeric.is_some() && result.matched {
+                need_portion.then(|| {
+                    matched_value
+                        .clone()
+                        .unwrap_or_else(|| ByteValue::from(value))
+                })
+            } else {
+                result
+                    .matched_value
+                    .filter(|_| need_portion)
+                    .map(ByteValue::from)
+            };
+            if let (Some(name), Some(value)) = (name, matched_value) {
                 if first {
                     // TX:0 retains its own copy when capture is enabled. Otherwise
                     // the audit snapshot can take ownership of the operator result.
@@ -1407,10 +1439,15 @@ impl Transaction {
                 &mut target,
             )?;
             if let Some((name, stage)) = target.first {
-                evaluate(self, Some(&name), &stage.value, Some(stage.result))?;
+                evaluate(
+                    self,
+                    Some(&name),
+                    stage.value.as_bytes(),
+                    Some((&stage.value, stage.result)),
+                )?;
                 if let Some(after) = stage.resume_after {
                     rule.transformations.visit_byte_stages(
-                        &stage.value,
+                        stage.value.as_bytes(),
                         Some(after),
                         |_, value| {
                             evaluate(self, Some(&name), value, None)?;
