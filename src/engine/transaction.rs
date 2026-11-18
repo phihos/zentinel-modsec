@@ -593,16 +593,7 @@ impl Transaction {
 
     /// Whether the response media type is selected for phase-4 body inspection.
     pub fn response_body_processable(&self) -> bool {
-        let content_type = self
-            .response
-            .headers
-            .get_bytes(b"content-type")
-            .and_then(|values| values.first().copied())
-            .unwrap_or_default();
-        let media_type = content_type
-            .split(|byte| *byte == b';')
-            .next()
-            .unwrap_or_default();
+        let media_type = self.response.content_type_bytes();
         self.ruleset
             .body_config()
             .response_mime_types

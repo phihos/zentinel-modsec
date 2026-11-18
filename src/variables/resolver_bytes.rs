@@ -268,14 +268,9 @@ impl<'a> VariableResolver<'a> {
             VariableName::ResponseHeadersNames => {
                 collection(&self.response.headers, "RESPONSE_HEADERS_NAMES", true)
             }
-            VariableName::ResponseContentType => scalar(
-                "RESPONSE_CONTENT_TYPE",
-                self.response
-                    .headers
-                    .get_bytes(b"content-type")
-                    .and_then(|values| values.first().copied())
-                    .unwrap_or_default(),
-            ),
+            VariableName::ResponseContentType => {
+                scalar("RESPONSE_CONTENT_TYPE", self.response.content_type_bytes())
+            }
             VariableName::ArgsCombinedSize => {
                 let size: usize = request
                     .args_get
