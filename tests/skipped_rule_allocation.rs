@@ -1,4 +1,4 @@
-//! Skipped rule blocks must not allocate copies of their immutable metadata.
+//! Allocation regressions for rule evaluation and byte transformation pipelines.
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use zentinel_modsec::ModSecurity;
@@ -91,4 +91,22 @@ fn inactive_rule_blocks_have_bounded_request_allocation_cost() {
         large_count <= small_count + 64,
         "skipped metadata caused per-request allocation growth: {small_count} -> {large_count}"
     );
+}
+
+#[test]
+fn unchanged_decode_stages_borrow_without_allocating() {
+    use zentinel_modsec::transformations::{create_transformation, TransformationPipeline};
+
+    let mut pipeline = TransformationPipeline::new();
+    for name in ["urlDecodeUni", "htmlEntityDecode", "jsDecode", "cssDecode"] {
+        pipeline.add(create_transformation(name).unwrap());
+    }
+
+    let input = [b'a'; 4096];
+    ALLOCATIONS.set(0);
+    TRACKING.set(true);
+    let result = pipeline.apply_bytes(&input).unwrap();
+    TRACKING.set(false);
+    assert_eq!(result.as_ptr(), input.as_ptr());
+    assert_eq!(ALLOCATIONS.get(), 0);
 }
