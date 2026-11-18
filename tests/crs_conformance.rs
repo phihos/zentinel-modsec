@@ -35,14 +35,14 @@
 //! cargo test --test crs_conformance -- --nocapture
 //! ```
 //!
-//! The gate expects an exact pass count, so it only holds against the CRS
-//! commit CI pins (`.github/workflows/ci.yml`); another checkout will report a
-//! different number.
+//! CI checks every stage against the shared reference outcome for its pinned
+//! CRS revision. A missing file or stage, a changed rule-ID expectation result,
+//! and an engine callback error all fail the gate.
 //!
 //! `CRS_DIR` overrides the location. `SKIP_CRS_CONFORMANCE=1` skips these tests
 //! when the corpus is not present — CI's unit-test job sets it, because the
-//! dedicated `conformance` job fetches the corpus and runs this optimised (~14s
-//! against ~5,000 cases, versus minutes unoptimised). That job must never set
+//! dedicated `conformance` jobs fetch the corpus and run release builds for
+//! the Rust and FFI backends. Those jobs must never set
 //! it: a gate that can silently not run is not a gate.
 //!
 //! Absence of the checkout is otherwise a failure rather than a skip, with
@@ -54,26 +54,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use zentinel_modsec::ModSecurity;
 
-/// Cases the corpus passes — exactly. A change in either direction fails the
-/// gate, so every gain and every loss is acknowledged in the commit that causes
-/// it: raise it when a fix lands; never lower it without saying which rules
-/// regressed and why.
-///
-/// That only works because evaluation is deterministic (#53: collections used
-/// to iterate in hash order, and the count varied between runs of one commit)
-/// and because CI pins the CRS checkout. Measured on CRS `main` (4.31.0-dev,
-/// 30cb436, the commit CI fetches). The corpus upstream keeps moving, so a
-/// change after bumping that commit is worth reading as new tests before
-/// reading it as a regression.
-// CRS 920430-5 supplies an empty protocol. The corrected @within rejects an
-// empty input; the native runner passes that protocol through unchanged.
-const MIN_PASSING: u32 = 5093;
-
-/// Corpus stages that cannot be driven from here: an `encoded_request` payload,
-/// or an expectation that is not about rule IDs (`status`, `match_regex`).
-/// Reported rather than hidden, so this cap cannot quietly grow.
-const EXPECTED_SKIPS_MAX: u32 = 60;
-
 // --- corpus schema (only the fields this harness uses) ---------------------
 
 #[derive(Deserialize)]
@@ -82,7 +62,7 @@ struct TestFile {
 }
 #[derive(Deserialize)]
 struct Test {
-    #[serde(default)]
+    test_id: u64,
     stages: Vec<Stage>,
 }
 #[derive(Deserialize)]
@@ -102,9 +82,9 @@ struct Input {
     #[serde(default)]
     version: Option<String>,
     #[serde(default)]
-    headers: BTreeMap<String, serde_yaml::Value>,
+    headers: BTreeMap<String, Scalar>,
     #[serde(default)]
-    data: Option<serde_yaml::Value>,
+    data: Option<Scalar>,
     #[serde(default)]
     encoded_request: Option<String>,
     #[serde(default)]
@@ -118,19 +98,27 @@ struct Output {
 #[derive(Deserialize, Default)]
 struct Log {
     #[serde(default)]
-    expect_ids: Vec<serde_yaml::Value>,
+    expect_ids: Vec<Scalar>,
     #[serde(default)]
-    no_expect_ids: Vec<serde_yaml::Value>,
+    no_expect_ids: Vec<Scalar>,
 }
 
 /// YAML scalars appear as strings or numbers; `data` may be a block sequence.
-fn scalar(v: &serde_yaml::Value) -> String {
-    match v {
-        serde_yaml::Value::String(s) => s.clone(),
-        serde_yaml::Value::Number(n) => n.to_string(),
-        serde_yaml::Value::Bool(b) => b.to_string(),
-        serde_yaml::Value::Sequence(items) => items.iter().map(scalar).collect::<Vec<_>>().join(""),
-        _ => String::new(),
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Scalar {
+    Text(String),
+    Number(serde_yaml::Number),
+    Bool(bool),
+    Parts(Vec<Scalar>),
+}
+
+fn scalar(value: &Scalar) -> String {
+    match value {
+        Scalar::Text(s) => s.clone(),
+        Scalar::Number(n) => n.to_string(),
+        Scalar::Bool(b) => b.to_string(),
+        Scalar::Parts(items) => items.iter().map(scalar).collect(),
     }
 }
 
@@ -194,18 +182,18 @@ fn load(dir: &Path, extra: &str) -> ModSecurity {
 }
 
 /// Drive one corpus stage and return the rule IDs that matched.
-fn run_stage(m: &ModSecurity, input: &Input) -> Vec<String> {
+fn run_stage(m: &ModSecurity, input: &Input) -> Result<Vec<String>, String> {
     let mut tx = m.new_transaction();
     let uri = input.uri.clone().unwrap_or_else(|| "/".into());
     let method = input.method.clone().unwrap_or_else(|| "GET".into());
     let version = input.version.clone().unwrap_or_else(|| "HTTP/1.1".into());
-    if tx.process_uri(&uri, &method, &version).is_err() {
-        return vec![];
-    }
+    tx.process_uri(&uri, &method, &version)
+        .map_err(|e| format!("URI: {e}"))?;
 
     let has = |n: &str| input.headers.keys().any(|k| k.eq_ignore_ascii_case(n));
     for (k, v) in &input.headers {
-        let _ = tx.add_request_header(k, &scalar(v));
+        tx.add_request_header(k, &scalar(v))
+            .map_err(|e| format!("request header: {e}"))?;
     }
     let body = input.data.as_ref().map(scalar).unwrap_or_default();
     // go-ftw fills these in unless a test opts out.
@@ -215,26 +203,31 @@ fn run_stage(m: &ModSecurity, input: &Input) -> Vec<String> {
                 .dest_addr
                 .clone()
                 .unwrap_or_else(|| "localhost".into());
-            let _ = tx.add_request_header("Host", &host);
+            tx.add_request_header("Host", &host)
+                .map_err(|e| format!("auto header: {e}"))?;
         }
         if !has("User-Agent") {
-            let _ = tx.add_request_header("User-Agent", "go-ftw");
+            tx.add_request_header("User-Agent", "go-ftw")
+                .map_err(|e| format!("auto header: {e}"))?;
         }
         if !has("Accept") {
-            let _ = tx.add_request_header("Accept", "*/*");
+            tx.add_request_header("Accept", "*/*")
+                .map_err(|e| format!("auto header: {e}"))?;
         }
         if !body.is_empty() && !has("Content-Length") {
-            let _ = tx.add_request_header("Content-Length", &body.len().to_string());
+            tx.add_request_header("Content-Length", &body.len().to_string())
+                .map_err(|e| format!("auto header: {e}"))?;
         }
     }
-    if tx.process_request_headers().is_err() {
-        return tx.matched_rules().to_vec();
-    }
+    tx.process_request_headers()
+        .map_err(|e| format!("phase 1: {e}"))?;
     if !body.is_empty() {
-        let _ = tx.append_request_body(body.as_bytes());
+        tx.append_request_body(body.as_bytes())
+            .map_err(|e| format!("body write: {e}"))?;
     }
-    let _ = tx.process_request_body();
-    tx.matched_rules().to_vec()
+    tx.process_request_body()
+        .map_err(|e| format!("phase 2: {e}"))?;
+    Ok(tx.matched_rules().to_vec())
 }
 
 // --- the gate --------------------------------------------------------------
@@ -244,116 +237,179 @@ fn crs_regression_corpus() {
     let Some(dir) = crs_dir() else { return };
     let m = load(&dir, FTW_SETUP);
 
-    let (mut pass, mut fail, mut skipped) = (0u32, 0u32, 0u32);
-    let mut by_file: BTreeMap<String, u32> = BTreeMap::new();
-    let mut missing: BTreeMap<String, u32> = BTreeMap::new();
-    let mut spurious: BTreeMap<String, u32> = BTreeMap::new();
-
     let root = dir.join("tests/regression/tests");
-    assert!(root.is_dir(), "corpus not found at {}", root.display());
-
-    for entry in walkdir::WalkDir::new(&root).into_iter().flatten() {
-        if entry
-            .path()
-            .extension()
-            .map(|e| e != "yaml")
-            .unwrap_or(true)
+    let mut report = BTreeMap::new();
+    let mut callbacks = Vec::new();
+    for entry in walkdir::WalkDir::new(&root) {
+        let entry = entry.expect("walk pinned corpus");
+        let path = entry.path();
+        if path.extension().is_none_or(|e| e != "yaml" && e != "yml") {
+            continue;
+        }
+        let file = path.strip_prefix(&root).unwrap().to_str().unwrap();
+        let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {file}: {e}"));
+        if text
+            .lines()
+            .all(|line| line.trim().is_empty() || line.trim_start().starts_with('#'))
         {
+            report.insert(format!("{file}#-"), "comment-only".into());
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(entry.path()) else {
-            continue;
-        };
-        let Ok(parsed) = serde_yaml::from_str::<TestFile>(&text) else {
-            continue;
-        };
-        let fname = entry
-            .path()
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-
-        for t in &parsed.tests {
-            for stage in &t.stages {
-                let Some(log) = &stage.output.log else {
-                    skipped += 1;
-                    continue;
-                };
-                if stage.input.encoded_request.is_some()
-                    || (log.expect_ids.is_empty() && log.no_expect_ids.is_empty())
+        let parsed = serde_yaml::from_str::<TestFile>(&text)
+            .unwrap_or_else(|e| panic!("decode {file}: {e}"));
+        assert!(!parsed.tests.is_empty(), "no tests in {file}");
+        for test in parsed.tests {
+            assert!(
+                !test.stages.is_empty(),
+                "no stages for {file}#{}",
+                test.test_id
+            );
+            for (index, stage) in test.stages.iter().enumerate() {
+                let id = format!("{file}#{}.{}", test.test_id, index + 1);
+                let status = if stage.input.encoded_request.is_some() {
+                    "skip-encoded".into()
+                } else if let Some(log) = stage
+                    .output
+                    .log
+                    .as_ref()
+                    .filter(|log| !(log.expect_ids.is_empty() && log.no_expect_ids.is_empty()))
                 {
-                    skipped += 1;
-                    continue;
-                }
-
-                let got = run_stage(&m, &stage.input);
-                let mut ok = true;
-                for id in log.expect_ids.iter().map(scalar) {
-                    if !got.contains(&id) {
-                        ok = false;
-                        *missing.entry(id).or_default() += 1;
+                    match run_stage(&m, &stage.input) {
+                        Ok(ids) => {
+                            let mut differences = Vec::new();
+                            for wanted in log.expect_ids.iter().map(scalar) {
+                                if !ids.contains(&wanted) {
+                                    differences.push(format!("missing:{wanted}"));
+                                }
+                            }
+                            for rejected in log.no_expect_ids.iter().map(scalar) {
+                                if ids.contains(&rejected) {
+                                    differences.push(format!("unexpected:{rejected}"));
+                                }
+                            }
+                            if differences.is_empty() {
+                                "pass".into()
+                            } else {
+                                differences.join(",")
+                            }
+                        }
+                        Err(error) => {
+                            callbacks.push(format!("{id} {error}"));
+                            format!("error:{error}")
+                        }
                     }
-                }
-                for id in log.no_expect_ids.iter().map(scalar) {
-                    if got.contains(&id) {
-                        ok = false;
-                        *spurious.entry(id).or_default() += 1;
-                    }
-                }
-                if ok {
-                    pass += 1;
                 } else {
-                    fail += 1;
-                    *by_file.entry(fname.clone()).or_default() += 1;
-                }
+                    "skip-no-rule-ids".into()
+                };
+                assert!(
+                    report.insert(id.clone(), status).is_none(),
+                    "duplicate stage {id}"
+                );
             }
         }
     }
-
-    let total = pass + fail;
+    if let Some(path) = std::env::var_os("CRS_STAGE_REPORT") {
+        let report = report
+            .iter()
+            .map(|(id, status)| format!("{id}\t{status}\n"))
+            .collect::<String>();
+        std::fs::write(path, report).expect("write stage report");
+    }
+    assert!(
+        callbacks.is_empty(),
+        "incomplete callbacks:\n{}",
+        callbacks.join("\n")
+    );
+    let expected = expected_outcomes();
+    let changes = outcome_changes(&expected, &report);
+    let stages = report
+        .values()
+        .filter(|status| *status != "comment-only")
+        .count();
+    let skipped = report
+        .values()
+        .filter(|status| status.starts_with("skip-"))
+        .count();
+    let passed = report.values().filter(|status| *status == "pass").count();
     println!(
-        "\nCRS regression corpus: {pass}/{total} passing ({:.1}%), {skipped} skipped",
-        100.0 * f64::from(pass) / f64::from(total)
+        "{passed}/{} stages passed, {skipped} skipped, {stages} total",
+        stages - skipped
     );
+    assert!(
+        changes.is_empty(),
+        "pinned stage outcomes changed:\n{}",
+        changes.join("\n")
+    );
+}
 
-    let mut worst: Vec<_> = by_file.into_iter().collect();
-    worst.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
-    if !worst.is_empty() {
-        println!("\nfailing files:");
-        for (f, n) in worst.iter().take(15) {
-            println!("  {n:>4}  {f}");
+/// The fixture groups shared Rust and C reference outcomes by path.
+fn expected_outcomes() -> BTreeMap<String, String> {
+    let mut expected = BTreeMap::new();
+    let mut file = "";
+    for line in include_str!("fixtures/crs-native-outcomes.tsv").lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        if let Some(path) = line.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            file = path;
+            continue;
+        }
+        let mut fields = line.split('\t');
+        let stage = fields.next().expect("stage");
+        let outcome = fields.next().expect("stage outcome");
+        assert!(
+            !file.is_empty() && fields.next().is_none(),
+            "invalid manifest line {line}"
+        );
+        let id = format!("{file}#{stage}");
+        assert!(
+            expected.insert(id.clone(), outcome.to_owned()).is_none(),
+            "duplicate expected stage {id}"
+        );
+    }
+    expected
+}
+
+fn outcome_changes(
+    expected: &BTreeMap<String, String>,
+    actual: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut changes = Vec::new();
+    for (id, old) in expected {
+        match actual.get(id) {
+            None => changes.push(format!("{id}: missing from corpus")),
+            Some(new) if old != new => changes.push(format!("{id}: {old} -> {new}")),
+            _ => {}
         }
     }
-    let top = |label: &str, m: BTreeMap<String, u32>| {
-        let mut v: Vec<_> = m.into_iter().collect();
-        v.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
-        if !v.is_empty() {
-            println!("\n{label}:");
-            for (id, n) in v.iter().take(15) {
-                println!("  {n:>4}  {id}");
-            }
+    for (id, new) in actual {
+        if !expected.contains_key(id) {
+            changes.push(format!("{id}: new stage ({new})"));
         }
-    };
-    top("rules that should have fired", missing);
-    top("rules that fired but must not", spurious);
+    }
+    changes
+}
 
-    assert!(
-        skipped <= EXPECTED_SKIPS_MAX,
-        "{skipped} corpus stages were skipped, more than the {EXPECTED_SKIPS_MAX} expected. \
-         Silently skipping cases reads as coverage that is not there — find out what changed."
-    );
-    assert!(
-        pass >= MIN_PASSING,
-        "CRS conformance regressed: {pass} passing, expected at least {MIN_PASSING}. \
-         The lists above name the rules. If this is a deliberate trade, say which \
-         rules regressed and why, then lower MIN_PASSING in the same commit."
-    );
-    assert!(
-        pass <= MIN_PASSING,
-        "CRS conformance improved: {pass} passing, MIN_PASSING is {MIN_PASSING}. \
-         Raise MIN_PASSING to {pass} in this commit, so the gain cannot be lost \
-         silently."
+#[test]
+fn equal_totals_cannot_hide_changed_or_replaced_stages() {
+    let expected = BTreeMap::from([
+        ("a".into(), "pass".into()),
+        ("b".into(), "missing:42".into()),
+        ("c".into(), "skip-encoded".into()),
+    ]);
+    let actual = BTreeMap::from([
+        ("a".into(), "missing:42".into()),
+        ("b".into(), "pass".into()),
+        ("d".into(), "skip-encoded".into()),
+    ]);
+    assert_eq!(
+        outcome_changes(&expected, &actual),
+        [
+            "a: pass -> missing:42",
+            "b: missing:42 -> pass",
+            "c: missing from corpus",
+            "d: new stage (skip-encoded)",
+        ]
     );
 }
 
@@ -505,4 +561,43 @@ fn stock_crs_blocks_attacks_and_passes_ordinary_traffic() {
         "stock CRS behaved wrongly:\n  {}",
         wrong.join("\n  ")
     );
+}
+
+/// Drive the upstream Apache internal-request exception (905110), including
+/// its anonymous final link, followed by tagged and untagged sentinel rules.
+#[test]
+fn crs_internal_request_exception_removes_only_tagged_rules() {
+    let Some(dir) = crs_dir() else { return };
+    let exceptions =
+        std::fs::canonicalize(dir.join("rules/REQUEST-905-COMMON-EXCEPTIONS.conf")).unwrap();
+    let engine = ModSecurity::from_string(&format!(
+        r#"
+SecRuleEngine On
+Include "{}"
+SecAction "id:1,phase:1,pass,tag:OWASP_CRS"
+SecAction "id:2,phase:1,pass"
+SecAction "id:3,phase:4,pass,tag:OWASP_CRS"
+SecAction "id:4,phase:4,pass"
+"#,
+        exceptions.display()
+    ))
+    .unwrap();
+    for (addr, expected) in [
+        ("127.0.0.1", vec!["905110", "2", "4"]),
+        ("192.0.2.1", vec!["1", "2", "3", "4"]),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.set_client_addr(addr, 42300);
+        tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+        tx.add_request_header("Host", "localhost").unwrap();
+        tx.add_request_header("User-Agent", "Apache (internal dummy connection)")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        tx.process_response_headers_with_status(200, "HTTP/1.1")
+            .unwrap();
+        tx.process_response_body().unwrap();
+        tx.process_logging().unwrap();
+        assert_eq!(tx.matched_rules(), expected);
+    }
 }
