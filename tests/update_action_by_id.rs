@@ -73,20 +73,25 @@ fn updates_respect_declaration_order_and_removals() {
 }
 
 #[test]
-fn unimplemented_actions_and_ambiguous_lists_reject_the_entire_configuration() {
+fn invalid_actions_selectors_and_missing_ids_reject_the_configuration() {
     for update in [
-        r#"11 "pass,nolog""#,
-        r#"11 "phase:2""#,
-        r#"11 "setvar:tx.mark=1""#,
         r#"11 "deny:extra""#,
-        r#"11 "deny, status:410""#,
         r#"11 "status:x""#,
         r#"11 """#,
         r#"11 "deny,""#,
-        r#"11 "deny" "pass""#,
+        r#"11 "phase:9""#,
+        r#"11 "id:0""#,
+        r#"11 "msg:''""#,
+        r#"11 "msg:'two words'""#,
+        r#"11 "tag:""#,
+        r#"11 "allow:unknown""#,
+        r#"11 "accuracy:10""#,
+        r#"11 "maturity:0""#,
+        r#"11 "unknown""#,
         r#"0 "deny""#,
-        r#"11-15 "deny""#,
-        r#"11 13 "deny""#,
+        r#"11-10 "deny""#,
+        r#"13-13 "deny""#,
+        r#"-11 "deny""#,
         r#""11" "deny""#,
         r#"'11' "deny""#,
         r#"11 'deny'"#,
@@ -97,7 +102,50 @@ fn unimplemented_actions_and_ambiguous_lists_reject_the_entire_configuration() {
 }
 
 #[test]
-fn updates_require_a_complete_chain_of_conditional_rules() {
+fn ranges_scan_declared_starters_and_a_singleton_finishes_the_edit() {
+    for (selectors, expected) in [
+        ("0-9223372036854775807", Some("2")),
+        ("10-11 12-13", Some("2")),
+        ("10-11 11-12", Some("3")),
+        ("11 12", Some("1")),
+        ("11-11 12", Some("1")),
+        ("98-99", None),
+    ] {
+        let engine = ModSecurity::from_string(&format!("{RULE}\nSecAction \"id:12,phase:1,pass\"\nSecRuleUpdateActionById {selectors} \"setvar:tx.edited=+1\"")).unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/catalog", "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(
+            tx.tx().get("edited"),
+            expected.map(|e| vec![e]),
+            "{selectors}"
+        );
+        assert_eq!(tx.matched_rules(), ["11", "12"]);
+    }
+}
+
+#[test]
+fn metadata_rekeys_moves_or_removes_existing_rules() {
+    let engine = ModSecurity::from_string(&format!(
+        r#"{RULE}
+SecAction "id:12,phase:1,pass"
+SecRuleUpdateActionById 11 "id:13,phase:request"
+SecRuleUpdateActionById 13 "deny,status:416"
+SecRuleUpdateActionById 12 "tag:remove"
+SecRuleRemoveByTag remove"#
+    ))
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/catalog", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert!(tx.matched_rules().is_empty());
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["13"]);
+    assert_eq!(tx.intervention().unwrap().status, 416);
+}
+
+#[test]
+fn updates_apply_to_unconditional_and_unfinished_chains() {
     let update = r#"SecRuleUpdateActionById 11 "deny""#;
     for chain in [
         r#"SecRule REQUEST_URI "@streq /catalog" "id:11,phase:1,pass,chain""#,
@@ -106,9 +154,11 @@ SecRule REQUEST_METHOD "@streq GET" "setvar:tx.seen=1""#,
         r#"SecRule REQUEST_METHOD "@streq GET" "id:11,phase:1,chain,pass"
 SecAction "setvar:tx.seen=1""#,
     ] {
-        assert!(
-            ModSecurity::from_string(&format!("{chain}\n{update}")).is_err(),
-            "{chain}"
-        );
+        let engine = ModSecurity::from_string(&format!("{chain}\n{update}")).unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/catalog", "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.intervention().unwrap().status, 403, "{chain}");
+        assert_eq!(tx.matched_rules(), ["11"]);
     }
 }

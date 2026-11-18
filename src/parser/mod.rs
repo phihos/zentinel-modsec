@@ -400,57 +400,45 @@ impl Parser {
     }
 
     fn parse_action_update(&mut self, lexer: &mut Lexer) -> Result<Directive> {
-        lexer.skip_whitespace();
-        if !matches!(lexer.peek(), Some('0'..='9' | '+')) {
-            return Err(Error::parse(
-                "SecRuleUpdateActionById requires an unquoted positive rule ID",
+        let argument = lexer.remaining_argument();
+        let mut fields = argument.split_whitespace();
+        let invalid = |message: &str| {
+            Error::parse(
+                format!("SecRuleUpdateActionById: {message}"),
                 self.location.to_string(),
-            ));
+            )
+        };
+        let raw_actions = fields
+            .next_back()
+            .ok_or_else(|| invalid("missing action list"))?
+            .trim_matches('"');
+        let mut selectors = Vec::new();
+        for field in fields {
+            let (lo, hi) = field.split_once('-').unwrap_or((field, field));
+            let number = |v: &str| v.parse::<i64>().ok().and_then(|n| u64::try_from(n).ok());
+            let (Some(lo), Some(hi)) = (number(lo), number(hi)) else {
+                return Err(invalid("invalid rule ID or range"));
+            };
+            if lo > hi {
+                return Err(invalid("reversed ID range"));
+            }
+            if lo == hi {
+                selectors.push(RuleIdSelector::Single(lo));
+                // Coraza returns immediately after applying the first singleton.
+                break;
+            }
+            selectors.push(RuleIdSelector::Range(lo, hi));
         }
-        let id = self
-            .expect_argument(lexer, "SecRuleUpdateActionById id")?
-            .parse::<i64>()
-            .ok()
-            .filter(|id| *id > 0)
-            .ok_or_else(|| {
-                Error::parse(
-                    "SecRuleUpdateActionById requires a positive numeric rule ID",
-                    self.location.to_string(),
-                )
-            })? as u64;
-        lexer.skip_whitespace();
-        if lexer.peek() == Some('\'') {
-            return Err(Error::parse(
-                format!(
-                    "SecRuleUpdateActionById {id} requires a bare or double-quoted action list"
-                ),
-                self.location.to_string(),
-            ));
+        if selectors.is_empty() {
+            return Err(invalid("missing rule ID or range"));
         }
-        let actions = self.expect_argument(lexer, "SecRuleUpdateActionById actions")?;
-        // Coraza tokenizes this directive on whitespace before parsing
-        // actions, so a space within a list can discard earlier actions.
-        // Accept only an unambiguous, comma-separated list here.
-        if self.peek_more_arguments(lexer)
-            || actions.chars().any(char::is_whitespace)
-            || actions.split(',').any(|item| {
-                item.is_empty()
-                    || item.split_once(':').is_some_and(|(name, value)| {
-                        !value.is_empty()
-                            && (name.eq_ignore_ascii_case("pass")
-                                || name.eq_ignore_ascii_case("deny"))
-                    })
-            })
-        {
-            return Err(Error::parse(
-                        format!("SecRuleUpdateActionById {id} expects one positive rule ID and a comma-separated list of deny, pass or status without spaces"),
-                        self.location.to_string(),
-                    ));
+        let actions = action::parse_update_actions(raw_actions)?;
+        match selectors.as_slice() {
+            [RuleIdSelector::Single(id)] => {
+                Ok(Directive::SecRuleUpdateActionById { id: *id, actions })
+            }
+            _ => Ok(Directive::SecRuleUpdateActionByIdRanges { selectors, actions }),
         }
-        Ok(Directive::SecRuleUpdateActionById {
-            id,
-            actions: action::parse_actions(&actions)?,
-        })
     }
 
     /// Parse a SecRuleUpdateTargetById directive.
@@ -852,7 +840,7 @@ impl Default for Parser {
 /// `ctl`, `initcol`, ...) never supersede anything. Single-valued actions
 /// supersede an earlier action of the same kind; `log`/`nolog` and
 /// `auditlog`/`noauditlog` are opposites of one switch and supersede each other.
-fn action_supersedes(new: &Action, old: &Action) -> bool {
+pub(crate) fn action_supersedes(new: &Action, old: &Action) -> bool {
     match (new, old) {
         (Action::Disruptive(_), Action::Disruptive(_)) => true,
         (Action::Flow(a), Action::Flow(b)) => {

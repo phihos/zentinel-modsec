@@ -45,6 +45,13 @@ pub enum Directive {
         /// Actions to merge into that rule.
         actions: Vec<Action>,
     },
+    /// Ordered rule ID ranges or singletons for an action update.
+    SecRuleUpdateActionByIdRanges {
+        /// Selectors in directive order.
+        selectors: Vec<RuleIdSelector>,
+        /// Actions applied to each selected rule.
+        actions: Vec<Action>,
+    },
     /// SecRequestBodyAccess directive.
     SecRequestBodyAccess(bool),
     /// SecResponseBodyAccess directive.

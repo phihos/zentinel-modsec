@@ -273,14 +273,14 @@ processing reconciles a previously buffered prefix with the final threshold.
 If an increase requires bytes already discarded during provisional writes,
 the header callback returns an error and body inspection cannot resume.
 
-`SecRuleUpdateActionById 112 "deny,status:409"` changes an earlier standalone
-rule or the starter of a `SecRule` chain. Standalone `SecAction` rules are
-also supported. Supply one positive ID and a comma-separated list of
-`pass`, `deny` and unsigned 16-bit `status` values without spaces.
-A status-only update preserves the disruptive action. The last supplied
-status and the last disruptive action each take effect. A missing or removed
-ID, ID range, unsupported action, incomplete chain, or chain containing
-`SecAction` rejects the load.
+`SecRuleUpdateActionById 112 "deny,status:409"` updates an earlier rule or
+chain starter, including `SecAction`. Use an inclusive range to update several
+rules, for example `SecRuleUpdateActionById 100-120 "tag:catalog,setvar:tx.seen=+1"`.
+A range skips missing IDs. A singleton must exist and ends the selector list.
+Use a comma-separated action list without spaces. The last disruptive action,
+status, or message replaces its predecessor. Tags, transformations, and
+`setvar` actions accumulate in declaration order. Status uses an unsigned
+16-bit value. Updated actions have the same runtime support as rule actions.
 Other unknown directives warn at load. `SecComponentSignature` is accepted as metadata.
 
 `SecRuleUpdateTargetByTag attack-sqli "!ARGS:password"` excludes that argument

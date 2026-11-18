@@ -227,6 +227,14 @@ fn normalize_line_continuations(input: &str) -> String {
 
 /// Parse an action list from a string.
 pub fn parse_actions(input: &str) -> Result<Vec<Action>> {
+    parse_action_list(input, false)
+}
+
+pub(super) fn parse_update_actions(input: &str) -> Result<Vec<Action>> {
+    parse_action_list(input, true)
+}
+
+fn parse_action_list(input: &str, update: bool) -> Result<Vec<Action>> {
     // First, normalize line continuations (backslash followed by newline and optional whitespace)
     let normalized = normalize_line_continuations(input);
 
@@ -237,6 +245,15 @@ pub fn parse_actions(input: &str) -> Result<Vec<Action>> {
     let mut quote_char = '"';
     let mut paren_depth: u32 = 0;
 
+    let mut push_action = |item: &str| -> Result<()> {
+        let item = item.trim();
+        if update {
+            actions.push(parse_update_action(item)?);
+        } else if !item.is_empty() {
+            actions.push(parse_single_action(item)?);
+        }
+        Ok(())
+    };
     for c in chars {
         match c {
             '"' | '\'' if !in_quotes => {
@@ -257,9 +274,7 @@ pub fn parse_actions(input: &str) -> Result<Vec<Action>> {
                 current.push(c);
             }
             ',' if !in_quotes && paren_depth == 0 => {
-                if !current.trim().is_empty() {
-                    actions.push(parse_single_action(current.trim())?);
-                }
+                push_action(&current)?;
                 current.clear();
             }
             _ => {
@@ -269,11 +284,51 @@ pub fn parse_actions(input: &str) -> Result<Vec<Action>> {
     }
 
     // Don't forget the last action
-    if !current.trim().is_empty() {
-        actions.push(parse_single_action(current.trim())?);
-    }
+    push_action(&current)?;
 
     Ok(actions)
+}
+
+/// Validate the arguments of the actions registered by the reference updater.
+fn parse_update_action(item: &str) -> Result<Action> {
+    let (name, value) = item.split_once(':').unwrap_or((item, ""));
+    let name = name.to_ascii_lowercase();
+    let value = unquote(value);
+    let valid = match name.as_str() {
+        "pass" | "deny" | "drop" | "block" | "log" | "nolog" | "auditlog" | "noauditlog"
+        | "capture" | "multimatch" | "chain" => value.is_empty(),
+        "id" => value.parse::<i64>().is_ok_and(|n| n > 0),
+        "maturity" | "accuracy" => value.parse::<u8>().is_ok_and(|n| (1..=9).contains(&n)),
+        "allow" => matches!(value, "" | "phase" | "request"),
+        "phase" | "skip" | "msg" | "logdata" | "tag" | "t" | "setvar" | "skipafter"
+        | "redirect" | "severity" | "status" | "ctl" | "rev" | "ver" | "exec" | "initcol"
+        | "expirevar" => !value.is_empty(),
+        _ => false,
+    };
+    if !valid {
+        return Err(Error::InvalidActionArgument {
+            action: name,
+            message: "invalid action or argument in update".into(),
+        });
+    }
+    if name == "phase" {
+        let phase = match value {
+            "request" => Some(2),
+            "response" => Some(4),
+            "logging" => Some(5),
+            _ => value.parse::<u8>().ok().filter(|p| (1..=5).contains(p)),
+        }
+        .ok_or_else(|| Error::InvalidActionArgument {
+            action: name,
+            message: "invalid phase".into(),
+        })?;
+        return Ok(Action::Metadata(MetadataAction::Phase(phase)));
+    }
+    if item.contains(':') {
+        parse_single_action(&format!("{name}:{value}"))
+    } else {
+        parse_single_action(&name)
+    }
 }
 
 /// Parse a single action.
