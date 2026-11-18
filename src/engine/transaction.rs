@@ -1291,26 +1291,36 @@ impl Transaction {
                     first_message: None,
                 }
             });
+            let mut portion = result
+                .matched_value
+                .filter(|_| capture || (first && name.is_some()))
+                .map(ByteValue::from);
             if let Some(name) = name {
                 let value = ByteValue::from(value);
                 if first {
+                    // TX:0 retains its own copy when capture is enabled. Otherwise
+                    // the audit snapshot can take ownership of the operator result.
+                    let audit_portion = if capture {
+                        portion.clone()
+                    } else {
+                        portion.take()
+                    };
+                    let (matched_portion, matched_portion_bytes) =
+                        audit_portion.map(ByteValue::into_display_and_bytes).unzip();
                     outcome.first_data = Some(MatchedData {
                         rule_id: logical_id.map(str::to_owned),
                         variable: name.to_string(),
                         value: value.to_string(),
-                        matched_portion: result
-                            .matched_value
-                            .as_deref()
-                            .map(|p| ByteValue::from(p).to_string()),
+                        matched_portion,
                         variable_bytes: name.as_bytes().to_vec(),
                         value_bytes: value.as_bytes().to_vec(),
-                        matched_portion_bytes: result.matched_value.clone(),
+                        matched_portion_bytes,
                     });
                 }
                 tx.matched_vars.push((name.clone(), value));
             }
             if capture {
-                tx.store_captures(result.matched_value, &result.captures);
+                tx.store_captures(portion, result.captures);
             }
             // SecLang runs all setvars before the controls for each
             // matching value. The parsed operations belong to the ruleset.
@@ -1445,16 +1455,16 @@ impl Transaction {
     /// `%{tx.3}` after a match with two groups then sees the old value. No
     /// ruleset should depend on a leftover like that, so the stale read is
     /// closed here.
-    fn store_captures(&mut self, whole: Option<Vec<u8>>, groups: &[Vec<u8>]) {
-        use crate::variables::MutableCollection;
-        for i in 0..10 {
-            self.tx.delete(&i.to_string());
+    fn store_captures(&mut self, whole: Option<ByteValue>, groups: Vec<Vec<u8>>) {
+        const SLOTS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+        for slot in SLOTS {
+            self.tx.delete_bytes(slot.as_bytes());
         }
         if let Some(whole) = whole {
-            self.tx.set_bytes("0", whole);
+            self.tx.set_bytes(SLOTS[0], whole);
         }
-        for (i, group) in groups.iter().take(9).enumerate() {
-            self.tx.set_bytes((i + 1).to_string(), group.clone());
+        for (&slot, group) in SLOTS[1..].iter().zip(groups) {
+            self.tx.set_bytes(slot, group);
         }
     }
 
