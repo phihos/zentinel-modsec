@@ -125,13 +125,8 @@ SecRule ARGS "@contains attack" "{action}"
 }
 
 #[test]
-fn ignored_body_access_and_unknown_directives_name_ruleset_ids() {
-    for directive in [
-        "SecRequestBodyAccess Off",
-        "SecResponseBodyAccess Off",
-        "SecCollectionTimeout 1234",
-        "SecUnknownExample On",
-    ] {
+fn ignored_unknown_directives_name_ruleset_ids() {
+    for directive in ["SecCollectionTimeout 1234", "SecUnknownExample On"] {
         let (_, log) = load_logs(&format!(
             r#"
 {directive}
@@ -315,4 +310,27 @@ SecRule TX:charset "@streq utf-8" "id:2,phase:1,pass""#,
         .unwrap();
     tx.process_request_headers().unwrap();
     assert_eq!(tx.matched_rules(), ["1", "2"]);
+}
+
+#[test]
+fn supported_body_policy_does_not_warn_and_enforces_access() {
+    let (engine, log) = load_logs(
+        r#"SecRequestBodyAccess Off
+SecResponseBodyAccess Off
+SecRequestBodyLimit 4
+SecResponseBodyLimit 4
+SecRequestBodyLimitAction ProcessPartial
+SecResponseBodyLimitAction Reject
+SecResponseBodyMimeType text/plain
+SecRule ARGS_POST:x "@contains attack" "id:201,phase:2,pass""#,
+    );
+    assert!(log.is_empty(), "{log}");
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+    tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.write_request_body(b"x=attack").unwrap().consumed, 0);
+    tx.process_request_body().unwrap();
+    assert!(tx.matched_rules().is_empty());
 }

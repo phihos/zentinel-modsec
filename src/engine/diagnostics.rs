@@ -46,40 +46,6 @@ pub(super) fn report(directives: &[Directive]) {
                 Some(&rule.operator),
             ),
             Directive::SecAction(rule) => (&rule.actions, &[][..], None),
-            Directive::SecRequestBodyAccess(_) => {
-                record(&mut found, "directive", "SecRequestBodyAccess", "configured body access is not applied; only ctl:requestBodyAccess is implemented", &global_ids);
-                continue;
-            }
-            Directive::SecResponseBodyAccess(_) => {
-                record(
-                    &mut found,
-                    "directive",
-                    "SecResponseBodyAccess",
-                    "configured response body access is not applied",
-                    &global_ids,
-                );
-                continue;
-            }
-            Directive::SecRequestBodyLimit(_) => {
-                record(
-                    &mut found,
-                    "directive",
-                    "SecRequestBodyLimit",
-                    "configured body limit is not applied",
-                    &global_ids,
-                );
-                continue;
-            }
-            Directive::SecResponseBodyLimit(_) => {
-                record(
-                    &mut found,
-                    "directive",
-                    "SecResponseBodyLimit",
-                    "configured body limit is not applied",
-                    &global_ids,
-                );
-                continue;
-            }
             Directive::SecRuleUpdateActionById { id, .. } => {
                 record(
                     &mut found,

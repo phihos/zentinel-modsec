@@ -1,6 +1,6 @@
 //! Request data for variable resolution.
 
-use super::collection::{Collection, HashMapCollection};
+use super::collection::{ByteCollection, Collection, HashMapCollection};
 use super::ByteValue;
 
 /// Request data container.
@@ -80,7 +80,7 @@ pub struct RequestData {
     pub body_error: Option<String>,
     /// Request body.
     pub body: Vec<u8>,
-    /// The engine intentionally retained only a body-limit prefix.
+    /// Acquisition reached its body limit; a partial body may end mid-part.
     pub inbound_data_error: bool,
     /// Client IP address.
     pub client_ip: String,
@@ -208,6 +208,21 @@ impl RequestData {
         let lower = name.to_ascii_lowercase();
         if lower == b"cookie" {
             self.parse_cookie_header_bytes(value);
+        }
+        // The first Content-Type selects form processors before phase 1,
+        // including empty bodies. Later duplicate headers must not change it.
+        if lower == b"content-type" && self.headers.get_bytes(b"content-type").is_none() {
+            let media = trim_header_leading_space(value);
+            if media.get(..33).is_some_and(|prefix| {
+                prefix.eq_ignore_ascii_case(b"application/x-www-form-urlencoded")
+            }) {
+                self.body_processor = "URLENCODED".into();
+            } else if media
+                .get(..19)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"multipart/form-data"))
+            {
+                self.body_processor = "MULTIPART".into();
+            }
         }
         self.headers.add_bytes(lower, value);
     }
@@ -407,6 +422,32 @@ fn decoded_request_path_bytes(input: &[u8]) -> Vec<u8> {
         }
     }
     percent_encoding::percent_decode(path).collect()
+}
+
+// Go strings.TrimSpace recognizes Unicode whitespace even when later header
+// bytes are opaque. Decode only the leading code point, never replace bytes.
+fn trim_header_leading_space(mut value: &[u8]) -> &[u8] {
+    while let Some(&first) = value.first() {
+        let width = match first {
+            0..=0x7f => 1,
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            0xf0..=0xf4 => 4,
+            _ => break,
+        };
+        let Some(character) = value
+            .get(..width)
+            .and_then(|prefix| std::str::from_utf8(prefix).ok())
+            .and_then(|text| text.chars().next())
+        else {
+            break;
+        };
+        if !character.is_whitespace() {
+            break;
+        }
+        value = &value[width..];
+    }
+    value
 }
 
 fn trim_ascii(mut value: &[u8]) -> &[u8] {

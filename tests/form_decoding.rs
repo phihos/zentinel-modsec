@@ -12,7 +12,7 @@ use zentinel_modsec::ModSecurity;
 
 fn query(rx: &str, uri: &str) -> bool {
     let rules = format!("SecRuleEngine On\nSecRule ARGS \"@rx {rx}\" \"id:1,phase:2,deny,t:none\"");
-    let m = ModSecurity::from_string(&rules).expect("rules load");
+    let m = load_with_request_body(&rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri(uri, "GET", "HTTP/1.1").unwrap();
     tx.process_request_headers().unwrap();
@@ -22,7 +22,7 @@ fn query(rx: &str, uri: &str) -> bool {
 
 fn form(rx: &str, body: &[u8]) -> bool {
     let rules = format!("SecRuleEngine On\nSecRule ARGS \"@rx {rx}\" \"id:1,phase:2,deny,t:none\"");
-    let m = ModSecurity::from_string(&rules).expect("rules load");
+    let m = load_with_request_body(&rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri("/g", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
@@ -36,7 +36,7 @@ fn form(rx: &str, body: &[u8]) -> bool {
 fn arg_name(rx: &str, uri: &str) -> bool {
     let rules =
         format!("SecRuleEngine On\nSecRule ARGS_NAMES \"@rx {rx}\" \"id:1,phase:2,deny,t:none\"");
-    let m = ModSecurity::from_string(&rules).expect("rules load");
+    let m = load_with_request_body(&rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri(uri, "GET", "HTTP/1.1").unwrap();
     tx.process_request_headers().unwrap();
@@ -118,7 +118,7 @@ fn a_windows_command_line_becomes_readable() {
     let uri = "/g?foo=FOR+%25a+IN+%28set%29+DO+abc";
     let rules = "SecRuleEngine On\nSecRule ARGS \"@rx ^for %a in \\(set\\) do abc$\" \
                  \"id:1,phase:2,deny,t:none,t:lowercase\"";
-    let m = ModSecurity::from_string(rules).expect("rules load");
+    let m = load_with_request_body(rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri(uri, "GET", "HTTP/1.1").unwrap();
     tx.process_request_headers().unwrap();
@@ -133,7 +133,7 @@ fn a_windows_command_line_becomes_readable() {
 #[test]
 fn a_json_body_keeps_its_pluses() {
     let rules = "SecRuleEngine On\nSecRule ARGS \"@rx ^a\\+b$\" \"id:1,phase:2,deny,t:none\"";
-    let m = ModSecurity::from_string(rules).unwrap();
+    let m = load_with_request_body(rules).unwrap();
     let mut tx = m.new_transaction();
     tx.process_uri("/g", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", "application/json")
@@ -147,7 +147,7 @@ fn a_json_body_keeps_its_pluses() {
 #[test]
 fn an_xml_body_keeps_its_pluses() {
     let rules = "SecRuleEngine On\nSecRule XML:/* \"@rx ^a\\+b$\" \"id:1,phase:2,deny,t:none\"";
-    let m = ModSecurity::from_string(rules).unwrap();
+    let m = load_with_request_body(rules).unwrap();
     let mut tx = m.new_transaction();
     tx.process_uri("/g", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", "application/xml")
@@ -162,7 +162,7 @@ fn an_xml_body_keeps_its_pluses() {
 fn the_request_uri_is_not_form_decoded() {
     // REQUEST_URI is the raw request target, not a form-encoded component.
     let rules = "SecRuleEngine On\nSecRule REQUEST_URI \"@rx \\+\" \"id:1,phase:2,deny,t:none\"";
-    let m = ModSecurity::from_string(rules).unwrap();
+    let m = load_with_request_body(rules).unwrap();
     let mut tx = m.new_transaction();
     tx.process_uri("/g?foo=a+b", "GET", "HTTP/1.1").unwrap();
     tx.process_request_headers().unwrap();
@@ -171,4 +171,10 @@ fn the_request_uri_is_not_form_decoded() {
         tx.has_intervention(),
         "REQUEST_URI should still contain the '+'"
     );
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

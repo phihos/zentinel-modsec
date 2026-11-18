@@ -2,7 +2,7 @@
 use zentinel_modsec::{engine::Transaction, ModSecurity};
 
 fn transaction(rules: &str, uri: &str, content_type: &str, body: &[u8]) -> Transaction {
-    let engine = ModSecurity::from_string(rules).unwrap();
+    let engine = load_with_request_body(rules).unwrap();
     let mut tx = engine.new_transaction();
     tx.process_uri(uri, "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", content_type).unwrap();
@@ -122,4 +122,10 @@ SecRule &REQUEST_BODY_LENGTH "@eq 1" "id:4,phase:2,pass""#;
     }
     let tx = transaction(rules, "/", "application/x-www-form-urlencoded", b"x=value");
     assert_eq!(tx.matched_rules(), ["3", "4"]);
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

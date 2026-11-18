@@ -3,7 +3,7 @@ use zentinel_modsec::ModSecurity;
 
 #[test]
 fn exact_crs_payloads_match_before_destructive_transformations() {
-    let engine = ModSecurity::from_string(include_str!("fixtures/crs-multimatch.conf")).unwrap();
+    let engine = load_with_request_body(include_str!("fixtures/crs-multimatch.conf")).unwrap();
     for (uri, id) in [
         (r"/get?arg=..\\pineapple", "930110"),
         (r"/get?a=..;.\.;\.", "930110"),
@@ -39,7 +39,7 @@ fn exact_crs_payloads_match_before_destructive_transformations() {
 
 #[test]
 fn changed_stages_run_actions_once_each_and_preserve_captures() {
-    let engine = ModSecurity::from_string(r#"SecRuleEngine DetectionOnly
+    let engine = load_with_request_body(r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@rx (?i)(a)" "id:10,phase:2,pass,multiMatch,t:none,t:lowercase,t:uppercase,t:uppercase,capture,setvar:tx.score=+5""#).unwrap();
     let mut tx = engine.new_transaction();
     tx.process_uri("/?x=a", "GET", "HTTP/1.1").unwrap();
@@ -53,7 +53,7 @@ SecRule ARGS:x "@rx (?i)(a)" "id:10,phase:2,pass,multiMatch,t:none,t:lowercase,t
 
 #[test]
 fn negation_applies_independently_to_each_stage_and_absence_is_not_a_value() {
-    let engine = ModSecurity::from_string(r#"SecRuleEngine DetectionOnly
+    let engine = load_with_request_body(r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "!@contains X" "id:10,phase:2,pass,multiMatch,t:uppercase,setvar:tx.score=+1"
 SecRule ARGS:absent "!@contains X" "id:11,phase:2,pass,multiMatch,t:uppercase,setvar:tx.score=+100""#).unwrap();
     let mut tx = engine.new_transaction();
@@ -67,7 +67,7 @@ SecRule ARGS:absent "!@contains X" "id:11,phase:2,pass,multiMatch,t:uppercase,se
 #[test]
 fn chain_children_see_all_matching_stages_and_failed_chains_keep_only_local_effects() {
     for (child, expected_score, matched) in [("A", "17", true), ("nope", "10", false)] {
-        let engine = ModSecurity::from_string(&format!(r#"SecRuleEngine DetectionOnly
+        let engine = load_with_request_body(&format!(r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@rx (?i)(a)" "id:10,phase:2,pass,multiMatch,t:uppercase,capture,setvar:tx.score=+5,chain"
 SecRule MATCHED_VARS "@streq {child}" "t:none,setvar:tx.score=+7""#)).unwrap();
         let mut tx = engine.new_transaction();
@@ -82,7 +82,7 @@ SecRule MATCHED_VARS "@streq {child}" "t:none,setvar:tx.score=+7""#)).unwrap();
 
 #[test]
 fn returning_to_an_earlier_value_after_a_change_is_another_evaluation() {
-    let engine = ModSecurity::from_string(r#"SecRuleEngine DetectionOnly
+    let engine = load_with_request_body(r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@streq a" "id:10,phase:2,pass,multiMatch,t:uppercase,t:lowercase,setvar:tx.score=+1""#).unwrap();
     let mut tx = engine.new_transaction();
     tx.process_uri("/?x=a", "GET", "HTTP/1.1").unwrap();
@@ -93,7 +93,7 @@ SecRule ARGS:x "@streq a" "id:10,phase:2,pass,multiMatch,t:uppercase,t:lowercase
 
 #[test]
 fn multi_match_does_not_overwrite_an_earlier_skip_after_action() {
-    let engine = ModSecurity::from_string(
+    let engine = load_with_request_body(
         r#"SecRuleEngine DetectionOnly
 SecRule ARGS:x "@streq a" "id:10,phase:2,pass,skipAfter:END,multiMatch"
 SecRule ARGS:x "@streq a" "id:11,phase:2,pass"
@@ -106,4 +106,10 @@ SecRule ARGS:x "@streq a" "id:12,phase:2,pass""#,
     tx.process_request_headers().unwrap();
     tx.process_request_body().unwrap();
     assert_eq!(tx.matched_rules(), ["10", "12"]);
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

@@ -18,7 +18,7 @@ use zentinel_modsec::ModSecurity;
 fn body_populates(target: &str, body: &[u8]) -> bool {
     let rules =
         format!("SecRuleEngine On\nSecRule {target} \"@rx .\" \"id:1,phase:2,deny,t:none\"");
-    let m = ModSecurity::from_string(&rules).expect("rules load");
+    let m = load_with_request_body(&rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri("/post", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
@@ -33,7 +33,7 @@ fn body_populates(target: &str, body: &[u8]) -> bool {
 fn matches(target: &str, rx: &str, body: &[u8]) -> bool {
     let rules =
         format!("SecRuleEngine On\nSecRule {target} \"@rx {rx}\" \"id:1,phase:2,deny,t:none\"");
-    let m = ModSecurity::from_string(&rules).expect("rules load");
+    let m = load_with_request_body(&rules).expect("rules load");
     let mut tx = m.new_transaction();
     tx.process_uri("/post", "POST", "HTTP/1.1").unwrap();
     tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
@@ -82,7 +82,7 @@ fn empty_segments_do_not_become_arguments() {
 fn the_query_string_still_behaves_the_same_way() {
     // The shape the body parser was missing; asserted so the two cannot drift.
     let rules = "SecRuleEngine On\nSecRule ARGS_NAMES \"@rx ^bare$\" \"id:1,phase:2,deny,t:none\"";
-    let m = ModSecurity::from_string(rules).unwrap();
+    let m = load_with_request_body(rules).unwrap();
     let mut tx = m.new_transaction();
     tx.process_uri("/p?bare", "GET", "HTTP/1.1").unwrap();
     tx.process_request_headers().unwrap();
@@ -97,4 +97,10 @@ fn an_sqli_payload_cannot_hide_by_encoding_its_separators() {
     let rx = r"(?i)\bor\b.{0,20}?\b\d+\s*=\s*\d+";
     assert!(matches("ARGS|ARGS_NAMES", rx, b"pay=or 120=121"));
     assert!(matches("ARGS|ARGS_NAMES", rx, b"pay%3Dor+120%3D121"));
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }

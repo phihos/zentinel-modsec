@@ -17,7 +17,7 @@
 use zentinel_modsec::ModSecurity;
 
 fn run(rules: &str, content_type: &str, body: &[u8]) -> bool {
-    let msc = ModSecurity::from_string(rules).expect("rules should load");
+    let msc = load_with_request_body(rules).expect("rules should load");
     let mut tx = msc.new_transaction();
     tx.process_uri("/api/search", "POST", "HTTP/1.1").unwrap();
     if !content_type.is_empty() {
@@ -341,6 +341,12 @@ fn excluding_one_json_path_leaves_the_others_live() {
         ),
         "a different key must still be inspected"
     );
+}
+
+// These positive body fixtures explicitly request inspection; the engine's
+// bare defaults match Coraza and leave body access off.
+fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
+    ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }
 
 #[test]

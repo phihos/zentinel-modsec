@@ -150,6 +150,29 @@ pub enum Error {
         message: String,
     },
 
+    /// An inspection buffer could not reserve its bounded prefix.
+    #[error("failed to reserve body inspection buffer: {source}")]
+    BodyBufferAllocation {
+        /// Allocator failure before the body bytes were copied.
+        source: std::collections::TryReserveError,
+    },
+
+    /// A previous header/body callback failed and cannot safely be replayed.
+    #[error("previous {direction} callback failed: {message}")]
+    BodyCallbackFailed {
+        /// Request or response direction.
+        direction: &'static str,
+        /// Original callback error.
+        message: String,
+    },
+
+    /// A connector supplied new bytes after the body phase was sealed.
+    #[error("cannot append {direction} body bytes after its inspection phase")]
+    BodyAlreadyProcessed {
+        /// Request or response direction.
+        direction: &'static str,
+    },
+
     /// A text-only extension cannot execute against arbitrary input bytes.
     #[error("{component} cannot inspect binary input; implement its byte API")]
     UnsupportedBinaryInput {

@@ -29,8 +29,8 @@ pub use action::{
     MetadataAction, SetVarSpec, SetVarValue,
 };
 pub use directive::{
-    Directive, RuleEngineMode, RuleIdSelector, SecAction, SecMarker, SecRule, UpdateTargetById,
-    UpdateTargetByTag,
+    BodyLimitAction, Directive, RuleEngineMode, RuleIdSelector, SecAction, SecMarker, SecRule,
+    UpdateTargetById, UpdateTargetByTag,
 };
 pub use lexer::{Lexer, Token, TokenKind};
 pub use operator::{OperatorName, OperatorSpec};
@@ -212,6 +212,33 @@ impl Parser {
             }
             "secrequestbodyaccess" => self.parse_boolean_directive(lexer, "SecRequestBodyAccess"),
             "secresponsebodyaccess" => self.parse_boolean_directive(lexer, "SecResponseBodyAccess"),
+            "secrequestbodylimit" => self.parse_body_limit(lexer, true),
+            "secresponsebodylimit" => self.parse_body_limit(lexer, false),
+            "secrequestbodylimitaction" => self.parse_body_limit_action(lexer, true),
+            "secresponsebodylimitaction" => self.parse_body_limit_action(lexer, false),
+            "secresponsebodymimetype" => {
+                let mut types = Vec::new();
+                while self.peek_more_arguments(lexer) {
+                    let argument = self.expect_argument(lexer, "SecResponseBodyMimeType")?;
+                    types.extend(argument.split_whitespace().map(str::to_owned));
+                }
+                if types.is_empty() {
+                    return Err(Error::parse(
+                        "SecResponseBodyMimeType requires a MIME type",
+                        self.location.to_string(),
+                    ));
+                }
+                Ok(Directive::SecResponseBodyMimeType(types))
+            }
+            "secresponsebodymimetypesclear" => {
+                if self.peek_more_arguments(lexer) {
+                    return Err(Error::parse(
+                        "SecResponseBodyMimeTypesClear takes no arguments",
+                        self.location.to_string(),
+                    ));
+                }
+                Ok(Directive::SecResponseBodyMimeTypesClear)
+            }
             "include" => self.parse_include(lexer),
             // Recognized engine-config/metadata directives that have no effect on
             // rule evaluation — skip quietly rather than warning.
@@ -476,6 +503,55 @@ impl Parser {
     fn peek_more_arguments(&self, lexer: &mut Lexer) -> bool {
         lexer.skip_whitespace();
         !matches!(lexer.peek(), None | Some('\n') | Some('\r') | Some('#'))
+    }
+
+    /// Parse a bounded byte count for request or response acquisition.
+    fn parse_body_limit(&mut self, lexer: &mut Lexer, request: bool) -> Result<Directive> {
+        let name = if request {
+            "SecRequestBodyLimit"
+        } else {
+            "SecResponseBodyLimit"
+        };
+        let text = self.expect_argument(lexer, name)?;
+        let limit = text
+            .parse::<usize>()
+            .ok()
+            .filter(|limit| (1..=1_073_741_824).contains(limit))
+            .ok_or_else(|| {
+                Error::parse(
+                    format!("{name} requires a byte count between 1 and 1073741824"),
+                    self.location.to_string(),
+                )
+            })?;
+        Ok(if request {
+            Directive::SecRequestBodyLimit(limit)
+        } else {
+            Directive::SecResponseBodyLimit(limit)
+        })
+    }
+
+    fn parse_body_limit_action(&mut self, lexer: &mut Lexer, request: bool) -> Result<Directive> {
+        let name = if request {
+            "SecRequestBodyLimitAction"
+        } else {
+            "SecResponseBodyLimitAction"
+        };
+        let text = self.expect_argument(lexer, name)?;
+        let action = match text.to_ascii_lowercase().as_str() {
+            "reject" => BodyLimitAction::Reject,
+            "processpartial" => BodyLimitAction::ProcessPartial,
+            _ => {
+                return Err(Error::parse(
+                    format!("{name} accepts Reject or ProcessPartial"),
+                    self.location.to_string(),
+                ))
+            }
+        };
+        Ok(if request {
+            Directive::SecRequestBodyLimitAction(action)
+        } else {
+            Directive::SecResponseBodyLimitAction(action)
+        })
     }
 
     /// Parse a boolean directive (On/Off).
