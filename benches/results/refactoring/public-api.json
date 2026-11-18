@@ -1,0 +1,34 @@
+{
+  "engine": "af31557479a44683c746aa1b7784254d8e175d77",
+  "tree": "73e52c47dfd81807d46ac042c8aa0d11047fc12f",
+  "coraza": "v3.8.1",
+  "checks": {
+    "body_limits": 48,
+    "acquisition_spool_transitions": 5,
+    "schema": 22,
+    "recursive_reference": 48,
+    "recursive_with_rust_boundaries": 50,
+    "dynamic_scope": 8,
+    "processor_rule_decisions": 17,
+    "processor_complete_records_equal": 16,
+    "action_load_and_execution_cases": 35,
+    "action_equal": 34
+  },
+  "engine_lib_sha256": "2ce9347022bcdc95d8b607d8016b6bc9940ba1e197746e78734ab713744560cf",
+  "outputs": {
+    "action-go.txt": "20acafeafdb82fa00de2b1601e62445f235f7c355c28c7a0e3896661a5957588",
+    "action-rust.txt": "7c80ef97f2ddfb1d9610a359fd3aa85d5f5ea10dc3c40d904fde60efb7b55fa2",
+    "body-go.txt": "627da1abf1b37b1cdb19a3d5330bafa691d1eec2e594ab875b7c11bdb5508361",
+    "body-rust.txt": "627da1abf1b37b1cdb19a3d5330bafa691d1eec2e594ab875b7c11bdb5508361",
+    "processor-go.txt": "c65d9baf555b1f739675e9d02e3f3990e6554318fa7f52a7c9bf34b05772a627",
+    "processor-rust.txt": "cf873401bb571053605bc9f2ebe76bf84042d072414bc2d1ca56b449efdd569e",
+    "recursive-go.txt": "273e8f49a01ae43898ef3c9d58586d20faafbd5ea353fcda014e7b6c7fc8007e",
+    "recursive-rust.txt": "64547817e9d7d1e6fd57f88b4ae25bccb02813082e57a32efbaaf0d3ecb5b0db",
+    "schema-go.txt": "fe22e7572884e88dade487cd3565ede54d1e46b6291e3920bc74f30a2a05ff00",
+    "schema-rust.txt": "fe22e7572884e88dade487cd3565ede54d1e46b6291e3920bc74f30a2a05ff00",
+    "scoped-go.txt": "efb1e4d71e41252d2119342c553bc95583028af52b0b51b47a9c838f2568078c",
+    "scoped-rust.txt": "efb1e4d71e41252d2119342c553bc95583028af52b0b51b47a9c838f2568078c",
+    "spooling-go.txt": "758cf8f9b8c5975ac76eba908ecd5c77f274407237ba1dc806e015adad0768e4",
+    "spooling-rust.txt": "758cf8f9b8c5975ac76eba908ecd5c77f274407237ba1dc806e015adad0768e4"
+  }
+}
