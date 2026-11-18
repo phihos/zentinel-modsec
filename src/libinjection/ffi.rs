@@ -8,21 +8,28 @@ extern "C" {
     fn libinjection_xss(input: *const c_char, len: usize) -> c_int;
 }
 
-fn checked_result(result: c_int, fingerprint: impl FnOnce() -> String) -> DetectionResult {
+fn checked_status(result: c_int) -> Result<bool, ()> {
     match result {
-        0 => DetectionResult::safe(),
-        1 => DetectionResult::detected(fingerprint()),
+        0 => Ok(false),
+        1 => Ok(true),
         other => {
             // The public boolean API cannot represent an evaluation error.
             // Surface it and conservatively report a match, never a bypass.
             tracing::error!(result = other, "upstream libinjection parser error");
-            DetectionResult::detected("LIBINJECTION_ERROR".into())
+            Err(())
         }
     }
 }
 
-/// Detect SQLi in the original bytes, including invalid UTF-8 and embedded NULs.
-pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
+fn checked_result(result: c_int, fingerprint: impl FnOnce() -> String) -> DetectionResult {
+    match checked_status(result) {
+        Ok(true) => DetectionResult::detected(fingerprint()),
+        Ok(false) => DetectionResult::safe(),
+        Err(()) => DetectionResult::detected("LIBINJECTION_ERROR".into()),
+    }
+}
+
+fn scan_sqli(input: &[u8]) -> (c_int, [c_char; 8]) {
     // Upstream requires at least eight bytes and writes an ASCII C string.
     let mut fingerprint = [0 as c_char; 8];
     // SAFETY: input remains valid for len bytes throughout the synchronous
@@ -31,6 +38,12 @@ pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
     // All parser state is local to the C call, so concurrent calls are safe.
     let result =
         unsafe { libinjection_sqli(input.as_ptr().cast(), input.len(), fingerprint.as_mut_ptr()) };
+    (result, fingerprint)
+}
+
+/// Detect SQLi in the original bytes, including invalid UTF-8 and embedded NULs.
+pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
+    let (result, fingerprint) = scan_sqli(input);
     checked_result(result, || {
         fingerprint
             .iter()
@@ -40,12 +53,23 @@ pub fn detect_sqli_bytes(input: &[u8]) -> DetectionResult {
     })
 }
 
-/// Detect XSS in the original bytes, including invalid UTF-8 and embedded NULs.
-pub fn detect_xss_bytes(input: &[u8]) -> DetectionResult {
+fn scan_xss(input: &[u8]) -> c_int {
     // SAFETY: input is a valid immutable byte slice for the supplied length;
     // upstream neither retains nor mutates it. Embedded NULs are supported.
-    let result = unsafe { libinjection_xss(input.as_ptr().cast(), input.len()) };
-    checked_result(result, || "XSS".into())
+    unsafe { libinjection_xss(input.as_ptr().cast(), input.len()) }
+}
+
+/// Detect XSS in the original bytes, including invalid UTF-8 and embedded NULs.
+pub fn detect_xss_bytes(input: &[u8]) -> DetectionResult {
+    checked_result(scan_xss(input), || "XSS".into())
+}
+
+pub(super) fn is_sqli_bytes(input: &[u8]) -> bool {
+    checked_status(scan_sqli(input).0).unwrap_or(true)
+}
+
+pub(super) fn is_xss_bytes(input: &[u8]) -> bool {
+    checked_status(scan_xss(input)).unwrap_or(true)
 }
 
 #[cfg(test)]
