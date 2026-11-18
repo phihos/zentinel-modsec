@@ -86,18 +86,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn state(&mut self, schema: &'a Value) -> Option<State> {
+        self.draft = self.refs.draft_for(schema)?;
         let mut state = State::default();
         let Some(map) = schema.as_object() else {
             state.leaf = Some((jsonschema::validator_for(schema).ok()?, 0, false));
             return Some(state);
         };
-        if map
-            .get("$schema")
-            .and_then(Value::as_str)
-            .is_some_and(|uri| Draft::from_schema_uri(uri) != self.draft)
-        {
-            return None;
-        }
         if let Some(reference) = map.get("$ref") {
             let target = self.refs.resolve(schema, reference.as_str()?)?;
             state.same.push(Op::All(vec![self.id(target)]));
@@ -303,25 +297,67 @@ impl Program {
     }
 }
 
+#[derive(Default)]
+struct Coverage {
+    all: bool,
+    positions: Vec<usize>,
+}
+
+impl Coverage {
+    fn push(&mut self, pos: usize) {
+        if !self.all {
+            self.positions.push(pos);
+        }
+    }
+    fn mark_all(&mut self) {
+        self.all = true;
+        self.positions = Vec::new();
+    }
+}
+
 struct Results {
     count: usize,
-    truths: Vec<bool>,
-    marks: HashMap<usize, Box<[usize]>>,
+    truths: Vec<u64>,
+    marks: HashMap<usize, Coverage>,
 }
 
 impl Results {
     fn valid(&self, node: Id, state: Id) -> bool {
-        self.truths[node * self.count + state]
-    }
-    fn inherit(&self, node: Id, state: Id, seen: &mut Vec<usize>) -> bool {
         let index = node * self.count + state;
-        if !self.truths[index] {
+        self.truths[index / 64] & (1u64 << (index % 64)) != 0
+    }
+    fn inherit(&self, node: Id, state: Id, seen: &mut Coverage) -> bool {
+        let index = node * self.count + state;
+        if !self.valid(node, state) {
             return false;
         }
         if let Some(fields) = self.marks.get(&index) {
-            seen.extend_from_slice(fields);
+            if fields.all {
+                seen.mark_all();
+            } else if !seen.all {
+                seen.positions.extend_from_slice(&fields.positions);
+            }
         }
         true
+    }
+}
+
+impl Object {
+    fn active(&self) -> bool {
+        !(self.properties.is_empty()
+            && self.patterns.is_empty()
+            && self.additional.is_none()
+            && self.names.is_none()
+            && self.unevaluated.is_none())
+    }
+}
+
+impl Array {
+    fn active(&self) -> bool {
+        !(self.prefix.is_empty()
+            && self.rest.is_none()
+            && self.contains.is_none()
+            && self.unevaluated.is_none())
     }
 }
 
@@ -332,7 +368,7 @@ impl State {
         node: Id,
         results: &Results,
         track: bool,
-        seen: &mut Vec<usize>,
+        seen: &mut Coverage,
     ) -> bool {
         let value = &arena.nodes()[node];
         if let Some((validator, depth, unique)) = &self.leaf {
@@ -350,8 +386,11 @@ impl State {
                 Op::All(ids) => ids.iter().all(|&s| results.inherit(node, s, seen)),
                 Op::Any(ids) => {
                     if track {
-                        ids.iter()
-                            .fold(false, |found, &s| results.inherit(node, s, seen) || found)
+                        let mut valid = false;
+                        for &s in ids {
+                            valid |= results.inherit(node, s, seen);
+                        }
+                        valid
                     } else {
                         ids.iter().any(|&s| results.valid(node, s))
                     }
@@ -380,7 +419,7 @@ impl State {
             }
         }
 
-        if let Some(fields) = value.as_object() {
+        if let Some(fields) = value.as_object().filter(|_| self.object.active()) {
             for (pos, (key, id)) in fields.iter().enumerate() {
                 if self
                     .object
@@ -424,7 +463,7 @@ impl State {
                 return check_remaining(fields.values(), s, results, seen);
             }
         }
-        if let Some(items) = value.as_array() {
+        if let Some(items) = value.as_array().filter(|_| self.array.active()) {
             let mut count = 0;
             for (pos, id) in items.iter().enumerate() {
                 let id = child(id);
@@ -462,18 +501,18 @@ fn check_remaining<'a>(
     children: impl ExactSizeIterator<Item = &'a Value>,
     state: Id,
     results: &Results,
-    seen: &mut Vec<usize>,
+    seen: &mut Coverage,
 ) -> bool {
-    seen.sort_unstable();
-    let len = children.len();
-    if children
-        .enumerate()
-        .any(|(pos, id)| seen.binary_search(&pos).is_err() && !results.valid(child(id), state))
-    {
+    if seen.all {
+        return true;
+    }
+    seen.positions.sort_unstable();
+    if children.enumerate().any(|(pos, id)| {
+        seen.positions.binary_search(&pos).is_err() && !results.valid(child(id), state)
+    }) {
         return false;
     }
-    seen.clear();
-    seen.extend(0..len);
+    seen.mark_all();
     true
 }
 
@@ -488,20 +527,30 @@ impl Program {
         };
         let mut results = Results {
             count: n,
-            truths: vec![false; size],
+            truths: vec![0; size.div_ceil(64)],
             marks: HashMap::new(),
         };
-        for node in 0..arena.nodes().len() {
+        for (node, value) in arena.nodes().iter().enumerate() {
+            let width = value
+                .as_array()
+                .map(Vec::len)
+                .or_else(|| value.as_object().map(Map::len))
+                .unwrap_or(0);
             for &state in &self.order {
-                let mut seen = Vec::new();
+                let mut seen = Coverage::default();
                 if self.states[state].evaluate(&arena, node, &results, self.annotations, &mut seen)
                 {
                     let index = node * n + state;
-                    results.truths[index] = true;
-                    if !seen.is_empty() {
-                        seen.sort_unstable();
-                        seen.dedup();
-                        results.marks.insert(index, seen.into_boxed_slice());
+                    results.truths[index / 64] |= 1u64 << (index % 64);
+                    if !seen.positions.is_empty() {
+                        seen.positions.sort_unstable();
+                        seen.positions.dedup();
+                        if seen.positions.len() == width {
+                            seen.mark_all();
+                        }
+                    }
+                    if width != 0 && (seen.all || !seen.positions.is_empty()) {
+                        results.marks.insert(index, seen);
                     }
                 }
             }

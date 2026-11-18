@@ -255,7 +255,7 @@ fn inspection_depth(schema: &Value) -> Option<(usize, bool)> {
 fn intern_subtree(
     mut bytes: &[u8],
     ids: &mut HashMap<Value, usize>,
-    store_names: bool,
+    mut names: Option<&mut HashMap<String, usize>>,
 ) -> Option<usize> {
     let mut frames = Vec::<(Value, Option<String>)>::new();
     while let Some((&byte, rest)) = bytes.split_first() {
@@ -289,9 +289,10 @@ fn intern_subtree(
                 bytes = &bytes[tokens.byte_offset()..];
                 if let Some((Value::Object(_), key @ None)) = frames.last_mut() {
                     *key = Some(value.as_str()?.to_owned());
-                    if store_names {
+                    if let Some(names) = names.as_deref_mut() {
                         let next = ids.len();
-                        ids.entry(value).or_insert(next);
+                        let id = *ids.entry(value).or_insert(next);
+                        names.entry(key.as_ref()?.clone()).or_insert(id);
                     }
                     continue;
                 }
@@ -363,7 +364,7 @@ fn project_deep_json(input: &[u8], (visible, unique): (usize, bool)) -> Option<s
                         let id = intern_subtree(
                             &raw.as_bytes()[omitted_start..=copy_from],
                             &mut identities,
-                            false,
+                            None,
                         )?;
                         if byte == b'}' {
                             projected.extend_from_slice(br#""":"#);

@@ -13,20 +13,16 @@ impl Arena {
     pub(super) fn parse(input: &[u8], store_names: bool) -> Option<Self> {
         let raw = serde_json::from_slice::<&serde_json::value::RawValue>(input).ok()?;
         let mut ids = HashMap::new();
-        let root = intern_subtree(raw.get().as_bytes(), &mut ids, store_names)?;
+        let mut names = HashMap::new();
+        let root = intern_subtree(
+            raw.get().as_bytes(),
+            &mut ids,
+            store_names.then_some(&mut names),
+        )?;
         let mut nodes = vec![Value::Null; ids.len()];
         for (node, index) in ids {
             nodes[index] = node;
         }
-        let names = if store_names {
-            nodes
-                .iter()
-                .enumerate()
-                .filter_map(|(id, v)| Some((v.as_str()?.to_owned(), id)))
-                .collect()
-        } else {
-            HashMap::new()
-        };
         Some(Self { nodes, root, names })
     }
 
