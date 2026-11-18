@@ -90,3 +90,26 @@ SecRule ARGS:x "@eq %{ARGS.target}" "id:12,phase:2,pass""#).unwrap();
         assert_eq!(tx.matched_rules(), ["10", "12"]);
     }
 }
+
+#[test]
+fn expanded_operands_use_the_same_conversion_as_values() {
+    use zentinel_modsec::operators::compile_operator_bytes;
+    use zentinel_modsec::parser::{OperatorName, OperatorSpec};
+    for (name, input, expected) in [
+        (OperatorName::Eq, "0", true),
+        (OperatorName::Gt, "1", true),
+        (OperatorName::Ge, "0", true),
+        (OperatorName::Lt, "-1", true),
+        (OperatorName::Le, "1", false),
+    ] {
+        let spec = OperatorSpec {
+            name,
+            argument: "%{tx.target}".into(),
+            negated: false,
+        };
+        for expanded in [&b"invalid"[..], &b"\xff"[..]] {
+            let op = compile_operator_bytes(&spec, expanded).unwrap();
+            assert_eq!(op.execute(input).matched, expected);
+        }
+    }
+}

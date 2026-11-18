@@ -54,3 +54,22 @@ SecRule ARGS:color "@streq green" "t:none"
         ["1", "3"]
     );
 }
+
+#[test]
+fn within_matches_partial_and_empty_substrings_in_static_and_binary_arguments() {
+    use zentinel_modsec::operators::{compile_operator_bytes, create_operator};
+    use zentinel_modsec::parser::{OperatorName, OperatorSpec};
+
+    let text = create_operator(OperatorName::Within, "green,blue").unwrap();
+    assert!(text.execute("en,bl").matched);
+    assert!(text.execute("").matched);
+    assert!(!text.execute("Green").matched);
+    let spec = OperatorSpec {
+        name: OperatorName::Within,
+        argument: "%{tx.palette}".into(),
+        negated: false,
+    };
+    let bytes = compile_operator_bytes(&spec, b"green\xffblue").unwrap();
+    assert!(bytes.execute_bytes(b"n\xffb").unwrap().matched);
+    assert!(bytes.execute_bytes(b"").unwrap().matched);
+}

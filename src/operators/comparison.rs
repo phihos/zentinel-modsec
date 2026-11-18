@@ -188,263 +188,61 @@ fn numeric_value(bytes: &[u8]) -> i64 {
     }
 }
 
-/// Numeric equals operator (@eq).
-/// Supports both numeric literals and variable references (e.g., %{tx.var}).
-pub struct EqOperator {
-    /// The argument (may be a number or variable reference).
-    arg: String,
+// A numeric target is parsed once. Values and expanded arguments use the
+// same original-byte conversion, including Go's overflow behavior.
+macro_rules! numeric_operator {
+    ($operator:ident, $name:literal, $comparison:tt) => {
+        #[doc = concat!("Numeric comparison operator (@", $name, ").")]
+        pub struct $operator {
+            target: Option<i64>,
+        }
+
+        impl $operator {
+            /// Compile a static argument. Runtime macros are bound by the transaction.
+            pub fn new(argument: &str) -> Self {
+                Self {
+                    target: (!argument.contains("%{")).then(|| numeric_value(argument.as_bytes())),
+                }
+            }
+
+            pub(super) fn from_expanded(argument: &[u8]) -> Self {
+                Self { target: Some(numeric_value(argument)) }
+            }
+
+            fn matches(&self, value: &[u8]) -> bool {
+                self.target.is_some_and(|target| numeric_value(value) $comparison target)
+            }
+        }
+
+        impl Operator for $operator {
+            fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
+                Ok(if self.matches(value) {
+                    ByteOperatorResult::matched(value.to_vec())
+                } else {
+                    ByteOperatorResult::no_match()
+                })
+            }
+
+            fn execute(&self, value: &str) -> OperatorResult {
+                if self.matches(value.as_bytes()) {
+                    OperatorResult::matched(value.to_owned())
+                } else {
+                    OperatorResult::no_match()
+                }
+            }
+
+            fn name(&self) -> &'static str {
+                $name
+            }
+        }
+    };
 }
 
-impl EqOperator {
-    /// Create the operator from its SecLang argument.
-    pub fn new(value: &str) -> Self {
-        Self {
-            arg: value.to_string(),
-        }
-    }
-
-    fn target_value(&self) -> Option<i64> {
-        // If it's a variable reference, we can't resolve it statically
-        if self.arg.contains("%{") {
-            return None;
-        }
-        Some(numeric_value(self.arg.as_bytes()))
-    }
-}
-
-impl Operator for EqOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(
-            if self
-                .target_value()
-                .is_some_and(|target| numeric_value(value) == target)
-            {
-                ByteOperatorResult::matched(value.to_vec())
-            } else {
-                ByteOperatorResult::no_match()
-            },
-        )
-    }
-
-    fn execute(&self, value: &str) -> OperatorResult {
-        if self
-            .target_value()
-            .is_some_and(|target| numeric_value(value.as_bytes()) == target)
-        {
-            OperatorResult::matched(value.to_string())
-        } else {
-            OperatorResult::no_match()
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "eq"
-    }
-}
-
-/// Greater than operator (@gt).
-pub struct GtOperator {
-    arg: String,
-}
-
-impl GtOperator {
-    /// Create the operator from its SecLang argument.
-    pub fn new(value: &str) -> Self {
-        Self {
-            arg: value.to_string(),
-        }
-    }
-
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        Some(numeric_value(self.arg.as_bytes()))
-    }
-}
-
-impl Operator for GtOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(
-            if self
-                .target_value()
-                .is_some_and(|target| numeric_value(value) > target)
-            {
-                ByteOperatorResult::matched(value.to_vec())
-            } else {
-                ByteOperatorResult::no_match()
-            },
-        )
-    }
-
-    fn execute(&self, value: &str) -> OperatorResult {
-        if self
-            .target_value()
-            .is_some_and(|target| numeric_value(value.as_bytes()) > target)
-        {
-            OperatorResult::matched(value.to_string())
-        } else {
-            OperatorResult::no_match()
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "gt"
-    }
-}
-
-/// Less than operator (@lt).
-pub struct LtOperator {
-    arg: String,
-}
-
-impl LtOperator {
-    /// Create the operator from its SecLang argument.
-    pub fn new(value: &str) -> Self {
-        Self {
-            arg: value.to_string(),
-        }
-    }
-
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        Some(numeric_value(self.arg.as_bytes()))
-    }
-}
-
-impl Operator for LtOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(
-            if self
-                .target_value()
-                .is_some_and(|target| numeric_value(value) < target)
-            {
-                ByteOperatorResult::matched(value.to_vec())
-            } else {
-                ByteOperatorResult::no_match()
-            },
-        )
-    }
-
-    fn execute(&self, value: &str) -> OperatorResult {
-        if self
-            .target_value()
-            .is_some_and(|target| numeric_value(value.as_bytes()) < target)
-        {
-            OperatorResult::matched(value.to_string())
-        } else {
-            OperatorResult::no_match()
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "lt"
-    }
-}
-
-/// Greater than or equal operator (@ge).
-pub struct GeOperator {
-    arg: String,
-}
-
-impl GeOperator {
-    /// Create the operator from its SecLang argument.
-    pub fn new(value: &str) -> Self {
-        Self {
-            arg: value.to_string(),
-        }
-    }
-
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        Some(numeric_value(self.arg.as_bytes()))
-    }
-}
-
-impl Operator for GeOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(
-            if self
-                .target_value()
-                .is_some_and(|target| numeric_value(value) >= target)
-            {
-                ByteOperatorResult::matched(value.to_vec())
-            } else {
-                ByteOperatorResult::no_match()
-            },
-        )
-    }
-
-    fn execute(&self, value: &str) -> OperatorResult {
-        if self
-            .target_value()
-            .is_some_and(|target| numeric_value(value.as_bytes()) >= target)
-        {
-            OperatorResult::matched(value.to_string())
-        } else {
-            OperatorResult::no_match()
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "ge"
-    }
-}
-
-/// Less than or equal operator (@le).
-pub struct LeOperator {
-    arg: String,
-}
-
-impl LeOperator {
-    /// Create the operator from its SecLang argument.
-    pub fn new(value: &str) -> Self {
-        Self {
-            arg: value.to_string(),
-        }
-    }
-
-    fn target_value(&self) -> Option<i64> {
-        if self.arg.contains("%{") {
-            return None;
-        }
-        Some(numeric_value(self.arg.as_bytes()))
-    }
-}
-
-impl Operator for LeOperator {
-    fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(
-            if self
-                .target_value()
-                .is_some_and(|target| numeric_value(value) <= target)
-            {
-                ByteOperatorResult::matched(value.to_vec())
-            } else {
-                ByteOperatorResult::no_match()
-            },
-        )
-    }
-
-    fn execute(&self, value: &str) -> OperatorResult {
-        if self
-            .target_value()
-            .is_some_and(|target| numeric_value(value.as_bytes()) <= target)
-        {
-            OperatorResult::matched(value.to_string())
-        } else {
-            OperatorResult::no_match()
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "le"
-    }
-}
+numeric_operator!(EqOperator, "eq", ==);
+numeric_operator!(GtOperator, "gt", >);
+numeric_operator!(GeOperator, "ge", >=);
+numeric_operator!(LtOperator, "lt", <);
+numeric_operator!(LeOperator, "le", <=);
 
 #[cfg(test)]
 mod tests {

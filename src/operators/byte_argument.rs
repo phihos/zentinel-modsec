@@ -3,6 +3,19 @@ use super::*;
 
 /// Compile a runtime argument without formatting binary macros for display.
 pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Arc<dyn Operator>> {
+    match spec.name {
+        OperatorName::Eq => return Ok(Arc::new(EqOperator::from_expanded(argument))),
+        OperatorName::Gt => return Ok(Arc::new(GtOperator::from_expanded(argument))),
+        OperatorName::Ge => return Ok(Arc::new(GeOperator::from_expanded(argument))),
+        OperatorName::Lt => return Ok(Arc::new(LtOperator::from_expanded(argument))),
+        OperatorName::Le => return Ok(Arc::new(LeOperator::from_expanded(argument))),
+        OperatorName::Within => {
+            return Ok(Arc::new(WithinOperator {
+                haystack: argument.to_vec(),
+            }))
+        }
+        _ => {}
+    }
     if let Ok(argument) = std::str::from_utf8(argument) {
         return compile_operator(&OperatorSpec {
             name: spec.name,
@@ -30,13 +43,7 @@ pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Ar
         | OperatorName::EndsWith
         | OperatorName::StreQ
         | OperatorName::Ne
-        | OperatorName::Within
-        | OperatorName::Pm
-        | OperatorName::Eq
-        | OperatorName::Gt
-        | OperatorName::Ge
-        | OperatorName::Lt
-        | OperatorName::Le => Ok(Arc::new(ByteArgument {
+        | OperatorName::Pm => Ok(Arc::new(ByteArgument {
             kind: spec.name,
             argument: argument.to_vec(),
         })),
@@ -68,10 +75,6 @@ impl Operator for ByteArgument {
             OperatorName::EndsWith => value.ends_with(&self.argument),
             OperatorName::StreQ => value == self.argument,
             OperatorName::Ne => value != self.argument,
-            OperatorName::Within => self
-                .argument
-                .split(u8::is_ascii_whitespace)
-                .any(|part| part == value),
             OperatorName::Pm => self
                 .argument
                 .split(u8::is_ascii_whitespace)
@@ -81,7 +84,7 @@ impl Operator for ByteArgument {
                         .windows(part.len())
                         .any(|candidate| candidate.eq_ignore_ascii_case(part))
                 }),
-            _ => false, // An invalid-UTF-8 argument cannot be a decimal number.
+            _ => unreachable!("only byte-argument comparisons are constructed"),
         };
         Ok(if matched {
             let portion = match self.kind {
