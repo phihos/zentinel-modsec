@@ -328,6 +328,7 @@ impl VariableName {
             | VariableName::ResponseHeadersNames
             | VariableName::ResponseBody
             | VariableName::ResponseContentType
+            | VariableName::ResponseContentLength
             | VariableName::RemoteAddr
             | VariableName::RemotePort
             | VariableName::ServerAddr
@@ -357,8 +358,7 @@ impl VariableName {
             | VariableName::ReqBodyProcessorError
             | VariableName::ReqBodyProcessorErrorMsg => true,
 
-            VariableName::ResponseContentLength
-            | VariableName::RemoteHost
+            VariableName::RemoteHost
             | VariableName::RemoteUser
             | VariableName::Session
             | VariableName::Env

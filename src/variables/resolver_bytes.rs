@@ -258,14 +258,16 @@ impl<'a> VariableResolver<'a> {
             QueryString => scalar("QUERY_STRING", request.query_bytes()),
             RequestMethod => scalar("REQUEST_METHOD", request.method_bytes()),
             RequestProtocol => scalar("REQUEST_PROTOCOL", request.protocol_bytes()),
-            RequestBasename => scalar(
-                "REQUEST_BASENAME",
-                request
-                    .path_bytes()
+            RequestBasename => {
+                let path = request.path_bytes();
+                // Coraza keeps the entire decoded path for a directory target.
+                let basename = path
                     .rsplit(|&b| b == b'/' || b == b'\\')
                     .next()
-                    .unwrap_or_default(),
-            ),
+                    .filter(|last| !last.is_empty())
+                    .unwrap_or(path);
+                scalar("REQUEST_BASENAME", basename);
+            }
             RequestLine => {
                 let mut line = request.method_bytes().to_vec();
                 line.push(b' ');
@@ -276,6 +278,16 @@ impl<'a> VariableResolver<'a> {
             }
             RequestBody => scalar("REQUEST_BODY", request.request_body_bytes_variable()),
             ResponseBody => scalar("RESPONSE_BODY", self.response.body_variable_bytes()),
+            ResponseContentLength => {
+                // An inspected empty body exposes "0"; an uninspected body
+                // retains the initial empty scalar, even with a length header.
+                let length = if self.response.body_inspected {
+                    self.response.body_length().to_string()
+                } else {
+                    String::new()
+                };
+                scalar("RESPONSE_CONTENT_LENGTH", length.as_bytes());
+            }
             ResponseContentType => {
                 scalar("RESPONSE_CONTENT_TYPE", self.response.content_type_bytes())
             }
