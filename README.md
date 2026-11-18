@@ -264,15 +264,20 @@ loading; malformed runtime controls produce load-time warnings with rule IDs.
 case-sensitive tag for this transaction, including later phases. A tagged
 chain starter selects its entire chain. Untagged rules continue to execute.
 
-**Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@beginsWith`,
+**Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@containsWord`, `@beginsWith`,
 `@endsWith`, `@within`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
-`@unconditionalMatch`, `@noMatch`. `@containsWord` and `@strmatch` are
-approximated by `@contains`. The file-backed aliases `@pmf` and `@ipMatchF` read the same
-files as `@pmFromFile` and `@ipMatchFromFile`. With `capture`, phrase matches
-populate `TX:0` through `TX:9` in input order using the original bytes.
-Overlapping phrases select the longest match at the earliest position.
+`@unconditionalMatch`, `@noMatch`. The file-backed aliases `@pmf` and
+`@ipMatchF` read the same files as `@pmFromFile` and `@ipMatchFromFile`.
+With `capture`, phrase matches populate `TX:0` through `TX:9` in input order
+using the original bytes. Overlapping phrases select the longest match at the
+earliest position.
+
+`@containsWord` follows ModSecurity v3. It matches case-sensitive bytes bounded
+by the input edges or bytes outside ASCII A–Z and a–z. An empty operand matches
+every value. Coraza 3.8.1 does not implement this operator. `@strmatch` uses
+substring matching and emits a load-time compatibility warning.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,

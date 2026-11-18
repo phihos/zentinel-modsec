@@ -46,6 +46,9 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
             Ok(Arc::new(PmOperator::from_file(argument)?))
         }
         OperatorName::Contains => Ok(Arc::new(ContainsOperator::new(argument))),
+        OperatorName::ContainsWord => Ok(Arc::new(comparison::ContainsWordOperator::new(
+            argument.as_bytes(),
+        ))),
         OperatorName::BeginsWith => Ok(Arc::new(BeginsWithOperator::new(argument))),
         OperatorName::EndsWith => Ok(Arc::new(EndsWithOperator::new(argument))),
         OperatorName::StreQ => Ok(Arc::new(StreqOperator::new(argument))),
@@ -78,7 +81,6 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         OperatorName::InspectFile | OperatorName::FuzzyHash | OperatorName::Rsub => {
             Ok(Arc::new(NoMatchOperator))
         }
-        OperatorName::ContainsWord => Ok(Arc::new(ContainsOperator::new(argument))),
         OperatorName::Within => Ok(Arc::new(WithinOperator::new(argument))),
         OperatorName::StrMatch => Ok(Arc::new(ContainsOperator::new(argument))),
         OperatorName::Ne => Ok(Arc::new(NeOperator::new(argument))),
