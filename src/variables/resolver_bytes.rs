@@ -43,6 +43,8 @@ impl<'a> VariableResolver<'a> {
 
     /// Borrow collection values while filtering. Count rules consume only the
     /// callback cardinality and never allocate names or copies of the values.
+    // Keep the general collection traversal out of the compiled phase loop.
+    #[inline(never)]
     pub(crate) fn visit_values(
         &self,
         spec: &VariableSpec,
