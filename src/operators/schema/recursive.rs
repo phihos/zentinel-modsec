@@ -4,7 +4,7 @@
 use super::arena::{child, Arena};
 use super::documents::SchemaDocuments;
 use super::reference::{DynamicScope, LocalRefs};
-use super::{inspection_depth, UniqueItems};
+use super::{projection::Projection, validation::validator_options};
 use jsonschema::{Draft, Validator};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -20,7 +20,7 @@ pub(super) struct Program {
 
 #[derive(Default)]
 struct State {
-    leaf: Option<(Validator, usize, bool)>,
+    leaf: Option<(Validator, Projection)>,
     same: Vec<Op>,
     object: Object,
     array: Array,
@@ -102,7 +102,10 @@ impl<'a> Compiler<'a> {
         self.draft = self.refs.draft_for(schema)?;
         let mut state = State::default();
         let Some(map) = schema.as_object() else {
-            state.leaf = Some((jsonschema::validator_for(schema).ok()?, 0, false));
+            state.leaf = Some((
+                jsonschema::validator_for(schema).ok()?,
+                Projection::default(),
+            ));
             return Some(state);
         };
         if let Some(reference) = map.get("$ref") {
@@ -225,24 +228,20 @@ impl<'a> Compiler<'a> {
             }
         }
         if !leaf.is_empty() {
-            let finite = Value::Object(leaf);
-            let (depth, unique) = if finite.get("dependencies").is_some() {
-                let mut rest = finite.clone();
-                rest.as_object_mut()?.remove("dependencies");
-                let (depth, unique) = inspection_depth(&rest)?;
-                (depth.max(1), unique)
-            } else {
-                inspection_depth(&finite)?
-            };
-            let validator = jsonschema::options()
+            // Only property-name lists remain from legacy dependencies. They
+            // observe the object's keys without inspecting any property value.
+            let dependencies = leaf.remove("dependencies");
+            let mut finite = Value::Object(leaf);
+            let mut projection = Projection::for_schema(&finite)?;
+            if let Some(dependencies) = dependencies {
+                finite["dependencies"] = dependencies;
+                projection.depth = projection.depth.max(1);
+            }
+            let validator = validator_options()
                 .with_draft(self.draft)
-                .should_validate_formats(false)
-                .with_keyword("uniqueItems", |_, value, _| {
-                    Ok(Box::new(UniqueItems(value.as_bool() == Some(true))))
-                })
                 .build(&finite)
                 .ok()?;
-            state.leaf = Some((validator, depth, unique));
+            state.leaf = Some((validator, projection));
         }
         Some(state)
     }
@@ -424,9 +423,9 @@ impl State {
         seen: &mut Coverage,
     ) -> bool {
         let value = &arena.nodes()[node];
-        if let Some((validator, depth, unique)) = &self.leaf {
+        if let Some((validator, projection)) = &self.leaf {
             let valid = if value.is_array() || value.is_object() {
-                validator.is_valid(&arena.project(node, *depth, *unique))
+                validator.is_valid(&projection.project_node(arena, node))
             } else {
                 validator.is_valid(value)
             };

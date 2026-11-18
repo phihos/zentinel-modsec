@@ -1,7 +1,9 @@
 //! Instance containers store child IDs. Parsing, traversal and destruction never
 //! require one Rust call frame per input container.
-use super::{intern_subtree, Value};
+use serde_json::Value;
 use std::collections::HashMap;
+
+pub(super) const MAX_DOCUMENT_DEPTH: usize = 10_000;
 
 pub(super) struct Arena {
     nodes: Vec<Value>,
@@ -33,39 +35,86 @@ impl Arena {
     pub(super) fn nodes(&self) -> &[Value] {
         &self.nodes
     }
-
-    // Only build the prefix proved sufficient for the particular validator.
-    // The schema compiler bounds this recursion independently of input nesting.
-    pub(super) fn project(&self, id: usize, depth: usize, unique: bool) -> Value {
-        let node = &self.nodes[id];
-        match node {
-            Value::Array(items) if depth > 0 => Value::Array(
-                items
-                    .iter()
-                    .map(|v| self.project(child(v), depth - 1, unique))
-                    .collect(),
-            ),
-            Value::Object(fields) if depth > 0 => Value::Object(
-                fields
-                    .iter()
-                    .map(|(key, v)| (key.clone(), self.project(child(v), depth - 1, unique)))
-                    .collect(),
-            ),
-            Value::Array(_) => Value::Array(if unique { vec![id.into()] } else { vec![] }),
-            Value::Object(_) => {
-                let mut object = serde_json::Map::new();
-                if unique {
-                    object.insert(String::new(), id.into());
-                }
-                Value::Object(object)
-            }
-            scalar => scalar.clone(),
-        }
-    }
 }
 
 pub(super) fn child(id: &Value) -> usize {
     id.as_u64().expect("arena containers store child IDs") as usize
+}
+
+// Intern exact scalar values and containers of child IDs. Keys in this map
+// are at most one container deep, including during hashing, equality and drop.
+pub(super) fn intern_subtree(
+    mut bytes: &[u8],
+    ids: &mut HashMap<Value, usize>,
+    mut names: Option<&mut HashMap<String, usize>>,
+) -> Option<usize> {
+    let mut frames = Vec::<(Value, Option<String>)>::new();
+    while let Some((&byte, rest)) = bytes.split_first() {
+        let mut node = match byte {
+            b'{' | b'[' => {
+                if frames.len() >= MAX_DOCUMENT_DEPTH {
+                    return None;
+                }
+                let container = if byte == b'{' {
+                    Value::Object(Default::default())
+                } else {
+                    Value::Array(Vec::new())
+                };
+                frames.push((container, None));
+                bytes = rest;
+                continue;
+            }
+            b'}' | b']' => {
+                bytes = rest;
+                frames.pop()?.0
+            }
+            b':' | b',' | b' ' | b'\t' | b'\n' | b'\r' => {
+                bytes = rest;
+                continue;
+            }
+            _ => {
+                // The outer RawValue check already validated the grammar. Only
+                // scalar tokens reach this decoder, so it never recurses.
+                let mut tokens = serde_json::Deserializer::from_slice(bytes).into_iter::<Value>();
+                let value = tokens.next()?.ok()?;
+                bytes = &bytes[tokens.byte_offset()..];
+                if let Some((Value::Object(_), key @ None)) = frames.last_mut() {
+                    *key = Some(value.as_str()?.to_owned());
+                    if let Some(names) = names.as_deref_mut() {
+                        let next = ids.len();
+                        let id = *ids.entry(value).or_insert(next);
+                        names.entry(key.as_ref()?.clone()).or_insert(id);
+                    }
+                    continue;
+                }
+                value
+            }
+        };
+        // JSON Schema compares numeric values, so 1 and 1.0 are equal.
+        if let Value::Number(n) = &node {
+            if n.is_f64() {
+                let f = n.as_f64()?;
+                if f.fract() == 0.0 && f.to_bits() != (-0.0f64).to_bits() {
+                    if (0.0..u64::MAX as f64).contains(&f) {
+                        node = Value::from(f as u64);
+                    } else if (i64::MIN as f64..0.0).contains(&f) {
+                        node = Value::from(f as i64);
+                    }
+                }
+            }
+        }
+        let next = ids.len();
+        let id = *ids.entry(node).or_insert(next);
+        match frames.last_mut() {
+            Some((Value::Array(items), _)) => items.push(Value::from(id)),
+            Some((Value::Object(fields), key)) => {
+                fields.insert(key.take()?, Value::from(id));
+            }
+            None => return Some(id),
+            _ => unreachable!("frames hold containers"),
+        }
+    }
+    None
 }
 
 #[cfg(test)]
