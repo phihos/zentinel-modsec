@@ -4,7 +4,6 @@ use super::{ByteValue, RequestData, ResponseData, TxCollection};
 #[path = "resolver_bytes.rs"]
 mod byte_resolution;
 use crate::parser::{Selection, VariableName, VariableSpec, XmlTarget};
-pub(crate) use byte_resolution::qualified_name;
 /// Variable resolver for transaction context.
 #[derive(Clone, Copy)]
 pub struct VariableResolver<'a> {

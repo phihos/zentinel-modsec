@@ -10,7 +10,9 @@ mod traits;
 mod validation;
 
 pub use comparison::{BeginsWithOperator, ContainsOperator, EndsWithOperator, StreqOperator};
-pub use comparison::{EqOperator, GeOperator, GtOperator, LeOperator, LtOperator};
+pub use comparison::{
+    EqOperator, GeOperator, GtOperator, LeOperator, LtOperator, NumericComparison,
+};
 pub use detection::{DetectSqliOperator, DetectXssOperator};
 pub use network::IpMatchOperator;
 pub use pattern::{PmOperator, RxOperator};

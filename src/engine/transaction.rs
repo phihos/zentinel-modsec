@@ -5,16 +5,18 @@ use std::sync::Arc;
 
 use super::body::{BodyState, BodyWriteResult};
 use super::chain::ChainState;
-use super::control::{CtlDirective, TransactionControls};
+use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
+use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
+use super::target_indices::RequestCollections;
 use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_operator_bytes, ByteOperatorResult, Operator};
 use crate::parser::{
     Action, BodyLimitAction, DataAction, DisruptiveAction, MetadataAction, SetVarSpec, SetVarValue,
-    VariableName, VariableSpec,
+    VariableSpec,
 };
 use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
@@ -57,7 +59,7 @@ pub struct Transaction {
     /// Default block status.
     default_status: u16,
     /// Matched rules.
-    matched_rules: Vec<String>,
+    matched_rules: MatchedRules,
     /// Last phase skipped by a request-wide or transaction-wide allow.
     allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
@@ -70,7 +72,7 @@ pub struct Transaction {
     /// rule so that `MATCHED_VARS` reads correctly. This accumulates for the
     /// whole transaction, because audit logging wants to answer "what did
     /// rule 942100 actually see" after the fact.
-    matched_data: Vec<MatchedData>,
+    matched_data: MatchLog<(RuleLocation, RawMatch)>,
     /// What each `setvar` that ran did, in order. See [`SetVarEffect`].
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
@@ -84,14 +86,14 @@ pub struct Transaction {
 
 /// Audit snapshots from a matched link.
 struct RuleOutcome {
-    first_data: Option<MatchedData>,
+    first_data: Option<RawMatch>,
     first_message: Option<RuleMessage>,
 }
 
 /// The first static match ends the read-only scan. Only this stage is
 /// prepared before actions run; later members retain their raw target values.
 struct PreparedStage {
-    value: Vec<u8>,
+    value: ByteValue,
     result: ByteOperatorResult,
     resume_after: Option<usize>,
 }
@@ -104,13 +106,27 @@ struct ResolvedTarget {
 
 struct StaticSearch<'a> {
     rule: &'a CompiledRule,
+    numeric: Option<crate::operators::NumericComparison>,
+    regex: Option<&'a crate::operators::RxOperator>,
     capture: bool,
     multi_match: bool,
 }
 
 impl StaticSearch<'_> {
-    fn first_match(&self, raw: &[u8]) -> Result<Option<PreparedStage>> {
+    fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
+            if let Some(numeric) = self.numeric {
+                let matched = numeric.matches(value);
+                return Ok(
+                    (matched != self.rule.operator_negated).then(|| ByteOperatorResult {
+                        matched,
+                        ..Default::default()
+                    }),
+                );
+            }
+            if let Some(regex) = self.regex {
+                return Ok(regex.rule_match(value, self.capture, self.rule.operator_negated));
+            }
             let result = self.rule.operator.execute_rule_bytes(value, self.capture)?;
             Ok((result.matched != self.rule.operator_negated).then_some(result))
         };
@@ -118,20 +134,25 @@ impl StaticSearch<'_> {
             self.rule
                 .transformations
                 .visit_byte_stages(raw, None, |stage, value| {
-                    Ok(execute(value)?.map(|result| PreparedStage {
-                        value: value.to_vec(),
-                        result,
-                        resume_after: Some(stage),
+                    Ok(execute(value)?.map(|result| {
+                        record(PreparedStage {
+                            value: ByteValue::from(value),
+                            result,
+                            resume_after: Some(stage),
+                        });
                     }))
-                })
+                })?;
         } else {
             let transformed = self.rule.transformations.apply_bytes(raw)?;
-            Ok(execute(&transformed)?.map(|result| PreparedStage {
-                value: transformed.into_owned(),
-                result,
-                resume_after: None,
-            }))
+            if let Some(result) = execute(&transformed)? {
+                record(PreparedStage {
+                    value: ByteValue::from(transformed),
+                    result,
+                    resume_after: None,
+                });
+            }
         }
+        Ok(())
     }
 }
 
@@ -154,8 +175,8 @@ pub struct MatchedData {
     /// The portion of the value the operator matched, when it reports one.
     ///
     /// `@contains evil` against `something-evil-here` gives `evil` here and
-    /// the full string in `value`. Operators that match the whole value, or
-    /// do not report a portion, leave this `None`.
+    /// the full string in `value`. Numeric operators report the whole input
+    /// on a positive match. A negated numeric match leaves this `None`.
     pub matched_portion: Option<String>,
     /// Original variable-name bytes, before display escaping.
     pub variable_bytes: Vec<u8>,
@@ -227,11 +248,11 @@ impl Transaction {
             phase: Phase::RequestHeaders,
             intervention: None,
             default_status,
-            matched_rules: Vec::new(),
+            matched_rules: MatchedRules::default(),
             allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
-            matched_data: Vec::new(),
+            matched_data: MatchLog::default(),
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
             rule_messages: Vec::new(),
@@ -296,7 +317,7 @@ impl Transaction {
     /// Pairs with [`matched_rules`](Self::matched_rules): that says which
     /// rules fired, this says what they saw.
     pub fn matched_data(&self) -> &[MatchedData] {
-        &self.matched_data
+        self.matched_data.as_slice(&self.ruleset, self.phase)
     }
 
     /// Record what every `setvar` does, for [`setvar_effects`](Self::setvar_effects).
@@ -896,7 +917,7 @@ impl Transaction {
 
     /// Get matched rule IDs.
     pub fn matched_rules(&self) -> &[String] {
-        &self.matched_rules
+        self.matched_rules.as_slice(&self.ruleset, self.phase)
     }
 
     /// Read the current legacy `TX:anomaly_score` value, or zero if absent.
@@ -957,10 +978,11 @@ impl Transaction {
         }
 
         let dispatch = ruleset.dispatch_for_phase(phase);
+        let available = RequestCollections::new(&self.request);
         let mut chain_state = ChainState::new();
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
-        let mut pending_chain_data: Vec<MatchedData> = Vec::new();
+        let mut pending_chain_data = Vec::new();
         let mut skip_count: u32 = 0;
         let mut skip_after: Option<usize> = None;
 
@@ -1026,16 +1048,30 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && !chain_state.in_chain;
-            if let Some(outcome) =
-                self.evaluate_rule(rule, &dispatch[idx], link_rule_id, tag_actions, standalone)?
-            {
+            if let Some(outcome) = self.evaluate_rule(
+                rule,
+                &dispatch[idx],
+                link_rule_id,
+                tag_actions,
+                standalone,
+                available,
+            )? {
                 let RuleOutcome {
                     first_data,
                     first_message,
                 } = outcome;
                 if let Some(data) = first_data {
+                    let source = RuleLocation {
+                        phase,
+                        index: if rule.id.is_some() {
+                            idx
+                        } else {
+                            starter_index
+                        },
+                    };
+                    let data = (source, data);
                     if standalone {
-                        self.matched_data.push(data);
+                        self.matched_data.extend(&ruleset, std::iter::once(data));
                     } else {
                         pending_chain_data.push(data);
                     }
@@ -1060,10 +1096,17 @@ impl Transaction {
                 // starter's disruptive action, flow and metadata.
                 if chain_state.in_chain {
                     chain_state.reset();
-                    self.matched_data.append(&mut pending_chain_data);
+                    self.matched_data
+                        .extend(&ruleset, pending_chain_data.drain(..));
                 }
-                if let Some(id) = &starter.id {
-                    self.matched_rules.push(id.clone());
+                if starter.id.is_some() {
+                    self.matched_rules.push(
+                        &ruleset,
+                        RuleLocation {
+                            phase,
+                            index: starter_index,
+                        },
+                    );
                 }
 
                 if self.record_rule_messages {
@@ -1173,7 +1216,8 @@ impl Transaction {
         logical_id: Option<&str>,
         tag_actions: &[Action],
         search: Option<&StaticSearch<'_>>,
-    ) -> Result<ResolvedTarget> {
+        target: &mut ResolvedTarget,
+    ) -> Result<()> {
         let resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
@@ -1181,42 +1225,58 @@ impl Transaction {
             &self.matched_vars,
         );
         let by_id = self.controls.has_target_removals(logical_id);
-        let by_tag = !tag_actions.is_empty() && self.controls.has_tag_target_removals(tag_actions);
-        let mut resolved = Ok(ResolvedTarget::default());
+        let by_tag = if tag_actions.is_empty() {
+            TagTargetRemoval::None
+        } else {
+            self.controls.tag_target_removal(tag_actions, spec)
+        };
+        let match_name = |prefix: &str, member: Option<&[u8]>| {
+            selection
+                .match_name
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(|| crate::variables::qualified_name(prefix, member))
+        };
+        let mut error = None;
         let mut count = 0usize;
-        resolver.visit_values(spec, selection, |prefix, member, value| {
-            if (by_id && self.controls.removed_member(logical_id, spec, member))
-                || (by_tag && self.controls.removed_tag_member(tag_actions, spec, member))
-            {
-                return;
-            }
-            if spec.count_mode {
-                count += 1;
-                return;
-            }
-            let Ok(target) = &mut resolved else {
-                return;
-            };
-            if let Some(search) = search.filter(|_| target.first.is_none()) {
-                match search.first_match(value) {
-                    Ok(None) => (),
-                    Ok(Some(stage)) => {
-                        target.first =
-                            Some((crate::variables::qualified_name(prefix, member), stage));
-                    }
-                    Err(error) => resolved = Err(error),
+        if by_tag != TagTargetRemoval::All {
+            resolver.visit_values(spec, selection, |prefix, member, value| {
+                if (by_id && self.controls.removed_member(logical_id, spec, member))
+                    || (by_tag == TagTargetRemoval::Members
+                        && self.controls.removed_tag_member(tag_actions, spec, member))
+                {
+                    return;
                 }
-            } else {
-                // A match can change selection controls or mutate the collection.
-                // Snapshot remaining members before running the first match's actions.
-                target.remaining.push((
-                    crate::variables::qualified_name(prefix, member),
-                    value.to_vec(),
-                ));
-            }
-        });
-        let mut target = resolved?;
+                if spec.count_mode {
+                    count += 1;
+                    return;
+                }
+                if error.is_some() {
+                    return;
+                }
+                if let Some(search) = search.filter(|_| target.first.is_none()) {
+                    if let Err(e) = search.first_match(value, |stage| {
+                        target.first = Some((match_name(prefix, member), stage));
+                    }) {
+                        error = Some(e);
+                    }
+                } else {
+                    // A match can change selection controls or mutate the collection.
+                    // Snapshot remaining members before running the first match's actions.
+                    target
+                        .remaining
+                        .push((match_name(prefix, member), value.to_vec()));
+                }
+            });
+        }
+        if let Some(error) = error {
+            return Err(error);
+        }
         if spec.count_mode {
+            let name = selection
+                .match_name
+                .as_deref()
+                .expect("compiled count target name");
             // Presence checks on a named header or TX variable normally produce 0 or 1.
             let value: Cow<'_, [u8]> = match count {
                 0 => Cow::Borrowed(b"0"),
@@ -1224,35 +1284,12 @@ impl Transaction {
                 _ => Cow::Owned(count.to_string().into_bytes()),
             };
             if let Some(search) = search {
-                target.first = search
-                    .first_match(&value)?
-                    .map(|stage| (crate::variables::count_name(spec), stage));
+                search.first_match(&value, |stage| target.first = Some((name.clone(), stage)))?;
             } else {
-                target
-                    .remaining
-                    .push((crate::variables::count_name(spec), value.into_owned()));
+                target.remaining.push((name.clone(), value.into_owned()));
             }
         }
-        Ok(target)
-    }
-
-    /// An empty collection contributes no values, even to a negated operator.
-    /// Counts still evaluate once on their decimal count (including zero).
-    fn empty_collection_target(&self, spec: &VariableSpec) -> bool {
-        if spec.count_mode {
-            return false;
-        }
-        use VariableName::*;
-        match spec.name {
-            Args | ArgsNames => {
-                self.request.args_get.is_empty() && self.request.args_post.is_empty()
-            }
-            ArgsGet | ArgsGetNames => self.request.args_get.is_empty(),
-            ArgsPost | ArgsPostNames => self.request.args_post.is_empty(),
-            RequestCookies | RequestCookiesNames => self.request.cookies.is_empty(),
-            Xml => self.request.xml.is_empty(),
-            _ => false,
-        }
+        Ok(())
     }
 
     fn evaluate_rule(
@@ -1262,6 +1299,7 @@ impl Transaction {
         logical_id: Option<&str>,
         tag_actions: &[Action],
         standalone: bool,
+        available: RequestCollections,
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
@@ -1269,7 +1307,13 @@ impl Transaction {
         let capture = dispatch.capture;
         let multi_match = dispatch.multi_match;
 
-        let search = (!dynamic).then_some(StaticSearch {
+        let search = (!dynamic).then(|| StaticSearch {
+            numeric: dispatch.numeric,
+            regex: if rule.operator_spec.name == crate::parser::OperatorName::Rx {
+                rule.operator.compiled_regex()
+            } else {
+                None
+            },
             rule,
             capture,
             multi_match,
@@ -1277,10 +1321,16 @@ impl Transaction {
         let mut evaluate = |tx: &mut Self,
                             name: Option<&ByteValue>,
                             value: &[u8],
-                            prepared: Option<ByteOperatorResult>|
+                            prepared: Option<(&ByteValue, ByteOperatorResult)>|
          -> Result<()> {
-            let result = if let Some(result) = prepared {
+            let snapshot = prepared.as_ref().map(|(snapshot, _)| *snapshot);
+            let result = if let Some((_, result)) = prepared {
                 result
+            } else if let Some(numeric) = dispatch.numeric {
+                ByteOperatorResult {
+                    matched: numeric.matches(value),
+                    ..Default::default()
+                }
             } else {
                 let operator: &dyn Operator = if dynamic {
                     if bound_operator.is_none() {
@@ -1307,12 +1357,24 @@ impl Transaction {
                     first_message: None,
                 }
             });
-            let mut portion = result
-                .matched_value
-                .filter(|_| capture || (first && name.is_some()))
-                .map(ByteValue::from);
-            if let Some(name) = name {
-                let value = ByteValue::from(value);
+            let matched_value =
+                name.map(|_| snapshot.cloned().unwrap_or_else(|| ByteValue::from(value)));
+            let need_portion = capture || (first && name.is_some());
+            // A positive static comparison reuses the input; a negated one
+            // has no matched portion. Other operators report their own bytes.
+            let mut portion = if dispatch.numeric.is_some() && result.matched {
+                need_portion.then(|| {
+                    matched_value
+                        .clone()
+                        .unwrap_or_else(|| ByteValue::from(value))
+                })
+            } else {
+                result
+                    .matched_value
+                    .filter(|_| need_portion)
+                    .map(ByteValue::from)
+            };
+            if let (Some(name), Some(value)) = (name, matched_value) {
                 if first {
                     // TX:0 retains its own copy when capture is enabled. Otherwise
                     // the audit snapshot can take ownership of the operator result.
@@ -1321,16 +1383,10 @@ impl Transaction {
                     } else {
                         portion.take()
                     };
-                    let (matched_portion, matched_portion_bytes) =
-                        audit_portion.map(ByteValue::into_display_and_bytes).unzip();
-                    outcome.first_data = Some(MatchedData {
-                        rule_id: logical_id.map(str::to_owned),
-                        variable: name.to_string(),
-                        value: value.to_string(),
-                        matched_portion,
-                        variable_bytes: name.as_bytes().to_vec(),
-                        value_bytes: value.as_bytes().to_vec(),
-                        matched_portion_bytes,
+                    outcome.first_data = Some(RawMatch {
+                        variable: name.clone(),
+                        value: value.clone(),
+                        portion: audit_portion,
                     });
                 }
                 tx.matched_vars.push((name.clone(), value));
@@ -1377,22 +1433,28 @@ impl Transaction {
             // SecAction has no target and matches exactly once.
             evaluate(self, None, b"", None)?;
         }
-        for (spec, selection) in rule.variables.iter().zip(&dispatch.selections) {
-            if self.empty_collection_target(spec) {
-                continue;
-            }
-            let target = self.resolve_rule_target(
+        for index in dispatch.targets.active(available, &rule.variables) {
+            let spec = &rule.variables[index];
+            let selection = &dispatch.selections[index];
+            let mut target = ResolvedTarget::default();
+            self.resolve_rule_target(
                 spec,
                 selection,
                 logical_id,
                 tag_actions,
                 search.as_ref(),
+                &mut target,
             )?;
             if let Some((name, stage)) = target.first {
-                evaluate(self, Some(&name), &stage.value, Some(stage.result))?;
+                evaluate(
+                    self,
+                    Some(&name),
+                    stage.value.as_bytes(),
+                    Some((&stage.value, stage.result)),
+                )?;
                 if let Some(after) = stage.resume_after {
                     rule.transformations.visit_byte_stages(
-                        &stage.value,
+                        stage.value.as_bytes(),
                         Some(after),
                         |_, value| {
                             evaluate(self, Some(&name), value, None)?;
@@ -1500,9 +1562,7 @@ impl Transaction {
     /// closed here.
     fn store_captures(&mut self, whole: Option<ByteValue>, groups: Vec<Vec<u8>>) {
         const SLOTS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-        for slot in SLOTS {
-            self.tx.delete_bytes(slot.as_bytes());
-        }
+        self.tx.clear_capture_slots();
         if let Some(whole) = whole {
             self.tx.set_bytes(SLOTS[0], whole);
         }
@@ -1525,8 +1585,8 @@ impl Transaction {
                 record.map(|_| SetVarChange::Set(value.clone()))
             }
             SetVarValue::Int(n) => {
-                let value = n.to_string();
-                let change = record.map(|_| SetVarChange::Set(value.clone()));
+                let value = ByteValue::decimal(*n);
+                let change = record.map(|_| SetVarChange::Set(value.display_text().to_owned()));
                 self.tx.set_bytes(name.as_ref(), value);
                 change
             }
@@ -1535,10 +1595,10 @@ impl Transaction {
                 let operand = self.expand_operator_macros_bytes(operand);
                 match kind {
                     SetVarKind::Set => {
-                        let operand = operand.into_owned();
-                        let change = record.map(|_| match std::str::from_utf8(&operand) {
+                        let operand = ByteValue::from(operand);
+                        let change = record.map(|_| match operand.as_utf8() {
                             Ok(text) => SetVarChange::Set(text.to_owned()),
-                            Err(_) => SetVarChange::SetBytes(operand.clone()),
+                            Err(_) => SetVarChange::SetBytes(operand.as_bytes().to_vec()),
                         });
                         self.tx.set_bytes(name.as_ref(), operand);
                         change
@@ -1641,7 +1701,7 @@ impl std::fmt::Debug for Transaction {
             .field("phase", &self.phase)
             .field("has_intervention", &self.intervention.is_some())
             .field("anomaly_score", &self.anomaly_score())
-            .field("matched_rules", &self.matched_rules)
+            .field("matched_rules", &self.matched_rules())
             .finish()
     }
 }
@@ -1740,6 +1800,7 @@ mod tests {
                     Some("77"),
                     &rule.actions,
                     true,
+                    RequestCollections::new(&tx.request),
                 )
                 .err()
                 .unwrap();

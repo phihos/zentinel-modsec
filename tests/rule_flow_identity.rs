@@ -196,3 +196,31 @@ SecRule REQUEST_COOKIES|ARGS:present "@streq " "id:5,phase:1,pass"
         assert_eq!(tx.matched_rules(), expected);
     }
 }
+
+#[test]
+fn phase_body_targets_and_tag_removal_counts_follow_the_current_request() {
+    let config = r#"
+SecRequestBodyAccess On
+SecAction "id:1,phase:1,pass,ctl:ruleRemoveTargetByTag=fields;ARGS_POST:city"
+SecRule REQUEST_HEADERS:X-Skip "@streq all" "id:2,phase:1,pass,ctl:ruleRemoveTargetByTag=fields;ARGS_POST"
+SecRule &ARGS_POST "@eq 0" "id:3,phase:2,pass,tag:fields"
+SecRule &ARGS_POST "@eq 1" "id:4,phase:2,pass,tag:fields"
+SecRule ARGS_POST:city "@streq Paris" "id:5,phase:2,pass,tag:other"
+SecRule ARGS_POST:name "@streq alex" "id:6,phase:2,pass,tag:fields"
+"#;
+    let engine = ModSecurity::from_string(config).unwrap();
+    for (skip, expected) in [
+        ("one", vec!["1", "4", "5", "6"]),
+        ("all", vec!["1", "2", "3", "5"]),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+        tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
+            .unwrap();
+        tx.add_request_header("X-Skip", skip).unwrap();
+        tx.process_request_headers().unwrap();
+        tx.append_request_body(b"city=Paris&name=alex").unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.matched_rules(), expected);
+    }
+}

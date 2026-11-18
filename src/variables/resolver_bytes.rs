@@ -1,19 +1,9 @@
 //! Lossless resolution used by transaction evaluation.
 use super::*;
 use crate::variables::{
-    folded_key, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms, TargetSelection,
+    folded_key, qualified_name, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms,
+    TargetSelection,
 };
-
-pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
-    let Some(key) = member.filter(|k| !k.is_empty()) else {
-        return prefix.into();
-    };
-    let mut name = Vec::with_capacity(prefix.len() + 1 + key.len());
-    name.extend_from_slice(prefix.as_bytes());
-    name.push(b':');
-    name.extend_from_slice(key);
-    name.into()
-}
 
 impl<'a> VariableResolver<'a> {
     /// Construct a resolver over original matched-value bytes.
@@ -40,7 +30,7 @@ impl<'a> VariableResolver<'a> {
                 programs.add(pattern, kind);
             }
         }
-        let selection = TargetSelection::compile(spec, &programs);
+        let selection = TargetSelection::for_lookup(spec, &programs);
         self.visit_values(spec, &selection, |prefix, key, value| {
             out.push((qualified_name(prefix, key), value.into()));
         });
@@ -57,13 +47,6 @@ impl<'a> VariableResolver<'a> {
     ) {
         let name = spec.name;
         let request = self.request;
-        let mut emit =
-            |prefix: &str, canonical: Option<&[u8]>, original: Option<&[u8]>, value: &[u8]| {
-                if !selection.excludes(prefix, canonical) {
-                    visit(prefix, original, value);
-                }
-            };
-
         let mut collection =
             |map: &HashMapCollection, prefix: &str, names: bool, literal: Option<&[u8]>| {
                 if map.is_empty() {
@@ -75,16 +58,13 @@ impl<'a> VariableResolver<'a> {
                     MemberSelector::Regex(Some(regex)) => (None, Some(regex)),
                     MemberSelector::Regex(None) => return,
                 };
-                map.visit(literal.or(selected), |key, original, value| {
-                    if regex.is_none_or(|re| re.is_match(key)) {
-                        emit(
-                            prefix,
-                            Some(key),
-                            Some(original),
-                            if names { original } else { value },
-                        );
-                    }
-                });
+                map.visit_filtered(
+                    literal.or(selected),
+                    |key| regex.is_none_or(|re| re.is_match(key)) && !selection.excludes(Some(key)),
+                    |_, original, value| {
+                        visit(prefix, Some(original), if names { original } else { value })
+                    },
+                );
             };
 
         use VariableName::*;
@@ -139,7 +119,11 @@ impl<'a> VariableResolver<'a> {
                 false,
                 None,
             ),
-            Tx => collection(self.tx.members(), "TX", false, None),
+            Tx => self.tx.visit(&selection.member, |key, value| {
+                if !selection.excludes(Some(key)) {
+                    visit("TX", Some(key), value);
+                }
+            }),
             Xml => match XmlTarget::from_selection(spec.selection.as_ref()) {
                 Some(XmlTarget::Elements) => collection(&request.xml, "XML", false, Some(b"/*")),
                 Some(XmlTarget::Attributes) => {
@@ -160,12 +144,9 @@ impl<'a> VariableResolver<'a> {
                     if !selection.member.matches(Some(&canonical)) {
                         return;
                     }
-                    emit(
-                        prefix,
-                        Some(&canonical),
-                        Some(key),
-                        if names { key } else { value },
-                    );
+                    if !selection.excludes(Some(&canonical)) {
+                        visit(prefix, Some(key), if names { key } else { value });
+                    }
                 };
                 if let Some(values) = self.matched_bytes {
                     for (key, value) in values {
@@ -177,7 +158,11 @@ impl<'a> VariableResolver<'a> {
                     }
                 }
             }
-            _ => self.visit_scalar(name, |prefix, value| emit(prefix, None, None, value)),
+            _ if !selection.excludes(None) => self.visit_scalar(name, |prefix, value| {
+                debug_assert_eq!(prefix, super::super::selectors::emitted_name(name));
+                visit(prefix, None, value);
+            }),
+            _ => (),
         }
     }
 

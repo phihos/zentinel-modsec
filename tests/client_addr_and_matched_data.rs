@@ -232,3 +232,28 @@ fn matched_data_accumulates_across_several_rules() {
     assert_eq!(data[1].rule_id.as_deref(), Some("2"));
     assert_eq!(data[1].variable, "ARGS:b");
 }
+
+#[test]
+fn matched_data_read_between_phases_preserves_binary_evidence_and_later_matches() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule REQUEST_HEADERS:X-Note "@contains note" "id:1,phase:1,pass"
+SecRule REQUEST_METHOD "@streq GET" "id:2,phase:2,pass"
+"#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    tx.add_request_header_bytes(b"X-Note", b"note\xff").unwrap();
+    tx.process_request_headers().unwrap();
+    let first = &tx.matched_data()[0];
+    assert_eq!(first.value, r"note\xff");
+    assert_eq!(first.value_bytes, b"note\xff");
+    assert_eq!(first.matched_portion_bytes.as_deref(), Some(&b"note"[..]));
+    tx.process_request_body().unwrap();
+    let data = tx.matched_data();
+    assert_eq!(data.len(), 2);
+    assert_eq!(data[0].value_bytes, b"note\xff");
+    assert_eq!(data[1].rule_id.as_deref(), Some("2"));
+    assert_eq!(data[1].value, "GET");
+}

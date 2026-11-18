@@ -123,3 +123,56 @@ fn tx_text_and_byte_access_share_unicode_lookup_and_arithmetic() {
     tx.delete_bytes("üBER".as_bytes());
     assert_eq!(tx.count(), 0);
 }
+
+#[test]
+fn processor_error_alias_exclusions_use_the_emitted_variable_name() {
+    use zentinel_modsec::parser::{VariableName, VariableSpec};
+    use zentinel_modsec::variables::{RequestData, ResponseData, TxCollection, VariableResolver};
+
+    let mut request = RequestData::new();
+    request.body_error = Some("fixture".into());
+    let response = ResponseData::default();
+    let tx = TxCollection::new();
+    let resolver = VariableResolver::new(&request, &response, &tx, None, &[], &[]);
+    for (alias, emitted, value) in [
+        ("REQBODY_PROCESSOR_ERROR", "REQBODY_ERROR", "1"),
+        (
+            "REQBODY_PROCESSOR_ERROR_MSG",
+            "REQBODY_ERROR_MSG",
+            "fixture",
+        ),
+    ] {
+        let mut spec = VariableSpec {
+            name: VariableName::from_str(alias).unwrap(),
+            selection: None,
+            count_mode: false,
+            exclusions: vec![alias.into()],
+        };
+        assert_eq!(
+            resolver.resolve(&spec),
+            [(emitted.to_owned(), value.to_owned())]
+        );
+        spec.exclusions = vec![emitted.into()];
+        assert!(resolver.resolve(&spec).is_empty());
+    }
+}
+
+#[test]
+fn header_bucket_filter_keeps_duplicate_observed_names_and_counts() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule &REQUEST_HEADERS:/^x-item$/|!ARGS:/^x-item$/ "@eq 3" "id:1,phase:1,pass"
+SecRule &REQUEST_HEADERS:/^x-/|!REQUEST_HEADERS:/^x-hide$/ "@eq 3" "id:2,phase:1,pass"
+SecRule REQUEST_HEADERS_NAMES:/^x-item$/ "@streq X-iTEM" "id:3,phase:1,pass"
+"#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    for name in ["x-item", "X-Hide", "X-iTEM", "x-Item"] {
+        tx.add_request_header(name, "value").unwrap();
+    }
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "3"]);
+    assert_eq!(tx.matched_data().last().unwrap().value, "X-iTEM");
+}

@@ -8,7 +8,7 @@ use std::sync::{Arc, LazyLock, Mutex, Weak};
 /// Count variables retain the selector as their match key, including regex
 /// delimiters. The reference preserves argument selector case and folds the
 /// selector of other collections.
-pub(crate) fn count_name(spec: &VariableSpec) -> ByteValue {
+fn count_name(spec: &VariableSpec) -> ByteValue {
     let prefix = spec.name.seclang_name();
     let key = match &spec.selection {
         Some(Selection::Key(key)) => std::borrow::Cow::Borrowed(key.as_bytes()),
@@ -51,10 +51,22 @@ pub(crate) fn compile_selector(
         .build()
 }
 
+/// Two processor-error aliases emit the same audit keys as their short forms.
+pub(super) fn emitted_name(name: VariableName) -> &'static str {
+    match name {
+        VariableName::ReqBodyProcessorError => "REQBODY_ERROR",
+        VariableName::ReqBodyProcessorErrorMsg => "REQBODY_ERROR_MSG",
+        _ => name.seclang_name(),
+    }
+}
+
 /// Selection data shared by requests after target updates have been applied.
 pub(crate) struct TargetSelection {
     pub member: MemberSelector,
-    exclusions: Box<[(Box<str>, MemberSelector)]>,
+    /// Fixed audit name for count targets and literal TX keys. Other named
+    /// collections report the observed spelling of each member.
+    pub match_name: Option<Box<ByteValue>>,
+    exclusions: Box<[MemberSelector]>,
 }
 
 pub(crate) enum MemberSelector {
@@ -77,6 +89,19 @@ impl MemberSelector {
 
 impl TargetSelection {
     pub fn compile(spec: &VariableSpec, programs: &SelectorPrograms) -> Self {
+        let mut selection = Self::for_lookup(spec, programs);
+        selection.match_name = if spec.count_mode {
+            Some(Box::new(count_name(spec)))
+        } else if let (VariableName::Tx, MemberSelector::Key(key)) = (spec.name, &selection.member)
+        {
+            Some(Box::new(qualified_name("TX", Some(key))))
+        } else {
+            None
+        };
+        selection
+    }
+
+    pub fn for_lookup(spec: &VariableSpec, programs: &SelectorPrograms) -> Self {
         let regex =
             |pattern: &str| MemberSelector::Regex(programs.get(pattern, spec.name).cloned());
         let member = match &spec.selection {
@@ -98,11 +123,15 @@ impl TargetSelection {
             Some(Selection::Regex(pattern)) => regex(pattern),
             _ => MemberSelector::All,
         };
+        let prefix = emitted_name(spec.name);
         let exclusions = spec
             .exclusions
             .iter()
-            .map(|target| {
+            .filter_map(|target| {
                 let (collection, selector) = target.split_once(':').unwrap_or((target, ""));
+                if !collection.eq_ignore_ascii_case(prefix) {
+                    return None;
+                }
                 let member = if selector.is_empty() {
                     MemberSelector::All
                 } else if let Some(pattern) =
@@ -116,16 +145,18 @@ impl TargetSelection {
                             .into_boxed_slice(),
                     )
                 };
-                (collection.into(), member)
+                Some(member)
             })
             .collect();
-        Self { member, exclusions }
+        Self {
+            member,
+            match_name: None,
+            exclusions,
+        }
     }
 
-    pub fn excludes(&self, prefix: &str, key: Option<&[u8]>) -> bool {
-        self.exclusions.iter().any(|(collection, selector)| {
-            collection.eq_ignore_ascii_case(prefix) && selector.matches(key)
-        })
+    pub fn excludes(&self, key: Option<&[u8]>) -> bool {
+        self.exclusions.iter().any(|selector| selector.matches(key))
     }
 }
 
