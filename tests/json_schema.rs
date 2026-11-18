@@ -90,3 +90,28 @@ fn schema_files_and_references_stay_under_the_rule_directory() {
         assert!(load("link.json").is_err());
     }
 }
+
+#[test]
+fn unconstrained_schema_accepts_deep_json_and_still_checks_raw_syntax() {
+    let dir = tempdir().unwrap();
+    fs::write(dir.path().join("all.json"), "true").unwrap();
+    let rule = dir.path().join("policy.conf");
+    fs::write(
+        &rule,
+        r#"SecRule ARGS:q "@validateSchema all.json" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    let ms = ModSecurity::from_file(rule.to_str().unwrap()).unwrap();
+    for (scalar, violation) in [
+        (r#"{"k":"a\"b","n":45}"#, false),
+        ("2e400", true),
+        ("malformed", true),
+    ] {
+        let value = format!("{}{scalar}{}", "[".repeat(160), "]".repeat(160));
+        let mut tx = ms.new_transaction();
+        tx.process_uri(&format!("/?q={value}"), "GET", "HTTP/1.1")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(!tx.matched_rules().is_empty(), violation, "{scalar}");
+    }
+}
