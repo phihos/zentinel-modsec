@@ -8,6 +8,13 @@ pub struct Lowercase;
 
 impl Transformation for Lowercase {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if input.is_ascii() {
+            return Ok(if input.iter().any(u8::is_ascii_uppercase) {
+                Cow::Owned(input.to_ascii_lowercase())
+            } else {
+                Cow::Borrowed(input)
+            });
+        }
         super::bytes::apply(self, input)
     }
 
@@ -141,6 +148,9 @@ pub struct RemoveNulls;
 
 impl Transformation for RemoveNulls {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if memchr::memchr(0, input).is_none() {
+            return Ok(Cow::Borrowed(input));
+        }
         super::bytes::apply(self, input)
     }
 
@@ -496,6 +506,9 @@ pub struct Utf8ToUnicode;
 
 impl Transformation for Utf8ToUnicode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if input.is_ascii() {
+            return Ok(Cow::Borrowed(input));
+        }
         super::bytes::apply(self, input)
     }
 
