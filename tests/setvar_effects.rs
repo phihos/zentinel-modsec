@@ -50,6 +50,25 @@ fn set_increment_decrement_and_delete_are_recorded_in_order() {
 }
 
 #[test]
+fn folded_setvar_keys_keep_their_original_audit_spelling() {
+    use zentinel_modsec::variables::ByteCollection;
+
+    let rules = r#"SecAction "id:1,phase:1,pass,setvar:'tx.MiXeD=00012',setvar:'tx.%{ARGS.key}=+3'"
+SecAction "id:2,phase:1,pass,setvar:'tx.%{ARGS.binary}=ok'""#;
+    let tx = run(rules, "/?key=mIXed&binary=X%FF");
+    assert_eq!(tx.tx().get_bytes(b"mixed"), Some(vec![b"15".as_slice()]));
+    assert_eq!(tx.tx().get_bytes(b"x\xff"), Some(vec![b"ok".as_slice()]));
+    assert_eq!(
+        tx.setvar_effects(),
+        [
+            effect("1", "MiXeD", SetVarChange::Set("12".into())),
+            effect("1", "mIXed", SetVarChange::Increment(3)),
+            effect("2", r"X\xff", SetVarChange::Set("ok".into())),
+        ]
+    );
+}
+
+#[test]
 fn nothing_is_recorded_unless_asked() {
     let rules = "SecRuleEngine On\n\
         SecRule REQUEST_URI \"@contains go\" \"id:1,phase:2,pass,nolog,setvar:'tx.score=+3'\"";
