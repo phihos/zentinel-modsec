@@ -1,5 +1,7 @@
 //! Operator implementations for ModSecurity.
 
+mod byte_argument;
+pub use byte_argument::compile_operator_bytes;
 mod comparison;
 mod detection;
 mod network;

@@ -13,9 +13,11 @@ use crate::actions::{
     SetVarOperation,
 };
 use crate::error::Result;
-use crate::operators::{compile_operator, Operator};
-use crate::parser::{Action, DataAction, OperatorSpec};
-use crate::variables::{Collection, RequestData, ResponseData, TxCollection, VariableResolver};
+use crate::operators::{compile_operator_bytes, Operator};
+use crate::parser::{Action, DataAction, FlowAction};
+use crate::variables::{
+    ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
+};
 
 /// Whether a lowercased Content-Type denotes a JSON body.
 ///
@@ -60,9 +62,7 @@ pub struct Transaction {
     /// Allow flag (skip further processing).
     allowed: bool,
     /// Matched variables for current rule evaluation.
-    matched_vars: Vec<(String, String)>,
-    /// Regex captures from last match.
-    captures: Vec<String>,
+    matched_vars: Vec<(ByteValue, ByteValue)>,
     /// Per-transaction `ctl:` overrides.
     controls: TransactionControls,
     /// Every variable that caused a rule to match, in order.
@@ -76,19 +76,22 @@ pub struct Transaction {
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
     record_setvar_effects: bool,
+    /// Optional expanded message snapshots, captured when each rule completes.
+    rule_messages: Vec<RuleMessage>,
+    record_rule_messages: bool,
 }
 
 /// The variable a rule matched on.
 #[derive(Debug, Clone)]
 struct MatchedVariable {
-    name: String,
-    value: String,
-    portion: Option<String>,
+    name: ByteValue,
+    value: ByteValue,
+    portion: Option<Vec<u8>>,
 }
 
 /// One variable value a rule's operator matched.
 struct RuleMatch {
-    captures: Vec<String>,
+    captures: Vec<Vec<u8>>,
     matched_variable: Option<MatchedVariable>,
 }
 
@@ -130,6 +133,27 @@ pub struct MatchedData {
     /// the full string in `value`. Operators that match the whole value, or
     /// do not report a portion, leave this `None`.
     pub matched_portion: Option<String>,
+    /// Original variable-name bytes, before display escaping.
+    pub variable_bytes: Vec<u8>,
+    /// Original transformed value bytes, before display escaping.
+    pub value_bytes: Vec<u8>,
+    /// Original matched portion bytes, before display escaping.
+    pub matched_portion_bytes: Option<Vec<u8>>,
+}
+
+/// Expanded message data for a completed logical rule.
+///
+/// Values are original bytes captured at match time, before a later rule can
+/// overwrite TX captures or scores. Rendering/escaping and logging policy belong
+/// to the connector; recording is opt-in and does not emit log messages itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleMessage {
+    /// ID of the standalone rule or completed chain starter.
+    pub rule_id: String,
+    /// Expanded `msg` bytes, if configured.
+    pub message: Option<Vec<u8>>,
+    /// Expanded `logdata` bytes, if configured.
+    pub logdata: Option<Vec<u8>>,
 }
 
 /// What a `setvar` did to a collection.
@@ -140,6 +164,8 @@ pub struct MatchedData {
 pub enum SetVarChange {
     /// `setvar:tx.name=value`
     Set(String),
+    /// An assignment containing invalid UTF-8, retained without replacement.
+    SetBytes(Vec<u8>),
     /// `setvar:tx.name=+n`
     Increment(i64),
     /// `setvar:tx.name=-n`
@@ -181,12 +207,41 @@ impl Transaction {
             matched_rules: Vec::new(),
             allowed: false,
             matched_vars: Vec::new(),
-            captures: Vec::new(),
             controls: TransactionControls::default(),
             matched_data: Vec::new(),
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
+            rule_messages: Vec::new(),
+            record_rule_messages: false,
         }
+    }
+
+    /// Enable expanded rule message snapshots for a connector or audit consumer.
+    /// Disabled by default; this does not change rule evaluation or log policy.
+    pub fn set_record_rule_messages(&mut self, enabled: bool) {
+        self.record_rule_messages = enabled;
+    }
+
+    /// Messages captured when logical rules completed, in evaluation order.
+    /// Empty unless [`Self::set_record_rule_messages`] was enabled.
+    pub fn rule_messages(&self) -> &[RuleMessage] {
+        &self.rule_messages
+    }
+
+    fn expand_rule_message(&self, result: &ActionResult) -> Option<RuleMessage> {
+        Some(RuleMessage {
+            rule_id: result.metadata.id.clone()?,
+            message: result
+                .metadata
+                .msg
+                .as_deref()
+                .map(|s| self.expand_operator_macros_bytes(s)),
+            logdata: result
+                .metadata
+                .logdata
+                .as_deref()
+                .map(|s| self.expand_operator_macros_bytes(s)),
+        })
     }
 
     /// Set the client address, backing `REMOTE_ADDR` and `REMOTE_PORT`.
@@ -249,9 +304,23 @@ impl Transaction {
 
     /// Process the request URI.
     pub fn process_uri(&mut self, uri: &str, method: &str, protocol: &str) -> Result<()> {
-        self.request.set_uri(uri);
+        self.request.set_uri_bytes(uri.as_bytes());
         self.request.set_method(method);
         self.request.set_protocol(protocol);
+        Ok(())
+    }
+
+    /// Process an original request line without replacing invalid UTF-8.
+    pub fn process_uri_bytes(&mut self, uri: &[u8], method: &[u8], protocol: &[u8]) -> Result<()> {
+        self.request.set_uri_bytes(uri);
+        self.request.set_method_bytes(method);
+        self.request.set_protocol_bytes(protocol);
+        Ok(())
+    }
+
+    /// Add original request header bytes without UTF-8 replacement.
+    pub fn add_request_header_bytes(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
+        self.request.add_header_bytes(name, value);
         Ok(())
     }
 
@@ -287,8 +356,11 @@ impl Transaction {
         let content_type = self
             .request
             .headers
-            .get("content-type")
-            .and_then(|v| v.first().map(|s| s.to_string()));
+            .get_bytes(b"content-type")
+            .and_then(|v| {
+                v.first()
+                    .and_then(|value| std::str::from_utf8(value).ok().map(str::to_owned))
+            });
         let ct_lower = content_type
             .as_deref()
             .map(|ct| ct.trim_start().to_ascii_lowercase())
@@ -398,6 +470,14 @@ impl Transaction {
     /// Add a response header.
     pub fn add_response_header(&mut self, name: &str, value: &str) -> Result<()> {
         self.response.add_header(name, value);
+        Ok(())
+    }
+
+    /// Add original response header bytes without UTF-8 replacement.
+    pub fn add_response_header_bytes(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
+        self.response
+            .headers
+            .add_bytes(name.to_ascii_lowercase(), value);
         Ok(())
     }
 
@@ -587,12 +667,6 @@ impl Transaction {
                 });
             let outcome = self.evaluate_rule(rule, tag_actions)?;
             let matched = !outcome.matches.is_empty();
-            // What the rule left behind for the chain: the last match's captures.
-            let captures = outcome
-                .matches
-                .last()
-                .map(|m| m.captures.clone())
-                .unwrap_or_default();
 
             if matched {
                 // MATCHED_VARS is scoped to the current rule in ModSecurity,
@@ -601,13 +675,14 @@ impl Transaction {
                 self.matched_vars.clear();
 
                 // Execute actions
-                let mut action_result = execute_actions(&rule.actions, None, &captures);
+                let mut action_result = execute_actions(&rule.actions, None, &[]);
                 let setvar_ops = std::mem::take(&mut action_result.setvar_ops);
                 let capture = rule
                     .actions
                     .iter()
                     .any(|a| matches!(a, Action::Data(DataAction::Capture)));
                 let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
+                let mut first_message = None;
 
                 // `capture` and `setvar` run once for each variable the
                 // operator matched, in order, as libmodsecurity does
@@ -631,9 +706,15 @@ impl Transaction {
                         if n == 0 {
                             let entry = MatchedData {
                                 rule_id: link_rule_id.map(str::to_string),
-                                variable: var.name.clone(),
-                                value: var.value.clone(),
-                                matched_portion: var.portion.clone(),
+                                variable: var.name.to_string(),
+                                value: var.value.to_string(),
+                                matched_portion: var
+                                    .portion
+                                    .clone()
+                                    .map(|v| ByteValue::from(v).to_string()),
+                                variable_bytes: var.name.as_bytes().to_vec(),
+                                value_bytes: var.value.as_bytes().to_vec(),
+                                matched_portion_bytes: var.portion.clone(),
                             };
                             if rule.is_chain || chain_state.in_chain {
                                 pending_chain_data.push(entry);
@@ -651,6 +732,17 @@ impl Transaction {
                     for op in &setvar_ops {
                         self.apply_setvar(op, link_rule_id);
                     }
+                    // A standalone rule's primary log record describes its
+                    // first match, with captures and setvar effects from that
+                    // match. Later values can overwrite both. Chain starters
+                    // instead expand after the final link has completed.
+                    if n == 0
+                        && self.record_rule_messages
+                        && !rule.is_chain
+                        && !chain_state.in_chain
+                    {
+                        first_message = self.expand_rule_message(&action_result);
+                    }
                 }
 
                 if rule.is_chain {
@@ -667,7 +759,7 @@ impl Transaction {
                         // A middle link: its ctl runs with the chain.
                         held.control_ops.extend(action_result.control_ops);
                     }
-                    chain_state.continue_chain(true, &captures);
+                    chain_state.continue_chain(true, &[]);
                     idx += 1;
                     continue;
                 }
@@ -715,13 +807,21 @@ impl Transaction {
                     }
                 }
 
+                if self.record_rule_messages {
+                    if let Some(message) =
+                        first_message.or_else(|| self.expand_rule_message(&action_result))
+                    {
+                        self.rule_messages.push(message);
+                    }
+                }
+
                 // Handle flow control
                 match action_result.flow {
                     FlowOutcome::Chain => {
                         if !chain_state.in_chain {
                             chain_state.start_chain(idx);
                         }
-                        chain_state.continue_chain(true, &captures);
+                        chain_state.continue_chain(true, &[]);
                     }
                     FlowOutcome::Skip(n) => {
                         skip_count = n;
@@ -816,16 +916,11 @@ impl Transaction {
 
     /// Evaluate a single rule.
     fn evaluate_rule(&self, rule: &CompiledRule, tag_actions: &[Action]) -> Result<RuleOutcome> {
-        let resolver = VariableResolver::new(
+        let resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
             &self.tx,
-            // MATCHED_VAR is the value the previous rule matched on. This was
-            // a literal `None`, so a rule reading MATCHED_VAR could never
-            // fire, however many rules had matched before it.
-            self.matched_vars.last().map(|(_, value)| value.as_str()),
             &self.matched_vars,
-            &self.captures,
         );
 
         // Resolve variables from all specs.
@@ -846,23 +941,32 @@ impl Transaction {
         let mut all_values = Vec::new();
         let mut any_excluded = false;
         for spec in &rule.variables {
-            let mut resolved = resolver.resolve(spec);
+            let mut resolved = resolver.resolve_bytes(spec);
             if filter_targets || filter_tag_targets {
                 let before = resolved.len();
                 resolved.retain(|(name, _)| {
                     !(filter_targets
-                        && self
-                            .controls
-                            .is_target_removed(rule.id.as_deref(), spec, name)
+                        && self.controls.is_target_removed_bytes(
+                            rule.id.as_deref(),
+                            spec,
+                            name.as_bytes(),
+                        )
                         || filter_tag_targets
-                            && self.controls.is_tag_target_removed(tag_actions, spec, name))
+                            && self.controls.is_tag_target_removed_bytes(
+                                tag_actions,
+                                spec,
+                                name.as_bytes(),
+                            ))
                 });
                 any_excluded |= resolved.len() != before;
             }
             if spec.count_mode {
                 // An exclusion reduces the count, which is what a rule like
                 // `SecRule &ARGS:x "@eq 0"` is asking about.
-                all_values.push((format!("&{:?}", spec.name), resolved.len().to_string()));
+                all_values.push((
+                    ByteValue::from(format!("&{:?}", spec.name)),
+                    ByteValue::from(resolved.len().to_string()),
+                ));
             } else {
                 all_values.extend(resolved);
             }
@@ -880,7 +984,7 @@ impl Transaction {
             // A rule with no variable specs at all (i.e. SecAction) runs its
             // operator unconditionally — this is how CRS sets up TX thresholds.
             if rule.variables.is_empty() {
-                let result = rule.operator.execute("");
+                let result = rule.operator.execute_bytes(b"")?;
                 let matched = if rule.operator_negated {
                     !result.matched
                 } else {
@@ -916,12 +1020,8 @@ impl Transaction {
         // against the resolved value. Otherwise use the precompiled operator.
         let dynamic_operator;
         let operator: &dyn Operator = if rule.operator_spec.argument.contains("%{") {
-            let expanded = self.expand_operator_macros(&rule.operator_spec.argument);
-            dynamic_operator = compile_operator(&OperatorSpec {
-                negated: rule.operator_spec.negated,
-                name: rule.operator_spec.name,
-                argument: expanded,
-            })?;
+            let expanded = self.expand_operator_macros_bytes(&rule.operator_spec.argument);
+            dynamic_operator = compile_operator_bytes(&rule.operator_spec, &expanded)?;
             dynamic_operator.as_ref()
         } else {
             rule.operator.as_ref()
@@ -929,9 +1029,36 @@ impl Transaction {
 
         // Apply transformations and match every value
         let mut matches = Vec::new();
+        let multi_match = rule
+            .actions
+            .iter()
+            .any(|action| matches!(action, Action::Flow(FlowAction::MultiMatch)));
         for (name, value) in all_values {
-            let transformed = rule.transformations.apply(&value);
-            let result = operator.execute(&transformed);
+            if multi_match {
+                rule.transformations
+                    .for_each_byte_stage(value.as_bytes(), |transformed| {
+                        let result = operator.execute_bytes(transformed)?;
+                        let matched = if rule.operator_negated {
+                            !result.matched
+                        } else {
+                            result.matched
+                        };
+                        if matched {
+                            matches.push(RuleMatch {
+                                captures: result.captures,
+                                matched_variable: Some(MatchedVariable {
+                                    name: name.clone(),
+                                    value: ByteValue::from(transformed),
+                                    portion: result.matched_value,
+                                }),
+                            });
+                        }
+                        Ok(())
+                    })?;
+                continue;
+            }
+            let transformed = rule.transformations.apply_bytes(value.as_bytes())?;
+            let result = operator.execute_bytes(&transformed)?;
 
             let final_match = if rule.operator_negated {
                 !result.matched
@@ -946,7 +1073,7 @@ impl Transaction {
                     // the portion the operator hit. The portion is reported
                     // separately, since an audit log wants both: the value to
                     // judge the match, the portion to see what triggered it.
-                    value: transformed.into_owned(),
+                    value: ByteValue::from(transformed.into_owned()),
                     portion: result.matched_value,
                 };
                 matches.push(RuleMatch {
@@ -962,56 +1089,53 @@ impl Transaction {
     /// Expand `%{...}` macros in an operator argument against current TX state.
     ///
     /// Resolved: the `TX` collection (thresholds, `tx.allowed_methods`),
-    /// `REQUEST_HEADERS.<name>` and `MATCHED_VAR`/`MATCHED_VAR_NAME`. Anything
+    /// `ARGS`/`ARGS_GET`/`ARGS_POST`, `REQUEST_HEADERS.<name>` and
+    /// `MATCHED_VAR`/`MATCHED_VAR_NAME`. Anything
     /// else expands to an empty string.
-    fn expand_operator_macros(&self, arg: &str) -> String {
-        // Compiled once: this runs on every evaluation of an operator whose
-        // argument contains `%{`.
-        static MACRO: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-            regex::Regex::new(r"%\{([^}]+)\}").expect("static macro regex is valid")
-        });
-        MACRO
-            .replace_all(arg, |caps: &regex::Captures| {
-                let inner = &caps[1];
-                // Bare names that are not collections (`%{MATCHED_VAR_NAME}`).
-                match inner.to_ascii_lowercase().as_str() {
-                    "matched_var" => {
-                        return self
-                            .matched_vars
-                            .last()
-                            .map(|(_, v)| v.clone())
-                            .unwrap_or_default()
-                    }
-                    "matched_var_name" => {
-                        return self
-                            .matched_vars
-                            .last()
-                            .map(|(n, _)| n.clone())
-                            .unwrap_or_default()
-                    }
-                    _ => {}
+    fn expand_operator_macros_bytes(&self, arg: &str) -> Vec<u8> {
+        static MACRO: once_cell::sync::Lazy<regex::Regex> =
+            once_cell::sync::Lazy::new(|| regex::Regex::new(r"%\{([^}]+)\}").unwrap());
+        let mut out = Vec::with_capacity(arg.len());
+        let mut end = 0;
+        for captures in MACRO.captures_iter(arg) {
+            let whole = captures.get(0).unwrap();
+            out.extend_from_slice(&arg.as_bytes()[end..whole.start()]);
+            let name = &captures[1];
+            let lower = name.to_ascii_lowercase();
+            let value = match lower.as_str() {
+                "matched_var" => self.matched_vars.last().map(|(_, v)| v.as_bytes()),
+                "matched_var_name" => self.matched_vars.last().map(|(k, _)| k.as_bytes()),
+                _ => {
+                    let (collection, key) = name.split_once('.').unwrap_or(("tx", name));
+                    let values = match collection.to_ascii_lowercase().as_str() {
+                        "tx" => self.tx.get_bytes(key.as_bytes()),
+                        "request_headers" => self
+                            .request
+                            .headers
+                            .get_bytes(key.to_ascii_lowercase().as_bytes()),
+                        "args" => self
+                            .request
+                            .args_get
+                            .get_bytes(key.as_bytes())
+                            .or_else(|| self.request.args_post.get_bytes(key.as_bytes())),
+                        "args_get" => self.request.args_get.get_bytes(key.as_bytes()),
+                        "args_post" => self.request.args_post.get_bytes(key.as_bytes()),
+                        _ => None,
+                    };
+                    values.and_then(|v| v.first().copied())
                 }
-                let (collection, name) = match inner.split_once('.') {
-                    Some((c, n)) => (c.to_ascii_lowercase(), n),
-                    None => ("tx".to_string(), inner),
-                };
-                match collection.as_str() {
-                    "tx" => self
-                        .tx
-                        .get(name)
-                        .and_then(|v| v.first().map(|s| s.to_string()))
-                        .unwrap_or_default(),
-                    // CRS 943110: `!@endsWith %{request_headers.host}`.
-                    "request_headers" => self
-                        .request
-                        .headers
-                        .get(&name.to_ascii_lowercase())
-                        .and_then(|v| v.first().map(|s| s.to_string()))
-                        .unwrap_or_default(),
-                    _ => String::new(),
-                }
-            })
-            .into_owned()
+            };
+            if let Some(value) = value {
+                out.extend_from_slice(value);
+            } else if lower.split_once('.').is_some_and(|(collection, _)| {
+                matches!(collection, "args" | "args_get" | "args_post")
+            }) {
+                out.extend_from_slice(name.as_bytes());
+            }
+            end = whole.end();
+        }
+        out.extend_from_slice(&arg.as_bytes()[end..]);
+        out
     }
 
     /// Publish the captures of a `capture` rule as `TX:0`..`TX:9`.
@@ -1027,71 +1151,80 @@ impl Transaction {
     /// `%{tx.3}` after a match with two groups then sees the old value. No
     /// ruleset should depend on a leftover like that, so the stale read is
     /// closed here.
-    fn store_captures(&mut self, whole: Option<String>, groups: &[String]) {
+    fn store_captures(&mut self, whole: Option<Vec<u8>>, groups: &[Vec<u8>]) {
         use crate::variables::MutableCollection;
         for i in 0..10 {
             self.tx.delete(&i.to_string());
         }
-        if let Some(w) = whole {
-            self.tx.set("0".to_string(), w);
+        if let Some(whole) = whole {
+            self.tx.set_bytes("0", whole);
         }
-        for (i, g) in groups.iter().take(9).enumerate() {
-            self.tx.set((i + 1).to_string(), g.clone());
+        for (i, group) in groups.iter().take(9).enumerate() {
+            self.tx.set_bytes((i + 1).to_string(), group.clone());
         }
     }
 
     /// Apply a setvar operation.
     fn apply_setvar(&mut self, op: &RuleSetVar, rule_id: Option<&str>) {
-        // The variable name may carry a macro too (CRS 920450:
-        // `tx.header_name_920450_%{tx.0}`, one variable per request header);
-        // without expanding it every header would overwrite one variable.
         let name = if op.name.contains("%{") {
-            self.expand_operator_macros(&op.name)
+            self.expand_operator_macros_bytes(&op.name)
         } else {
-            op.name.clone()
+            op.name.as_bytes().to_vec()
         };
-        // A macro-bearing value (e.g. `+%{tx.critical_anomaly_score}`) is
-        // resolved here, where TX state is available. Which operation it is
-        // comes from the text as written, before any expansion.
-        let operation = if let SetVarOperation::Macro(raw) = &op.operation {
-            let (kind, operand) = split_setvar_rhs(raw);
-            let operand = self.expand_operator_macros(operand);
-            match kind {
-                SetVarKind::Set => SetVarOperation::Set(operand),
-                SetVarKind::Add => SetVarOperation::Increment(leading_int(&operand)),
-                SetVarKind::Subtract => SetVarOperation::Decrement(leading_int(&operand)),
+        let change = match &op.operation {
+            SetVarOperation::Set(value) => {
+                self.tx.set_bytes(name.clone(), value.clone());
+                SetVarChange::Set(value.clone())
             }
-        } else {
-            op.operation.clone()
+            SetVarOperation::Macro(raw) => {
+                let (kind, operand) = split_setvar_rhs(raw);
+                let operand = self.expand_operator_macros_bytes(operand);
+                match kind {
+                    SetVarKind::Set => {
+                        self.tx.set_bytes(name.clone(), operand.clone());
+                        match String::from_utf8(operand) {
+                            Ok(text) => SetVarChange::Set(text),
+                            Err(error) => SetVarChange::SetBytes(error.into_bytes()),
+                        }
+                    }
+                    SetVarKind::Add | SetVarKind::Subtract => {
+                        let n = std::str::from_utf8(&operand).map(leading_int).unwrap_or(0);
+                        let n = if matches!(kind, SetVarKind::Subtract) {
+                            -n
+                        } else {
+                            n
+                        };
+                        self.tx.increment_bytes(&name, n);
+                        if matches!(kind, SetVarKind::Subtract) {
+                            SetVarChange::Decrement(-n)
+                        } else {
+                            SetVarChange::Increment(n)
+                        }
+                    }
+                }
+            }
+            SetVarOperation::Increment(n) => {
+                self.tx.increment_bytes(&name, *n);
+                SetVarChange::Increment(*n)
+            }
+            SetVarOperation::Decrement(n) => {
+                self.tx.increment_bytes(&name, -*n);
+                SetVarChange::Decrement(*n)
+            }
+            SetVarOperation::Delete => {
+                self.tx.delete_bytes(&name);
+                SetVarChange::Delete
+            }
         };
-        let resolved = RuleSetVar {
-            collection: op.collection.clone(),
-            name,
-            operation,
-        };
-        crate::actions::apply_setvar(&mut self.tx, &resolved);
-
         if let Some(rule_id) = rule_id.filter(|_| self.record_setvar_effects) {
-            let effect_op = match &resolved.operation {
-                SetVarOperation::Set(v) => Some(SetVarChange::Set(v.clone())),
-                SetVarOperation::Increment(n) => Some(SetVarChange::Increment(*n)),
-                SetVarOperation::Decrement(n) => Some(SetVarChange::Decrement(*n)),
-                SetVarOperation::Delete => Some(SetVarChange::Delete),
-                // Resolved above; `apply_setvar` ignores it too.
-                SetVarOperation::Macro(_) => None,
-            };
-            if let Some(effect_op) = effect_op {
-                self.setvar_effects.push(SetVarEffect {
-                    rule_id: rule_id.to_string(),
-                    collection: resolved.collection.to_ascii_lowercase(),
-                    key: resolved.name.clone(),
-                    op: effect_op,
-                });
-            }
+            self.setvar_effects.push(SetVarEffect {
+                rule_id: rule_id.into(),
+                collection: op.collection.to_ascii_lowercase(),
+                key: ByteValue::from(name.clone()).to_string(),
+                op: change,
+            });
         }
-
-        // Sync anomaly score from TX if relevant
-        if resolved.name == "anomaly_score" {
+        if name == b"anomaly_score" {
             self.anomaly_score.sync_from_tx(&self.tx);
         }
     }

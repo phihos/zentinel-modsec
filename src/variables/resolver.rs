@@ -1,7 +1,10 @@
 //! Variable resolution engine.
 
-use super::{RequestData, ResponseData, TxCollection};
+use super::{ByteValue, RequestData, ResponseData, TxCollection};
+#[path = "resolver_bytes.rs"]
+mod byte_resolution;
 use crate::parser::{Selection, VariableName, VariableSpec, XmlTarget};
+pub(crate) use byte_resolution::cached_bytes_regex;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
@@ -56,6 +59,7 @@ pub struct VariableResolver<'a> {
     /// reads it yet (`TX:0`..`TX:9` are served from the TX collection).
     #[allow(dead_code)]
     captures: &'a [String],
+    matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
 }
 
 impl<'a> VariableResolver<'a> {
@@ -75,6 +79,7 @@ impl<'a> VariableResolver<'a> {
             matched_var,
             matched_vars,
             captures,
+            matched_bytes: None,
         }
     }
 

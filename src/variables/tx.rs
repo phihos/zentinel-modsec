@@ -1,6 +1,7 @@
 //! TX (transaction) collection.
 
-use super::collection::{Collection, HashMapCollection, MutableCollection};
+use super::collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
+use super::ByteValue;
 use regex::Regex;
 use std::borrow::Cow;
 
@@ -32,6 +33,30 @@ impl TxCollection {
     /// Create a new TX collection.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Store original value bytes under a case-insensitive original byte key.
+    pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
+        let key = key.into();
+        self.data
+            .set_bytes(key.as_bytes().to_ascii_lowercase(), value);
+    }
+
+    /// Delete a case-insensitive original byte key.
+    pub fn delete_bytes(&mut self, key: &[u8]) {
+        self.data.delete_bytes(&key.to_ascii_lowercase());
+    }
+
+    /// Increment a numeric byte value; a nonnumeric value starts at zero.
+    pub fn increment_bytes(&mut self, key: &[u8], amount: i64) {
+        let current = self
+            .get_bytes(key)
+            .and_then(|v| {
+                v.first()
+                    .and_then(|v| std::str::from_utf8(v).ok()?.parse::<i64>().ok())
+            })
+            .unwrap_or(0);
+        self.set_bytes(key.to_vec(), (current + amount).to_string());
     }
 
     /// Clear all data.
@@ -82,5 +107,21 @@ impl MutableCollection for TxCollection {
 
     fn decrement(&mut self, key: &str, amount: i64) {
         self.data.decrement(&normalize(key), amount);
+    }
+}
+
+impl ByteCollection for TxCollection {
+    fn all_bytes(&self) -> Vec<(&[u8], &[u8])> {
+        self.data.all_bytes()
+    }
+    fn get_bytes(&self, key: &[u8]) -> Option<Vec<&[u8]>> {
+        if key.iter().any(u8::is_ascii_uppercase) {
+            self.data.get_bytes(&key.to_ascii_lowercase())
+        } else {
+            self.data.get_bytes(key)
+        }
+    }
+    fn get_regex_bytes(&self, pattern: &regex::bytes::Regex) -> Vec<(&[u8], &[u8])> {
+        self.data.get_regex_bytes(pattern)
     }
 }

@@ -1,7 +1,7 @@
 //! Request data for variable resolution.
 
 use super::collection::{Collection, HashMapCollection};
-use std::borrow::Cow;
+use super::ByteValue;
 
 /// Request data container.
 #[derive(Debug, Clone, Default)]
@@ -18,6 +18,16 @@ pub struct RequestData {
     pub query_string: String,
     /// HTTP protocol version.
     pub protocol: String,
+    /// Original URI bytes when the legacy text field cannot represent them.
+    pub(crate) binary_uri: Option<ByteValue>,
+    /// Decoded path bytes when percent decoding produces non-UTF-8 data.
+    pub(crate) binary_path: Option<ByteValue>,
+    /// Original query bytes when the legacy text field cannot represent them.
+    pub(crate) binary_query: Option<ByteValue>,
+    /// Original method bytes when not UTF-8.
+    pub(crate) binary_method: Option<ByteValue>,
+    /// Original protocol bytes when not UTF-8.
+    pub(crate) binary_protocol: Option<ByteValue>,
     /// Request headers.
     pub headers: HashMapCollection,
     /// GET arguments.
@@ -70,6 +80,9 @@ impl RequestData {
 
     /// Set the URI and parse path/query string.
     pub fn set_uri(&mut self, uri: &str) {
+        self.binary_uri = None;
+        self.binary_query = None;
+        self.binary_path = None;
         self.uri = uri.to_string();
         self.uri_raw = uri.to_string();
 
@@ -83,35 +96,112 @@ impl RequestData {
         }
     }
 
+    /// Set a request target without replacing invalid UTF-8 or decoded bytes.
+    pub fn set_uri_bytes(&mut self, uri: &[u8]) {
+        match std::str::from_utf8(uri) {
+            Ok(text) => self.set_uri(text),
+            Err(_) => self.set_uri(ByteValue::from(uri).display_text()),
+        }
+        let path_end = uri.iter().position(|&b| b == b'?').unwrap_or(uri.len());
+        let raw_path = &uri[..path_end];
+        if raw_path.contains(&b'%') || std::str::from_utf8(raw_path).is_err() {
+            let decoded = decoded_request_path_bytes(raw_path);
+            if std::str::from_utf8(&decoded).is_err() {
+                self.binary_path = Some(ByteValue::from(decoded));
+            }
+        }
+        if std::str::from_utf8(uri).is_err() {
+            self.binary_uri = Some(ByteValue::from(uri));
+            self.args_get.clear();
+            if path_end < uri.len() {
+                let query = &uri[path_end + 1..];
+                self.binary_query = Some(ByteValue::from(query));
+                parse_form_bytes(query, &mut self.args_get);
+            }
+        }
+    }
+
+    /// Original request target bytes.
+    pub fn uri_bytes(&self) -> &[u8] {
+        self.binary_uri
+            .as_ref()
+            .map_or(self.uri_raw.as_bytes(), ByteValue::as_bytes)
+    }
+    /// Decoded path bytes, including invalid UTF-8 created by percent decoding.
+    pub fn path_bytes(&self) -> &[u8] {
+        self.binary_path
+            .as_ref()
+            .map_or(self.path.as_bytes(), ByteValue::as_bytes)
+    }
+    /// Original query string bytes.
+    pub fn query_bytes(&self) -> &[u8] {
+        self.binary_query
+            .as_ref()
+            .map_or(self.query_string.as_bytes(), ByteValue::as_bytes)
+    }
+    /// Original HTTP method bytes.
+    pub fn method_bytes(&self) -> &[u8] {
+        self.binary_method
+            .as_ref()
+            .map_or(self.method.as_bytes(), ByteValue::as_bytes)
+    }
+    /// Original HTTP protocol bytes.
+    pub fn protocol_bytes(&self) -> &[u8] {
+        self.binary_protocol
+            .as_ref()
+            .map_or(self.protocol.as_bytes(), ByteValue::as_bytes)
+    }
+    /// Set method bytes; textual presentation is never used for matching.
+    pub fn set_method_bytes(&mut self, value: &[u8]) {
+        let value = ByteValue::from(value);
+        self.method = value.to_string();
+        self.binary_method = value.as_utf8().is_err().then_some(value);
+    }
+    /// Set protocol bytes; textual presentation is never used for matching.
+    pub fn set_protocol_bytes(&mut self, value: &[u8]) {
+        let value = ByteValue::from(value);
+        self.protocol = value.to_string();
+        self.binary_protocol = value.as_utf8().is_err().then_some(value);
+    }
+
     /// Set the HTTP method.
     pub fn set_method(&mut self, method: &str) {
+        self.binary_method = None;
         self.method = method.to_string();
     }
 
     /// Set the protocol.
     pub fn set_protocol(&mut self, protocol: &str) {
+        self.binary_protocol = None;
         self.protocol = protocol.to_string();
     }
 
     /// Add a request header.
     pub fn add_header(&mut self, name: &str, value: &str) {
-        let lower = name.to_lowercase();
-        if lower == "cookie" {
-            self.parse_cookie_header(value);
-        }
-        self.headers.add(lower, value.to_string());
+        self.add_header_bytes(name.as_bytes(), value.as_bytes());
     }
 
-    /// Parse a `Cookie` request header into the cookies collection.
-    fn parse_cookie_header(&mut self, value: &str) {
-        for pair in value.split(';') {
-            let pair = pair.trim();
+    /// Add original header name/value bytes without UTF-8 replacement.
+    pub fn add_header_bytes(&mut self, name: &[u8], value: &[u8]) {
+        let lower = name.to_ascii_lowercase();
+        if lower == b"cookie" {
+            self.parse_cookie_header_bytes(value);
+        }
+        self.headers.add_bytes(lower, value);
+    }
+
+    fn parse_cookie_header_bytes(&mut self, value: &[u8]) {
+        for pair in value.split(|&b| b == b';') {
+            let pair = trim_ascii(pair);
             if pair.is_empty() {
                 continue;
             }
-            match pair.split_once('=') {
-                Some((k, v)) => self.cookies.add(k.trim().to_string(), v.trim().to_string()),
-                None => self.cookies.add(pair.to_string(), String::new()),
+            let equal = pair.iter().position(|&b| b == b'=');
+            match equal {
+                Some(i) => self
+                    .cookies
+                    .add_bytes(trim_ascii(&pair[..i]), trim_ascii(&pair[i + 1..])),
+                None => self.cookies.add_bytes(pair, &b""[..]),
             }
         }
     }
@@ -124,6 +214,15 @@ impl RequestData {
     /// Get body as string.
     pub fn body_str(&self) -> String {
         String::from_utf8_lossy(&self.body).to_string()
+    }
+
+    /// REQUEST_BODY's original bytes, observing processor-specific visibility.
+    pub fn request_body_bytes_variable(&self) -> &[u8] {
+        if matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
+            &self.body
+        } else {
+            b""
+        }
     }
 
     /// Public REQUEST_BODY value, distinct from the internally retained bytes.
@@ -152,19 +251,7 @@ impl RequestData {
 
     /// Parse query string into args_get.
     fn parse_query_string(&mut self, qs: &str) {
-        for pair in qs.split('&') {
-            if let Some(pos) = pair.find('=') {
-                let key = &pair[..pos];
-                let value = &pair[pos + 1..];
-                // URL decode
-                let key = form_decode(key);
-                let value = form_decode(value);
-                self.args_get.add(key, value);
-            } else if !pair.is_empty() {
-                let key = form_decode(pair);
-                self.args_get.add(key, String::new());
-            }
-        }
+        parse_form_bytes(qs.as_bytes(), &mut self.args_get);
     }
 
     /// Parse a `multipart/form-data` body.
@@ -250,24 +337,7 @@ impl RequestData {
 
     /// Parse form body into args_post.
     pub fn parse_form_body(&mut self) {
-        let body_str = self.body_str();
-        for pair in body_str.split('&') {
-            if let Some(pos) = pair.find('=') {
-                let key = &pair[..pos];
-                let value = &pair[pos + 1..];
-                let key = form_decode(key);
-                let value = form_decode(value);
-                self.args_post.add(key, value);
-            } else if !pair.is_empty() {
-                // A parameter with no `=` is a name with an empty value, which
-                // is how application frameworks parse it. Dropping it here was
-                // a bypass: percent-encoding the `=` leaves a body with no
-                // literal separator, so the whole body became invisible to
-                // ARGS and ARGS_NAMES while the origin still saw a parameter.
-                // The query-string parser has always handled this shape.
-                self.args_post.add(form_decode(pair), String::new());
-            }
-        }
+        parse_form_bytes(&self.body, &mut self.args_post);
     }
 
     /// Parse a JSON body into `args_post`, mirroring ModSecurity's JSON
@@ -334,60 +404,61 @@ impl RequestData {
 /// Decode only the path component. Query delimiters are split by the caller
 /// before decoding, and a literal plus in a path is never form-decoded.
 fn decoded_request_path(input: &str) -> String {
-    let without_fragment = input.split('#').next().unwrap_or(input);
-    let path = if let Some((scheme, rest)) = without_fragment.split_once("://") {
+    String::from_utf8(decoded_request_path_bytes(input.as_bytes()))
+        .unwrap_or_else(|_| input.to_string())
+}
+
+fn decoded_request_path_bytes(input: &[u8]) -> Vec<u8> {
+    let without_fragment = input.split(|&b| b == b'#').next().unwrap_or(input);
+    let path = if let Some(scheme_end) = without_fragment.windows(3).position(|part| part == b"://")
+    {
+        let scheme = &without_fragment[..scheme_end];
+        let rest = &without_fragment[scheme_end + 3..];
         if !scheme.is_empty()
-            && scheme.bytes().enumerate().all(|(i, b)| {
-                b.is_ascii_alphabetic() || i > 0 && (b.is_ascii_digit() || b"+-.".contains(&b))
+            && scheme.iter().enumerate().all(|(i, b)| {
+                b.is_ascii_alphabetic() || i > 0 && (b.is_ascii_digit() || b"+-.".contains(b))
             })
         {
-            rest.find('/').map_or("", |offset| &rest[offset..])
+            rest.iter()
+                .position(|&b| b == b'/')
+                .map_or(&b""[..], |offset| &rest[offset..])
         } else {
             without_fragment
         }
     } else {
         without_fragment
     };
-    let bytes = path.as_bytes();
-    for (index, byte) in bytes.iter().enumerate() {
-        if *byte == b'%'
-            && !bytes
-                .get(index + 1..index + 3)
-                .is_some_and(|pair| pair.iter().all(|byte| byte.is_ascii_hexdigit()))
+    for (i, &byte) in path.iter().enumerate() {
+        if byte == b'%'
+            && !path
+                .get(i + 1..i + 3)
+                .is_some_and(|pair| pair.iter().all(u8::is_ascii_hexdigit))
         {
-            // Match the reference parser's whole-path fallback on malformed
-            // escapes, rather than partially decoding an invalid path.
-            return input.to_string();
+            return input.to_vec();
         }
     }
-    percent_encoding::percent_decode_str(path)
-        .decode_utf8()
-        .map(|decoded| decoded.into_owned())
-        // Preserve the source at the current string API boundary instead of
-        // replacing an invalid decoded byte with a replacement character.
-        .unwrap_or_else(|_| input.to_string())
+    percent_encoding::percent_decode(path).collect()
 }
 
-/// Decode one component of `application/x-www-form-urlencoded` input.
-///
-/// In that encoding `+` denotes a space -- it is what a browser emits for a
-/// space in a submitted form -- so decoding only percent-escapes leaves the
-/// argument holding a literal `+` where the origin application will see a
-/// space. Any rule matching a payload that contains whitespace then misses,
-/// which is a bypass rather than a coverage gap: the same request reaches the
-/// application as spaces either way.
-///
-/// The `+` substitution happens *before* percent-decoding, so a plus that was
-/// genuinely sent as `%2B` survives as a plus instead of becoming a space.
-fn form_decode(component: &str) -> String {
-    let plus_decoded: Cow<'_, str> = if component.as_bytes().contains(&b'+') {
-        Cow::Owned(component.replace('+', " "))
-    } else {
-        Cow::Borrowed(component)
-    };
-    percent_encoding::percent_decode_str(&plus_decoded)
-        .decode_utf8_lossy()
-        .into_owned()
+fn trim_ascii(mut value: &[u8]) -> &[u8] {
+    while value.first().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[1..];
+    }
+    while value.last().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[..value.len() - 1];
+    }
+    value
+}
+
+fn parse_form_bytes(input: &[u8], collection: &mut HashMapCollection) {
+    for pair in input.split(|&b| b == b'&').filter(|pair| !pair.is_empty()) {
+        let equal = pair.iter().position(|&b| b == b'=');
+        let (key, value) = equal.map_or((pair, &b""[..]), |i| (&pair[..i], &pair[i + 1..]));
+        collection.add_bytes(
+            crate::transformations::bytes::url_decode_stage(key, false).into_owned(),
+            crate::transformations::bytes::url_decode_stage(value, false).into_owned(),
+        );
+    }
 }
 
 /// Extract the `boundary` parameter from a multipart Content-Type value.
