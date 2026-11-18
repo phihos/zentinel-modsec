@@ -1,0 +1,42 @@
+{
+  "commit": "87771dce375e9016a6a5bd1e745176c50e2c4c84",
+  "tree": "a4e8194b4425b300b467f97b5a43048627ed26e5",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "lock_sha256": "93e5e1ddd76b9c69bffbdeada8d0785ed673ac4a8585fdf7834610335012439b",
+  "sources": {
+    "src/transformations/pipeline.rs": {
+      "production_sha256": "aa433bee5610aa80b30bf78e2c32a5c9e258ecd7c71d0158bf76bc132680a0d4",
+      "oracle": "combined-sweep.rs",
+      "oracle_sha256": "de592f77c08e2f877cff07e315a96fb7910436dc157de72d3ef040f17a645638",
+      "combined_sha256": "a49273160dd01241e4a88fe3babbe077d7f5fe026a4f7793c84e39050986e650"
+    },
+    "src/operators/pattern.rs": {
+      "production_sha256": "1f4b311a40a4ce5747a270279459ab251f50e2bc6d2b3d4c8ecb2d9827fe2079",
+      "oracle": "differential.rs",
+      "oracle_sha256": "d8e9dd1e9da036f4d0181715885afd1cc0fc7bea32c3fc58835ccc63cb9f83c5",
+      "combined_sha256": "36692166e3ef0c0ec1e788bf40aba3434983ad2428751f00ea3494f1afefad68"
+    }
+  },
+  "cmd": [
+    "taskset",
+    "-c",
+    "1-2",
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "--release",
+    "--lib",
+    "--",
+    "--nocapture"
+  ],
+  "exit": 0,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "output_sha256": "f0a6af86c749f5acd3ede5de83d8b6c2e5f598c2b29c804be2df12b072143158",
+  "results": [
+    "early rejection eligible rules 100, early rejections crosschecked 464605",
+    "live shapes 35, including individual stages 46, inputs 67851, checked final values and ownership 3121146, checked multiMatch stage visits 3460642, mismatches 0",
+    "CRS rules 698, distinct static RX 291, inputs 68880, comparisons 20044080, prefilter rejections 17102704, matching portions 201818, subgroups 5793, mismatches 0",
+    "test result: ok. 201 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.18s"
+  ]
+}
