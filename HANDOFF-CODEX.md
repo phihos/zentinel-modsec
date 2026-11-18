@@ -2,6 +2,27 @@
 
 ## Current local checkpoint
 
+Engine commit `20ee8581ff172f6d359223d5373afe581b272b63` on
+`spike/crs-parity` uses ordered scalar storage for TX, prepares eligible
+rule targets per phase and reuses the inspected bytes for successful static
+numeric comparisons. Match records retain their compiled rule positions,
+and a single matched ID can be read directly from the ruleset.
+
+Compared with `92a6e0b`, warmed full-CRS GET p50 fell from
+124.64 to 99.33 µs and form POST from 266.14 to 236.89 µs. The mixed GET,
+form and nested-JSON workload moved from 225.58 to 206.04 µs at p50 and from
+297.13 to 277.15 µs at p99. GET allocations fell from 427 to 220, and form POST
+allocations from 627 to 430. On the single-rule fixture that reads the full
+65,530-byte binary header into an audit record, resident-worker p50 rose
+from 238.55 to 264.20 µs. Form POST with an audit read improved at p99 in
+four of eight rounds. All 13 repository checks passed. Both
+backends preserved the pinned corpus outcomes, all 22 blocking traces and
+the complete mixed-request audit evidence. The
+[local qualification report](../zentinel-eval/results/latency-fe6d1ea/RESULTS.md)
+includes audit-read timings, one-rule measurements and ruleset memory.
+
+## Short-value and rule evaluation checkpoint at `92a6e0b`
+
 Engine commit `92a6e0bd0de0fd9ba4f803c50b419dc6b75acfe1` on
 `spike/crs-parity` stores short text inline, shares binary match evidence
 and formats its escaped text on demand. The evaluator resolves targets
