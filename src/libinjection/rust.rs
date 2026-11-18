@@ -27,6 +27,7 @@ pub fn detect_xss_bytes(input: &[u8]) -> DetectionResult {
     }
 }
 
+#[cfg(not(feature = "libinjection-ffi"))]
 pub(super) fn is_sqli_bytes(input: &[u8]) -> bool {
     matching_sql_fingerprint(input).is_some()
 }
