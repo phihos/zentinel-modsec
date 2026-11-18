@@ -96,6 +96,7 @@ struct ResolvedTarget {
 
 struct StaticSearch<'a> {
     rule: &'a CompiledRule,
+    within: Option<&'a [u8]>,
     numeric: Option<crate::operators::NumericComparison>,
     regex: Option<&'a crate::operators::RxOperator>,
     capture: bool,
@@ -104,17 +105,15 @@ struct StaticSearch<'a> {
 
 impl StaticSearch<'_> {
     fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
-        if !self.rule.operator_negated
-            && self.rule.transformations.preserves_token_width_bounds()
-            && self
-                .regex
-                .is_some_and(|regex| regex.rejects_short_token(raw))
-        {
-            return Ok(());
-        }
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
-            if let Some(numeric) = self.numeric {
-                let matched = numeric.matches(value);
+            let whole_input = self
+                .numeric
+                .map(|numeric| numeric.matches(value))
+                .or_else(|| {
+                    self.within
+                        .map(|haystack| crate::operators::WithinOperator::matches(haystack, value))
+                });
+            if let Some(matched) = whole_input {
                 return Ok(
                     (matched != self.rule.operator_negated).then(|| ByteOperatorResult {
                         matched,
@@ -128,6 +127,24 @@ impl StaticSearch<'_> {
             let result = self.rule.operator.execute_rule_bytes(value, self.capture)?;
             Ok((result.matched != self.rule.operator_negated).then_some(result))
         };
+        if self.rule.transformations.is_empty() {
+            if let Some(result) = execute(raw)? {
+                record(PreparedStage {
+                    value: ByteValue::from(raw),
+                    result,
+                    resume_after: self.multi_match.then_some(0),
+                });
+            }
+            return Ok(());
+        }
+        if !self.rule.operator_negated
+            && self.rule.transformations.preserves_token_width_bounds()
+            && self
+                .regex
+                .is_some_and(|regex| regex.rejects_short_token(raw))
+        {
+            return Ok(());
+        }
         if self.multi_match {
             self.rule
                 .transformations
@@ -996,7 +1013,8 @@ impl Transaction {
                 idx = defaults.end;
             }
         }
-        while idx < rules.len() {
+        let mut phase_end = rules.len();
+        while idx < phase_end {
             // Handle skipAfter
             if let Some(next) = skip_after.take() {
                 if next < idx {
@@ -1006,13 +1024,14 @@ impl Transaction {
                 continue;
             }
 
-            // A ctl:ruleEngine=Off from an earlier rule stops this phase where
-            // it stands, rather than only taking effect from the next phase.
-            if self.engine_mode() == RuleEngineMode::Off {
-                return Ok(());
-            }
-
             let rule = &rules[idx];
+
+            let targets = dispatch[idx].targets.select(available);
+            if !targets.may_match(rule.variables.len()) && chain_start.is_none() && skip_count == 0
+            {
+                idx = dispatch[idx].after_empty_targets;
+                continue;
+            }
 
             // Coraza applies removals before counting skip:N, at the entry
             // to a logical rule. A child tag cannot select its starter.
@@ -1047,7 +1066,6 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && chain_start.is_none();
-            let targets = dispatch[idx].targets.select(available);
             let outcome = if targets.may_match(rule.variables.len()) {
                 self.evaluate_rule(
                     rule,
@@ -1061,6 +1079,13 @@ impl Transaction {
                 None
             };
             if let Some(outcome) = outcome {
+                // Controls can change the mode only on a match. Finish recording
+                // this link, then stop before evaluating another logical rule.
+                if dispatch[idx].controls_from < rule.actions.len()
+                    && self.engine_mode() == RuleEngineMode::Off
+                {
+                    phase_end = 0;
+                }
                 let RuleOutcome {
                     first_data,
                     first_message,
@@ -1316,7 +1341,8 @@ impl Transaction {
         let capture = dispatch.capture;
         let multi_match = dispatch.multi_match;
 
-        let search = (!dynamic).then(|| StaticSearch {
+        let search = StaticSearch {
+            within: None,
             numeric: dispatch.numeric,
             regex: if rule.operator_spec.name == crate::parser::OperatorName::Rx {
                 rule.operator.compiled_regex()
@@ -1326,7 +1352,7 @@ impl Transaction {
             rule,
             capture,
             multi_match,
-        });
+        };
         let mut evaluate = |tx: &mut Self,
                             name: Option<&ByteValue>,
                             value: &[u8],
@@ -1371,7 +1397,10 @@ impl Transaction {
             let need_portion = capture || (first && name.is_some());
             // A positive static comparison reuses the input; a negated one
             // has no matched portion. Other operators report their own bytes.
-            let mut portion = if dispatch.numeric.is_some() && result.matched {
+            let mut portion = if result.matched
+                && (dispatch.numeric.is_some()
+                    || (snapshot.is_some() && dispatch.within_tx_key.is_some()))
+            {
                 need_portion.then(|| {
                     matched_value
                         .clone()
@@ -1486,6 +1515,14 @@ impl Transaction {
             let spec = &rule.variables[index];
             let selection = &dispatch.selections[index];
             let mut target = ResolvedTarget::default();
+            // Read the TX operand for this target. After the first match, actions
+            // may change it and subsequent evaluations use the dynamic binder.
+            let within = dispatch
+                .within_tx_key
+                .as_deref()
+                .map(|key| self.tx.canonical_value(key).unwrap_or_default());
+            let search =
+                (!dynamic || within.is_some()).then_some(StaticSearch { within, ..search });
             self.resolve_rule_target(
                 spec,
                 selection,
@@ -1929,6 +1966,49 @@ SecRule REQUEST_HEADERS:x-test "@rx (?-u:\xFF)" "id:66,phase:1,deny,status:406""
                 a.intervention().map(|i| i.status),
                 (count == 33).then_some(406)
             );
+        }
+    }
+
+    #[test]
+    fn empty_target_runs_preserve_counted_skips_markers_and_chains() {
+        let config = r#"SecRuleEngine On
+SecRule REQUEST_METHOD "@streq POST" "id:70,phase:1,pass,skip:2,ctl:ruleRemoveById=71"
+SecRule REQUEST_METHOD "@streq HEAD" "id:80,phase:1,pass,skipAfter:MIDDLE"
+SecRule ARGS "@streq hit" "id:71,phase:1,pass,chain"
+SecRule REQUEST_METHOD "@rx ." "setvar:tx.child=1"
+SecRule ARGS "@streq hit" "id:72,phase:1,pass"
+SecMarker MIDDLE
+SecRule ARGS "@streq hit" "id:73,phase:1,pass"
+SecAction "id:74,phase:1,pass,setvar:tx.visited=1"
+SecRule REQUEST_METHOD "@rx ." "id:75,phase:1,pass,chain,setvar:tx.starter=1"
+SecRule ARGS "@streq hit" "chain"
+SecRule REQUEST_METHOD "@rx ." "setvar:tx.tail=1"
+SecRule &ARGS "@eq 0" "id:76,phase:1,pass"
+SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
+        let fast = make_ruleset(config);
+        let rules = fast.dispatch_for_phase(Phase::RequestHeaders);
+        assert!(rules[2].after_empty_targets >= 6);
+        // TX:unset always resolves to no values, but its mutable collection
+        // keeps the reference evaluator on the ordinary per-rule path.
+        let reference = make_ruleset(&config.replace("SecRule ARGS ", "SecRule ARGS|TX:unset "));
+        for method in ["GET", "HEAD", "POST"] {
+            for uri in ["/", "/?v=hit"] {
+                let run = |rules| {
+                    let mut tx = Transaction::new(rules, 403);
+                    tx.set_record_rule_messages(true);
+                    tx.set_record_setvar_effects(true);
+                    tx.process_uri(uri, method, "HTTP/1.1").unwrap();
+                    tx.process_request_headers().unwrap();
+                    tx
+                };
+                let (a, b) = (run(fast.clone()), run(reference.clone()));
+                assert_eq!(a.matched_rules(), b.matched_rules());
+                assert_eq!(a.matched_data(), b.matched_data());
+                assert_eq!(a.rule_messages(), b.rule_messages());
+                assert_eq!(a.setvar_effects(), b.setvar_effects());
+                assert_eq!(a.tx.all_bytes(), b.tx.all_bytes());
+                assert!(a.matched_rules().iter().any(|id| id == "77"));
+            }
         }
     }
 

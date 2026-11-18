@@ -141,14 +141,14 @@ impl WithinOperator {
         }
     }
 
-    fn matches(&self, needle: &[u8]) -> bool {
-        memchr::memmem::find(&self.haystack, needle).is_some()
+    pub(crate) fn matches(haystack: &[u8], needle: &[u8]) -> bool {
+        memchr::memmem::find(haystack, needle).is_some()
     }
 }
 
 impl Operator for WithinOperator {
     fn execute_bytes(&self, value: &[u8]) -> crate::Result<ByteOperatorResult> {
-        Ok(if self.matches(value) {
+        Ok(if Self::matches(&self.haystack, value) {
             ByteOperatorResult::matched(value.to_vec())
         } else {
             ByteOperatorResult::no_match()
@@ -156,7 +156,7 @@ impl Operator for WithinOperator {
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if self.matches(value.as_bytes()) {
+        if Self::matches(&self.haystack, value.as_bytes()) {
             OperatorResult::matched(value.to_string())
         } else {
             OperatorResult::no_match()

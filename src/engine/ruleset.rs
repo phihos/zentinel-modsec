@@ -122,6 +122,8 @@ pub(super) struct CompiledSetVar {
 #[derive(Default)]
 pub(super) struct RuleDispatch {
     pub targets: super::target_indices::TargetIndices,
+    /// First logical rule for which a miss on this target plan proves nothing.
+    pub after_empty_targets: usize,
     pub selections: Box<[crate::variables::TargetSelection]>,
     /// Immutable numeric predicates match the full input without capture groups.
     pub numeric: Option<crate::operators::NumericComparison>,
@@ -129,6 +131,7 @@ pub(super) struct RuleDispatch {
     pub single_tx_numeric: bool,
     pub numeric_tx_slot: Option<u8>,
     pub dynamic: bool,
+    pub within_tx_key: Option<Box<[u8]>>,
     pub capture: bool,
     pub multi_match: bool,
     /// Start of the suffix containing every control, or the action count.
@@ -167,6 +170,7 @@ impl RuleDispatch {
             let [word, path] = rule.operator.short_token_minimums();
             [
                 word,
+                rule.operator.dotted_token_minimum(),
                 if rule.transformations.preserves_token_width_bounds() {
                     path
                 } else {
@@ -174,7 +178,7 @@ impl RuleDispatch {
                 },
             ]
         } else {
-            [0; 2]
+            [0; 3]
         };
         let mut dispatch = Self {
             targets: super::target_indices::TargetIndices::compile(&rule.variables, minimum),
@@ -191,6 +195,19 @@ impl RuleDispatch {
             controls_from: rule.actions.len(),
             disruptive: rule.actions.len(),
             dynamic,
+            within_tx_key: if dynamic && rule.operator_spec.name == OperatorName::Within {
+                super::split_operator_macro(&rule.operator_spec.argument).and_then(
+                    |(prefix, name, suffix)| {
+                        let (collection, key) = name.split_once('.')?;
+                        (prefix.is_empty()
+                            && suffix.is_empty()
+                            && collection.eq_ignore_ascii_case("tx"))
+                        .then(|| folded_key(key.as_bytes()).into_owned().into_boxed_slice())
+                    },
+                )
+            } else {
+                None
+            },
             ..Self::default()
         };
         dispatch.single_tx_numeric = dispatch.numeric.is_some()
@@ -278,12 +295,12 @@ impl RuleDispatch {
             Self::header_members(rule, &plan.selections).map(|(_, key)| key)
         });
         let keys = Self::frequent_keys(members, 4, super::target_indices::HEADER_SLOTS);
-        if !keys.is_empty() {
-            for (rule, plan) in rules.iter().zip(dispatch) {
-                for (index, key) in Self::header_members(rule, &plan.selections) {
-                    if let Some(slot) = keys.iter().position(|k| k.as_ref() == key) {
-                        plan.targets.header_targets[slot] |= 1 << index;
-                    }
+        for (rule, plan) in rules.iter().zip(dispatch) {
+            for (index, key) in Self::header_members(rule, &plan.selections) {
+                if let Some(slot) = keys.iter().position(|k| k.as_ref() == key) {
+                    plan.targets.header_targets[slot] |= 1 << index;
+                } else {
+                    plan.targets.add_optional_header(index, key);
                 }
             }
         }
@@ -635,6 +652,26 @@ impl CompiledRuleset {
             }
             sources
         });
+        for phase in Phase::ALL {
+            let rules = ruleset.rules.for_phase(phase);
+            let dispatch = &mut ruleset.dispatch[phase.index()];
+            let mut next = rules.len();
+            for index in (0..rules.len()).rev() {
+                if !rules[index].is_chain {
+                    next = index + 1;
+                }
+                dispatch[index].after_empty_targets = match rules.get(next) {
+                    Some(rule)
+                        if !rule.variables.is_empty()
+                            && rule.variables.len() <= super::target_indices::PREFIX
+                            && dispatch[index].targets == dispatch[next].targets =>
+                    {
+                        dispatch[next].after_empty_targets
+                    }
+                    _ => next,
+                };
+            }
+        }
         ruleset.tx_defaults = super::initialization::TxDefaults::compile(
             ruleset.rules_for_phase(Phase::RequestHeaders),
             ruleset.dispatch_for_phase(Phase::RequestHeaders),
