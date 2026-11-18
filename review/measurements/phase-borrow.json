@@ -1,0 +1,201 @@
+{
+  "harness": {
+    "before": {
+      "engine": "f85a24022ca85eec0e1e502623f963e91eca07bc",
+      "build_commit": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+      "benchmark_commit": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+      "bytes": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+      "driver": "8b4ac9606c1021610c9d0ceea65678fef589b52d4aaf9751119f45790c101083",
+      "executable": "9d96455e18740d0a5a1eda89433efc3130f9d10036177a61b6bf1a4d8096932b",
+      "lockfile": "9f674f5419da39788b637dc9480eb2eb11e9ed0057262a5b8f69b3f203f216b8"
+    },
+    "after": {
+      "engine": "97bab54dbfe3a54c2970e14170054bcef3434da8",
+      "build_commit": "b47556660c1e95c91acbd2aaccce3f813c8608db",
+      "benchmark_commit": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+      "bytes": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+      "driver": "8b4ac9606c1021610c9d0ceea65678fef589b52d4aaf9751119f45790c101083",
+      "executable": "e94b3d7bdbb3e91774b50e8897073ff020370d22baa1cc201f3bd2dd63e09bcc",
+      "lockfile": "9f674f5419da39788b637dc9480eb2eb11e9ed0057262a5b8f69b3f203f216b8"
+    }
+  },
+  "cpu": 14,
+  "crs_commit": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "compiled_rules": 698,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "runs": [
+    {
+      "round": 0,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 790.034480685501,
+          "raw_sha256": "939633861c48fba90674b89f7f3f3a7de9ca28aae28cc0c722fd2160bae38a85"
+        },
+        "form": {
+          "mean_us": 890.4662292634462,
+          "raw_sha256": "771c3c81769aa2a19f6e7a4256f76f90bf7be12998f3c1ca3c2abcea743a6639"
+        },
+        "json": {
+          "mean_us": 929.6328378051971,
+          "raw_sha256": "0ffdbed9520e90ca3ffb84e7880d3c7c57ec8d6a1cd3954159cc4578c15ca11b"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 0,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 243.26423633613837,
+          "raw_sha256": "629c714fc743f2a49981ab1b09105972765afc9315fe9974887dbcef568f2969"
+        },
+        "form": {
+          "mean_us": 318.2428826471445,
+          "raw_sha256": "fb4ceacc42d1baeab93718aa6d87140e280d90db4303888546d4d74965d7fe02"
+        },
+        "json": {
+          "mean_us": 354.04083017305237,
+          "raw_sha256": "44b2465b5d5024799ef71362ded715c92382d03d42d1d56ff7c7e75098f4f6bb"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 1,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 246.33588765065173,
+          "raw_sha256": "d9d93cba1769e351d745ecbda6444c66a39ae325c26a8573b0ccc846199663e8"
+        },
+        "form": {
+          "mean_us": 323.0445309975568,
+          "raw_sha256": "5228fed88205ae951f74bec22219bb5cd7f3bfe48777636c51a9dcdbb01869bc"
+        },
+        "json": {
+          "mean_us": 355.52651824308236,
+          "raw_sha256": "76121b2b17a8860aa88275cf2382b3fb76edae44ccf9e7665a98c235ecb4058c"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 1,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 780.411093272026,
+          "raw_sha256": "9c53fde614cf6530f0c6eaa721a842ceb258629c8531266461d10eafd3958f65"
+        },
+        "form": {
+          "mean_us": 936.2733684964176,
+          "raw_sha256": "f4dd8cf6db31820e679eada99fbf84d9ff57ba8911fe1d3b15ba7ce6c9b7aab7"
+        },
+        "json": {
+          "mean_us": 925.0897195466436,
+          "raw_sha256": "6a1b2a82f34bb59b8d5c1af1f239f45994a5965c0090bad80c138a11f88fb8d8"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 2,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 781.7004891244799,
+          "raw_sha256": "8943361c40af67d453dc82a408a8fb8e195d584e1678e1f465be122b74c31d26"
+        },
+        "form": {
+          "mean_us": 881.8513455421916,
+          "raw_sha256": "08ac21e39458eee2ae2ac8ed3cea56f13336b50e392db87731e2cf4d1b88fb00"
+        },
+        "json": {
+          "mean_us": 894.6741734830007,
+          "raw_sha256": "9f7190c3cf9ec74b76625ead058719986c62304d4c6bd3ada4f3f2d557a15c21"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 2,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 243.503459365119,
+          "raw_sha256": "1b268303193ffae2e1f0108014eda1e4ea7256f6ba4cb9867abfc5e1c8a6802e"
+        },
+        "form": {
+          "mean_us": 320.8632528007554,
+          "raw_sha256": "5191037fb27ecf87ddacfd6d4c3f505c0186f805aaf8d3b0e7a44c5aba77b90c"
+        },
+        "json": {
+          "mean_us": 355.06977107309046,
+          "raw_sha256": "352b01fa8e422fc20a199ee8acbffcb4243a93a4fc8e025c005a773a488a01c9"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 3,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 250.62708037909286,
+          "raw_sha256": "40185d5fc67c58fe23d4045b7271192d9b5ded33be3cef275c9ca102a92c6daa"
+        },
+        "form": {
+          "mean_us": 324.3079736948098,
+          "raw_sha256": "a86356f3accf81f2583ae3649ca9c5daa32757bcdcb9efdee13fb9f2daafc500"
+        },
+        "json": {
+          "mean_us": 363.1716813940974,
+          "raw_sha256": "772a3bd75a1ebe6d7914351d4f745e7c8e9194113766c27f8e3058a9810da288"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 3,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 784.7898093419731,
+          "raw_sha256": "e8d10d4556265502f46afcb5a0b5a1f77aee5a58342031d5e717ce55c91637b1"
+        },
+        "form": {
+          "mean_us": 890.6905103714577,
+          "raw_sha256": "7a030671077e97c757fa989dbe81f7841e61e9637617c9351d511c9f1223e4ca"
+        },
+        "json": {
+          "mean_us": 1067.4347931495956,
+          "raw_sha256": "a96947bc54dedb84ffa2335b8b44bb62fc12a897e84a9bda7182026b8cc47cef"
+        }
+      },
+      "exit": 0
+    }
+  ],
+  "summary": {
+    "get": {
+      "before_us": 783.2451492332265,
+      "after_us": 244.91967350788536,
+      "paired_change_pct": -68.64231568271384,
+      "wins": 4
+    },
+    "form": {
+      "before_us": 890.5783698174519,
+      "after_us": 321.95389189915613,
+      "paired_change_pct": -63.93795430908699,
+      "wins": 4
+    },
+    "json": {
+      "before_us": 927.3612786759204,
+      "after_us": 355.2981446580864,
+      "paired_change_pct": -61.742243214889186,
+      "wins": 4
+    }
+  },
+  "samples_archive_sha256": "7e69fe15f4cd34b02f068dde76e86fa15dc1867e1b186921f3ec407a38b49728"
+}

@@ -1,0 +1,199 @@
+{
+  "harness": {
+    "before": {
+      "engine": "f85a24022ca85eec0e1e502623f963e91eca07bc",
+      "benchmark": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+      "bytes": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+      "driver": "8b4ac9606c1021610c9d0ceea65678fef589b52d4aaf9751119f45790c101083",
+      "executable": "9d96455e18740d0a5a1eda89433efc3130f9d10036177a61b6bf1a4d8096932b",
+      "lockfile": "9f674f5419da39788b637dc9480eb2eb11e9ed0057262a5b8f69b3f203f216b8"
+    },
+    "after": {
+      "engine": "9fa45f6061ff305568a63b61714beb70bfef4c8b",
+      "benchmark": "03d93f494d9e03ad53ecbe266a8b60634fbe0103",
+      "bytes": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+      "driver": "8b4ac9606c1021610c9d0ceea65678fef589b52d4aaf9751119f45790c101083",
+      "executable": "50f27a1b69a7a01a420c243ff39528835eaa00df499ebd3c92eb1644d17ee2fb",
+      "lockfile": "8fc034504036a3fa61ab5d7aa6a78b614abeb1da7d876d14ef5a5e23db3b656c"
+    }
+  },
+  "cpu": 14,
+  "crs_commit": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "compiled_rules": 698,
+  "toolchain": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2",
+  "runs": [
+    {
+      "round": 0,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 756.9707677199152,
+          "raw_sha256": "33dd00dc125043577834d7ebfa510799bbe0cba4bf4a76e6ecdd21a2671bd149"
+        },
+        "form": {
+          "mean_us": 892.9331329556411,
+          "raw_sha256": "13cca113c2ff78798b0970e55b4ccfa4c58ebdd4b90305bc22aa0478bd7626d1"
+        },
+        "json": {
+          "mean_us": 898.7205989526998,
+          "raw_sha256": "9dd3a5791ddcfd355d721685af741e0d0a67a37767270a7ad0233dc8ca54c477"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 0,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 72.12413893818997,
+          "raw_sha256": "73aac5ebb16de7de7cb80db90a37a533d97dee5c7d4e36114f0c24edd141c273"
+        },
+        "form": {
+          "mean_us": 88.08256117272532,
+          "raw_sha256": "53fe6dcf0b1d329dfa9d69c5602862ef56c70980057b85a40a8e06d76b5fcdff"
+        },
+        "json": {
+          "mean_us": 107.35946650317112,
+          "raw_sha256": "d1f82f39db0cbab760cbc9c17e5c311f0be9fd6a8078a8867b0f2b0ce4421089"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 1,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 72.6088355345714,
+          "raw_sha256": "9b6ee7241fa21aa11352c1fdc3cbd74599b90993ca7c3aad8a7385299f56d040"
+        },
+        "form": {
+          "mean_us": 88.01409902168315,
+          "raw_sha256": "249be8b187855e6668c0058ff7b57b9af3d7c9b4b6ce058b2c163262aea324a6"
+        },
+        "json": {
+          "mean_us": 111.36262301616902,
+          "raw_sha256": "18edee7daad457b4530e42dff31e19f0ee275f9187216bda16c66172c2ef04e2"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 1,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 814.1693129184856,
+          "raw_sha256": "264daf95ed83317f751d9086fdecb94f53663b4cde895ded5827a0992cd7e6ea"
+        },
+        "form": {
+          "mean_us": 922.4021944995993,
+          "raw_sha256": "31f2b933c05549dfd0b0b730bc61f1a4b381ebf32233a0bfa8a9e56664401a06"
+        },
+        "json": {
+          "mean_us": 938.2497718771639,
+          "raw_sha256": "c7c5dbe073896e1c38a502fa07c44608d08a86a1de7327e841461e1de659eb0c"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 2,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 959.8131960650637,
+          "raw_sha256": "93d76c89fa6aec2cbb886a72736fb2fd77d8b55991ab2ab01805d91b936b625a"
+        },
+        "form": {
+          "mean_us": 1048.124300193437,
+          "raw_sha256": "106a73d782dd9187c47cb40baebe88ee525c1fff38931f9149e9740197fae570"
+        },
+        "json": {
+          "mean_us": 1134.1080251433984,
+          "raw_sha256": "87737721d86cd1a3fa5074cb9edf09ea76c8e58f7ca17f3f37dedd059f77fa53"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 2,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 112.51488521711443,
+          "raw_sha256": "2c23adfc37141a77998f25a6c0b27e70ac190f6433992612fdb1a1e5436a8c8d"
+        },
+        "form": {
+          "mean_us": 120.58029746484127,
+          "raw_sha256": "f0e3f1d17bbd1ca39da5373f0f2a748f6886cb513c289362cf54216041fcf933"
+        },
+        "json": {
+          "mean_us": 119.72770036917339,
+          "raw_sha256": "51d3514ae38d9f715e33e7b0f1b02d8d8bae7e02362d468e5d282f8673b0c656"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 3,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 79.98481357164299,
+          "raw_sha256": "c31e309cdadcbf60d310d174a6cfb6d983b7ac068b6440e150edcc6a4b22e8ec"
+        },
+        "form": {
+          "mean_us": 96.82524617056768,
+          "raw_sha256": "f0070144e3ccc3ba2ab358bcdf2d2b28b79203e7d0334f279ebe3659f383d95f"
+        },
+        "json": {
+          "mean_us": 116.7103070876462,
+          "raw_sha256": "ac9ffe69cca388625d08a88850a0e159e6b214881f95e55fd441f10539b07259"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 3,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 830.1423689154726,
+          "raw_sha256": "bf7de3ce53516570124a58103c9a86e5e20b6f1b6d6853e6f8354e64c8cadb96"
+        },
+        "form": {
+          "mean_us": 943.4392490194142,
+          "raw_sha256": "a8d7ea1f5093739c2a0ee5b5d889d9541a4411e0117ce9bac01014ed27d29ae1"
+        },
+        "json": {
+          "mean_us": 929.7954217768405,
+          "raw_sha256": "ff80b4eebf240a2a83e6c1c538aef7554e7f2f66e7124efe32d7d5f20d1ad905"
+        }
+      },
+      "exit": 0
+    }
+  ],
+  "summary": {
+    "get": {
+      "before_us": 822.1558409169791,
+      "after_us": 76.2968245531072,
+      "paired_change_pct": -90.41846644822917,
+      "wins": 4
+    },
+    "form": {
+      "before_us": 932.9207217595067,
+      "after_us": 92.4539036716465,
+      "paired_change_pct": -89.93629231867303,
+      "wins": 4
+    },
+    "json": {
+      "before_us": 934.0225968270022,
+      "after_us": 114.03646505190761,
+      "paired_change_pct": -88.09250070680108,
+      "wins": 4
+    }
+  },
+  "samples_archive_sha256": "34f39d3b7e1a3699759f59cfa7d26fe8319febfb382d4272022b5f96b18eb13b"
+}

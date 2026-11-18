@@ -1,0 +1,4722 @@
+{
+  "upstream": "zentinelproxy/zentinel-modsec",
+  "upstream_base": "f85a24022ca85eec0e1e502623f963e91eca07bc",
+  "snapshot": "9fa45f6061ff305568a63b61714beb70bfef4c8b",
+  "benchmark": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+  "benchmark_pr": 69,
+  "issue": 68,
+  "tip": "7bb10efa02bad10faf0af3b7f16ff7d6371f731b",
+  "omitted_handoff_commits": [
+    "9865e412b3b9bc6fa261aaafeb76c0387dac52e6",
+    "6a8f8a5bb4d6fdfbf5422dd65cab1c62b05791ae",
+    "5a6021b2c5e65788e3435b2a23fa2b533b08f91a",
+    "cfa97fe3cee808d6c474878e488bdc9bf6a67089",
+    "3ba717e3c87cf555942b5b2c1aa57c0daeca1dca",
+    "841b4ebb19feb31909cefd9aa9b89c7c74444e4c",
+    "a11fb8926f4d0fc665bbbe6f2b5c3f63ebc3d260",
+    "fe6d1eac21f6bbb5ada3a2275558fdb33bc34b98",
+    "1c46c6e8d218ff3c4f347f2a515d492f3523a47c",
+    "3466fed91fce661d83e893795ff17dcd546b8301",
+    "499db2123f0f926d880956faa1660978b6c3bba5",
+    "9fa45f6061ff305568a63b61714beb70bfef4c8b"
+  ],
+  "review_slices": [
+    {
+      "number": 2,
+      "title": "Normalize Windows paths to forward slashes",
+      "branch": "review/002-normalize-windows-paths-to-forward-slashes",
+      "head": "7e67fbc57de7fcfc0022a59a01ac56b153588ea1",
+      "base": "63f0d8836136f2dbedbb48b115f16dfba337bdda",
+      "source": "746f9fa0cf75f493d3e4ba0b1f0c7cc6123cc2e4",
+      "files": [
+        "src/transformations/normalize.rs"
+      ],
+      "add": 17,
+      "delete": 9,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/63f0d8836136f2dbedbb48b115f16dfba337bdda...7e67fbc57de7fcfc0022a59a01ac56b153588ea1",
+      "upstream_pr": "https://github.com/zentinelproxy/zentinel-modsec/pull/70",
+      "notes": [
+        "Independent upstream PR #70. Substitute the merged upstream change when rebasing."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets"
+        ],
+        "exit": 0,
+        "tree": "097191a34dd34eba83dededb58ed48b9b6bd62f4"
+      }
+    },
+    {
+      "number": 3,
+      "title": "Import upstream libinjection C sources and BSD license",
+      "branch": "review/003-import-upstream-libinjection-c-sources-and-bsd-licen",
+      "head": "d29ac35320cc68ee085bfa2b87462347f797a995",
+      "base": "7e67fbc57de7fcfc0022a59a01ac56b153588ea1",
+      "source": "eec9e95933754f46e199542f0b153044c03c8ec6",
+      "files": [
+        "vendor/libinjection/COPYING",
+        "vendor/libinjection/README.md",
+        "vendor/libinjection/libinjection.h",
+        "vendor/libinjection/libinjection_error.h",
+        "vendor/libinjection/libinjection_html5.c",
+        "vendor/libinjection/libinjection_html5.h",
+        "vendor/libinjection/libinjection_sqli.c",
+        "vendor/libinjection/libinjection_sqli.h",
+        "vendor/libinjection/libinjection_sqli_data.h",
+        "vendor/libinjection/libinjection_xss.c",
+        "vendor/libinjection/libinjection_xss.h"
+      ],
+      "add": 14566,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/7e67fbc57de7fcfc0022a59a01ac56b153588ea1...d29ac35320cc68ee085bfa2b87462347f797a995",
+      "upstream_pr": null,
+      "notes": [
+        "Vendor import from libinjection v4.0.2 at 7244a1e3c633ea13b3c89d2f670da25789e152fc. Compare upstream files and BSD license."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets"
+        ],
+        "exit": 0,
+        "tree": "2490401ab8e89bc8b489df07bc820c7eb9b774be"
+      }
+    },
+    {
+      "number": 4,
+      "title": "Expose the optional upstream C detector with byte-length FFI calls",
+      "branch": "review/004-expose-the-optional-upstream-c-detector-with-byte-le",
+      "head": "f3380ee326f839fd01e40bf6c4a6722cb2d6bc85",
+      "base": "d29ac35320cc68ee085bfa2b87462347f797a995",
+      "source": "eec9e95933754f46e199542f0b153044c03c8ec6",
+      "files": [
+        "Cargo.toml",
+        "build.rs",
+        "src/libinjection/ffi.rs",
+        "src/libinjection/mod.rs",
+        "src/operators/detection.rs",
+        "tests/libinjection_ffi.rs"
+      ],
+      "add": 188,
+      "delete": 9,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d29ac35320cc68ee085bfa2b87462347f797a995...f3380ee326f839fd01e40bf6c4a6722cb2d6bc85",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "309435965a892165a580790d4b357642c1ce339b"
+      }
+    },
+    {
+      "number": 5,
+      "title": "Compare Rust and C libinjection costs with standalone examples",
+      "branch": "review/005-compare-rust-and-c-libinjection-costs-with-standalon",
+      "head": "4c2d46d0cc241f6590f02e386d73ff2cd23f80bc",
+      "base": "f3380ee326f839fd01e40bf6c4a6722cb2d6bc85",
+      "source": "eec9e95933754f46e199542f0b153044c03c8ec6",
+      "files": [
+        "Cargo.toml",
+        "README.md",
+        "examples/libinjection_cost.rs",
+        "examples/libinjection_native_cost.c"
+      ],
+      "add": 131,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/f3380ee326f839fd01e40bf6c4a6722cb2d6bc85...4c2d46d0cc241f6590f02e386d73ff2cd23f80bc",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "c14ac3e9e49353d2d112048f57733d478ddf6966"
+      }
+    },
+    {
+      "number": 6,
+      "title": "Fold full-width ASCII in urlDecodeUni",
+      "branch": "review/006-fold-full-width-ascii-in-urldecodeuni",
+      "head": "687706d3ebcc06a8e16f036ac90b44a19dcbc320",
+      "base": "4c2d46d0cc241f6590f02e386d73ff2cd23f80bc",
+      "source": "978a843ec15ef5cb5a47b33c0e90886e6fff22f2",
+      "files": [
+        "src/transformations/decode.rs"
+      ],
+      "add": 34,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/4c2d46d0cc241f6590f02e386d73ff2cd23f80bc...687706d3ebcc06a8e16f036ac90b44a19dcbc320",
+      "upstream_pr": "https://github.com/zentinelproxy/zentinel-modsec/pull/71",
+      "notes": [
+        "Independent upstream PR #71. Substitute the merged upstream change when rebasing."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "dff1f2b56befa6a59fc18a13c5aff1e706ef5d85"
+      }
+    },
+    {
+      "number": 7,
+      "title": "Encode non-ASCII input in utf8toUnicode",
+      "branch": "review/007-encode-non-ascii-input-in-utf8tounicode",
+      "head": "de873df9511587b6dbfb3247161c9980d9dcad46",
+      "base": "687706d3ebcc06a8e16f036ac90b44a19dcbc320",
+      "source": "d8b01fa83e63b6491437e7b1bb7e63d7a59ba18f",
+      "files": [
+        "src/transformations/normalize.rs"
+      ],
+      "add": 25,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/687706d3ebcc06a8e16f036ac90b44a19dcbc320...de873df9511587b6dbfb3247161c9980d9dcad46",
+      "upstream_pr": "https://github.com/zentinelproxy/zentinel-modsec/pull/72",
+      "notes": [
+        "Independent upstream PR #72. Substitute the merged upstream change when rebasing."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "299bbb1e1dd97017fbe7aee557f9b4067aa1a934"
+      }
+    },
+    {
+      "number": 8,
+      "title": "Implement tag-based rule target exclusions",
+      "branch": "review/008-implement-tag-based-rule-target-exclusions",
+      "head": "b46c59bd487eae7aac6a36389963ccbcdb945037",
+      "base": "de873df9511587b6dbfb3247161c9980d9dcad46",
+      "source": "b94417490d6726dd0e9f3dd1389afd8f0aa462ec",
+      "files": [
+        "README.md",
+        "src/engine/control.rs",
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "src/parser/directive.rs",
+        "src/parser/mod.rs",
+        "tests/tag_target_exclusions.rs"
+      ],
+      "add": 434,
+      "delete": 19,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/de873df9511587b6dbfb3247161c9980d9dcad46...b46c59bd487eae7aac6a36389963ccbcdb945037",
+      "upstream_pr": null,
+      "notes": [
+        "Coordinate with upstream #65 on transaction-local tag controls."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "463098b64d932f06446df0712c525738fafbb767"
+      }
+    },
+    {
+      "number": 9,
+      "title": "Share compiled patterns across live rulesets",
+      "branch": "review/009-share-compiled-patterns-across-live-rulesets",
+      "head": "59b689c67086ffc6e093127c326bd176585a986c",
+      "base": "b46c59bd487eae7aac6a36389963ccbcdb945037",
+      "source": "f4524ff377efa872a45a1559ed541ac1e728f765",
+      "files": [
+        "Cargo.toml",
+        "src/operators/pattern.rs",
+        "tests/regex_validation.rs"
+      ],
+      "add": 137,
+      "delete": 63,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b46c59bd487eae7aac6a36389963ccbcdb945037...59b689c67086ffc6e093127c326bd176585a986c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "8efc089d278a9fd24ac33a7a2468a44c58fb781b"
+      }
+    },
+    {
+      "number": 10,
+      "title": "Retain recognized action and directive names in the parsed configuration",
+      "branch": "review/010-retain-recognized-action-and-directive-names-in-the",
+      "head": "ef046606ba68623cec2a6ae274ef547d6c59d694",
+      "base": "59b689c67086ffc6e093127c326bd176585a986c",
+      "source": "2cc70f68cf01f69290eaabbd968a22e38e0ee71e",
+      "files": [
+        "src/actions/mod.rs",
+        "src/parser/action.rs",
+        "src/parser/mod.rs"
+      ],
+      "add": 59,
+      "delete": 14,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/59b689c67086ffc6e093127c326bd176585a986c...ef046606ba68623cec2a6ae274ef547d6c59d694",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "533ccd226a31ea03d07e6effed9f7ab78ae95a5d"
+      }
+    },
+    {
+      "number": 11,
+      "title": "Reject unsupported selector shapes for runtime ID exclusions",
+      "branch": "review/011-reject-unsupported-selector-shapes-for-runtime-id-ex",
+      "head": "98d62e74a7e1d7573a3d692582009da927ee1f7b",
+      "base": "ef046606ba68623cec2a6ae274ef547d6c59d694",
+      "source": "2cc70f68cf01f69290eaabbd968a22e38e0ee71e",
+      "files": [
+        "src/engine/control.rs"
+      ],
+      "add": 14,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/ef046606ba68623cec2a6ae274ef547d6c59d694...98d62e74a7e1d7573a3d692582009da927ee1f7b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b4a2c484e90c0284686704f13893a321c9f40435"
+      }
+    },
+    {
+      "number": 12,
+      "title": "Report unsupported capabilities and affected rule IDs during loading",
+      "branch": "review/012-report-unsupported-capabilities-and-affected-rule-id",
+      "head": "d232af2d5660064f6a1fc91b3df50fe1a7662cd5",
+      "base": "98d62e74a7e1d7573a3d692582009da927ee1f7b",
+      "source": "2cc70f68cf01f69290eaabbd968a22e38e0ee71e",
+      "files": [
+        "Cargo.toml",
+        "src/engine/diagnostics.rs",
+        "src/engine/mod.rs",
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 418,
+      "delete": 62,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/98d62e74a7e1d7573a3d692582009da927ee1f7b...d232af2d5660064f6a1fc91b3df50fe1a7662cd5",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b340c52464f0055a78ae65c824a6a756f5f65f84"
+      }
+    },
+    {
+      "number": 13,
+      "title": "Cover load-time diagnostics for actions, selectors and macros",
+      "branch": "review/013-cover-load-time-diagnostics-for-actions-selectors-an",
+      "head": "c45b51d1159acf7349040d51c93c0f1fd6206e00",
+      "base": "d232af2d5660064f6a1fc91b3df50fe1a7662cd5",
+      "source": "2cc70f68cf01f69290eaabbd968a22e38e0ee71e",
+      "files": [
+        "README.md",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 206,
+      "delete": 11,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d232af2d5660064f6a1fc91b3df50fe1a7662cd5...c45b51d1159acf7349040d51c93c0f1fd6206e00",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "a0b796dfefa9183db7bfcbda1c1c3095e030108c"
+      }
+    },
+    {
+      "number": 14,
+      "title": "Clarify optional C dependency and benchmark control",
+      "branch": "review/014-clarify-optional-c-dependency-and-benchmark-control",
+      "head": "1252e3fdd49725c62b4625b1f2150dfc5a19ef8c",
+      "base": "c45b51d1159acf7349040d51c93c0f1fd6206e00",
+      "source": "1f8c0fee19146e00b9325352e8cc6e0ff5f784dc",
+      "files": [
+        "README.md",
+        "examples/libinjection_native_cost.c",
+        "src/lib.rs"
+      ],
+      "add": 10,
+      "delete": 8,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c45b51d1159acf7349040d51c93c0f1fd6206e00...1252e3fdd49725c62b4625b1f2150dfc5a19ef8c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "386a1ccecd38029b24b659aef09b5bdcc60ea6dc"
+      }
+    },
+    {
+      "number": 15,
+      "title": "Report selector regex program limits at load",
+      "branch": "review/015-report-selector-regex-program-limits-at-load",
+      "head": "17abeee9e2ac7cce9890744af9479908b8140341",
+      "base": "1252e3fdd49725c62b4625b1f2150dfc5a19ef8c",
+      "source": "7f365d1bead8c1e85521d9a6f67307851fc78d98",
+      "files": [
+        "Cargo.toml",
+        "src/engine/diagnostics.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 33,
+      "delete": 5,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/1252e3fdd49725c62b4625b1f2150dfc5a19ef8c...17abeee9e2ac7cce9890744af9479908b8140341",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "c51648c5514d0ca96e0068496380950ba7b21a5d"
+      }
+    },
+    {
+      "number": 16,
+      "title": "Borrow immutable phase rules instead of copying them per request",
+      "branch": "review/016-borrow-immutable-phase-rules-instead-of-copying-them",
+      "head": "2e77a42eeb129bb861e03d78f2f68a8d7eb94f7d",
+      "base": "17abeee9e2ac7cce9890744af9479908b8140341",
+      "source": "8be9dd0cf9e409d620fb14d0b1eab5cea9a580d7",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 97,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/17abeee9e2ac7cce9890744af9479908b8140341...2e77a42eeb129bb861e03d78f2f68a8d7eb94f7d",
+      "upstream_pr": "https://github.com/zentinelproxy/zentinel-modsec/pull/75",
+      "notes": [
+        "Independent upstream PR #75. Substitute the merged upstream change when rebasing."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "1242f6f481180c77e202da6125fa61fea90a1381"
+      }
+    },
+    {
+      "number": 17,
+      "title": "Decode URL plus and percent escapes once",
+      "branch": "review/017-decode-url-plus-and-percent-escapes-once",
+      "head": "79d2b6cf1c1898b4732f7422d5ee54e23e36f77c",
+      "base": "2e77a42eeb129bb861e03d78f2f68a8d7eb94f7d",
+      "source": "869b30302d66d85453aa81579eb7ff89b30b71b3",
+      "files": [
+        "src/transformations/decode.rs",
+        "tests/url_decode_uni.rs"
+      ],
+      "add": 86,
+      "delete": 39,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2e77a42eeb129bb861e03d78f2f68a8d7eb94f7d...79d2b6cf1c1898b4732f7422d5ee54e23e36f77c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d0e25dc47e66da1f6595aece0944f2772ba610b4"
+      }
+    },
+    {
+      "number": 18,
+      "title": "Expose lossless byte input to injection backends",
+      "branch": "review/018-expose-lossless-byte-input-to-injection-backends",
+      "head": "9f428f7df6ea6fc7d39198402fc2a7710c4c9998",
+      "base": "79d2b6cf1c1898b4732f7422d5ee54e23e36f77c",
+      "source": "72a18e060df7f1e6381993b23df840376ca75ea7",
+      "files": [
+        "src/error.rs",
+        "src/libinjection/ffi.rs",
+        "src/libinjection/mod.rs",
+        "tests/libinjection_bytes.rs"
+      ],
+      "add": 94,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/79d2b6cf1c1898b4732f7422d5ee54e23e36f77c...9f428f7df6ea6fc7d39198402fc2a7710c4c9998",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "cf774d682688d6882b1af604b955daa87b7c30de"
+      }
+    },
+    {
+      "number": 19,
+      "title": "Expose XML values independently of HTTP arguments",
+      "branch": "review/019-expose-xml-values-independently-of-http-arguments",
+      "head": "df3c62d75e32390cbb00588db9ce26968cc9bc41",
+      "base": "9f428f7df6ea6fc7d39198402fc2a7710c4c9998",
+      "source": "18638ee1b9ae8717fb420dcc9d398add7b6cadfa",
+      "files": [
+        "src/variables/request.rs",
+        "src/variables/resolver.rs",
+        "tests/form_decoding.rs",
+        "tests/xml_body_processor.rs",
+        "tests/xml_namespace_declarations.rs",
+        "tests/xml_parity.rs",
+        "tests/xml_targets.rs"
+      ],
+      "add": 203,
+      "delete": 131,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/9f428f7df6ea6fc7d39198402fc2a7710c4c9998...df3c62d75e32390cbb00588db9ce26968cc9bc41",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "a8604e7f5fd6343b317b813946454e6e8f67c64e"
+      }
+    },
+    {
+      "number": 20,
+      "title": "Fold TX selector literals without rewriting regex syntax",
+      "branch": "review/020-fold-tx-selector-literals-without-rewriting-regex-sy",
+      "head": "c9952f7f6157e54a92bdaeef94265312d345a6cf",
+      "base": "df3c62d75e32390cbb00588db9ce26968cc9bc41",
+      "source": "a9ee01e6a4af50d8e75166426d9cb5ac603b7cea",
+      "files": [
+        "src/engine/diagnostics.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "src/variables/tx.rs",
+        "tests/tx_regex_selectors.rs"
+      ],
+      "add": 83,
+      "delete": 12,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/df3c62d75e32390cbb00588db9ce26968cc9bc41...c9952f7f6157e54a92bdaeef94265312d345a6cf",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "304892f7e63a8ccf5f8386863b2f70b9c7464bb2"
+      }
+    },
+    {
+      "number": 21,
+      "title": "Accept balanced quoted numeric rule IDs",
+      "branch": "review/021-accept-balanced-quoted-numeric-rule-ids",
+      "head": "7aafd8320be56f7637493ea2eaa891c456551881",
+      "base": "c9952f7f6157e54a92bdaeef94265312d345a6cf",
+      "source": "db87322f1be2e09e8b88c8dc991911458ee31d44",
+      "files": [
+        "src/parser/action.rs",
+        "src/variables/mod.rs",
+        "tests/quoted_rule_ids.rs"
+      ],
+      "add": 46,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c9952f7f6157e54a92bdaeef94265312d345a6cf...7aafd8320be56f7637493ea2eaa891c456551881",
+      "upstream_pr": "https://github.com/zentinelproxy/zentinel-modsec/pull/73",
+      "notes": [
+        "Independent upstream PR #73. Substitute the merged upstream change when rebasing."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "fe9cacf36cc4066c9cc5ce462c5d4fbaa86b7d62"
+      }
+    },
+    {
+      "number": 22,
+      "title": "Expose decoded request filenames while preserving raw URI",
+      "branch": "review/022-expose-decoded-request-filenames-while-preserving-ra",
+      "head": "39bb79ab021903b73782b6b1c879683b2ad70b57",
+      "base": "7aafd8320be56f7637493ea2eaa891c456551881",
+      "source": "23dfa8ac102a14e5f2e578c80a7fb1d573bf3d5d",
+      "files": [
+        "src/variables/request.rs",
+        "tests/request_filename_decoding.rs"
+      ],
+      "add": 95,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/7aafd8320be56f7637493ea2eaa891c456551881...39bb79ab021903b73782b6b1c879683b2ad70b57",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "1cd31a18f1f1f4dfe794a9173e83782005eb4b6c"
+      }
+    },
+    {
+      "number": 23,
+      "title": "Retain raw collection bytes without key collisions",
+      "branch": "review/023-retain-raw-collection-bytes-without-key-collisions",
+      "head": "adb53e20d25620b2402427d7841c2d569957ac79",
+      "base": "39bb79ab021903b73782b6b1c879683b2ad70b57",
+      "source": "e1e831d250acef56faf8f50f5aeb3a992ec1b3e3",
+      "files": [
+        "src/variables/collection.rs",
+        "src/variables/mod.rs",
+        "src/variables/value.rs"
+      ],
+      "add": 246,
+      "delete": 13,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/39bb79ab021903b73782b6b1c879683b2ad70b57...adb53e20d25620b2402427d7841c2d569957ac79",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "2a8d7f152aa531340d33c5169e4066932197b9ed"
+      }
+    },
+    {
+      "number": 24,
+      "title": "Add byte operator results and native byte predicates",
+      "branch": "review/024-add-byte-operator-results-and-native-byte-predicates",
+      "head": "48143a6cb8ceb1cbc37aa7ae3039221e51bc0a86",
+      "base": "adb53e20d25620b2402427d7841c2d569957ac79",
+      "source": "e95e80f1bf6b34b8321419272eb1171023469cb4",
+      "files": [
+        "src/operators/comparison.rs",
+        "src/operators/detection.rs",
+        "src/operators/mod.rs",
+        "src/operators/network.rs",
+        "src/operators/traits.rs",
+        "src/operators/validation.rs",
+        "tests/byte_operators.rs"
+      ],
+      "add": 305,
+      "delete": 5,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/adb53e20d25620b2402427d7841c2d569957ac79...48143a6cb8ceb1cbc37aa7ae3039221e51bc0a86",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "ea6153644f04185f875f75d434a27af27ee6ff5a"
+      }
+    },
+    {
+      "number": 25,
+      "title": "Add byte-oriented transformation and pipeline entry points",
+      "branch": "review/025-add-byte-oriented-transformation-and-pipeline-entry",
+      "head": "65b174d456a70dc5f45e3deead03e15f5458c118",
+      "base": "48143a6cb8ceb1cbc37aa7ae3039221e51bc0a86",
+      "source": "f961d018c683730214c5a80465a04843664fc2af",
+      "files": [
+        "src/transformations/mod.rs",
+        "src/transformations/pipeline.rs",
+        "tests/byte_transformations.rs"
+      ],
+      "add": 47,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/48143a6cb8ceb1cbc37aa7ae3039221e51bc0a86...65b174d456a70dc5f45e3deead03e15f5458c118",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "7083ec7b3faa44c29a5cf8e1be73f0409a5e7011"
+      }
+    },
+    {
+      "number": 26,
+      "title": "Decode and encode original bytes in builtin transformations",
+      "branch": "review/026-decode-and-encode-original-bytes-in-builtin-transfor",
+      "head": "fd05efe3cce50b4345124533e88b987dd063dddc",
+      "base": "65b174d456a70dc5f45e3deead03e15f5458c118",
+      "source": "f961d018c683730214c5a80465a04843664fc2af",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/decode.rs",
+        "src/transformations/encode.rs",
+        "src/transformations/mod.rs",
+        "tests/byte_transformations.rs"
+      ],
+      "add": 345,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/65b174d456a70dc5f45e3deead03e15f5458c118...fd05efe3cce50b4345124533e88b987dd063dddc",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "8b855eac07fa56d6be311565f480fbf836f23d81"
+      }
+    },
+    {
+      "number": 27,
+      "title": "Normalize opaque transformation inputs without replacing bytes",
+      "branch": "review/027-normalize-opaque-transformation-inputs-without-repla",
+      "head": "98f058b124000991bb141ecc78eaf0969ab82149",
+      "base": "fd05efe3cce50b4345124533e88b987dd063dddc",
+      "source": "f961d018c683730214c5a80465a04843664fc2af",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/normalize.rs",
+        "tests/byte_transformations.rs"
+      ],
+      "add": 273,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/fd05efe3cce50b4345124533e88b987dd063dddc...98f058b124000991bb141ecc78eaf0969ab82149",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "ee5f5ba2a5cf1049137c72331bd227304a478711"
+      }
+    },
+    {
+      "number": 28,
+      "title": "Evaluate multiMatch before and between changed transformations",
+      "branch": "review/028-evaluate-multimatch-before-and-between-changed-trans",
+      "head": "e0e2fcf310a65c138e6ab4af15b30c5583a4ef38",
+      "base": "98f058b124000991bb141ecc78eaf0969ab82149",
+      "source": "abf2d64c760c04a673002ff148209f33c770f61a",
+      "files": [
+        "src/actions/mod.rs",
+        "src/engine/diagnostics.rs",
+        "src/engine/transaction.rs",
+        "src/transformations/pipeline.rs",
+        "tests/fixtures/crs-multimatch.conf",
+        "tests/multi_match.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 184,
+      "delete": 6,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/98f058b124000991bb141ecc78eaf0969ab82149...e0e2fcf310a65c138e6ab4af15b30c5583a4ef38",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "4fb9924f978545d47c36c7ebf0ac49861e6283ff"
+      }
+    },
+    {
+      "number": 29,
+      "title": "Expose actual response status and protocol to response rules",
+      "branch": "review/029-expose-actual-response-status-and-protocol-to-respon",
+      "head": "1df5fd3b5506a21a8e045e98c0ccd3dcfd3b6320",
+      "base": "e0e2fcf310a65c138e6ab4af15b30c5583a4ef38",
+      "source": "8255b2ef6b78f3b58c942302247bdf0080938a8f",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/parser/variable.rs",
+        "src/variables/resolver.rs",
+        "tests/response_metadata.rs"
+      ],
+      "add": 71,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e0e2fcf310a65c138e6ab4af15b30c5583a4ef38...1df5fd3b5506a21a8e045e98c0ccd3dcfd3b6320",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "f3abe256c33966f5183b616d7e10f5e0f324783b"
+      }
+    },
+    {
+      "number": 30,
+      "title": "Select body processors for forced raw inspection",
+      "branch": "review/030-select-body-processors-for-forced-raw-inspection",
+      "head": "963f346f48f664cbbcb0d5a30bb4f7b0483da405",
+      "base": "1df5fd3b5506a21a8e045e98c0ccd3dcfd3b6320",
+      "source": "3f8b4615976ac5b2f24f679960df12d11ae0bab7",
+      "files": [
+        "src/engine/control.rs",
+        "src/engine/transaction.rs",
+        "src/variables/resolver.rs",
+        "tests/body_processor_selection.rs"
+      ],
+      "add": 165,
+      "delete": 18,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/1df5fd3b5506a21a8e045e98c0ccd3dcfd3b6320...963f346f48f664cbbcb0d5a30bb4f7b0483da405",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "33ccf3594f9297755d170be1faa6e00657fa9b38"
+      }
+    },
+    {
+      "number": 31,
+      "title": "Expand argument collection macros in operators and setvar",
+      "branch": "review/031-expand-argument-collection-macros-in-operators-and-s",
+      "head": "ebaa0260a543711fc2ab7e9b462eef23ed105be4",
+      "base": "963f346f48f664cbbcb0d5a30bb4f7b0483da405",
+      "source": "cd9d7b3b5de5be745dba675700816aac66ce7f4e",
+      "files": [
+        "src/engine/diagnostics.rs",
+        "src/engine/transaction.rs",
+        "tests/args_macros.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 88,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/963f346f48f664cbbcb0d5a30bb4f7b0483da405...ebaa0260a543711fc2ab7e9b462eef23ed105be4",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "73cfd2ca444aa8cc890ee58f718777c1acd3693b"
+      }
+    },
+    {
+      "number": 32,
+      "title": "Implement ANSI C escape sequence decoding",
+      "branch": "review/032-implement-ansi-c-escape-sequence-decoding",
+      "head": "63d6d23dfda3d87b42102bfc79763d9dfc1b2837",
+      "base": "ebaa0260a543711fc2ab7e9b462eef23ed105be4",
+      "source": "69f4c01f32db27f98e0b07c154c58663b2890616",
+      "files": [
+        "src/transformations/normalize.rs",
+        "tests/escape_seq_decode.rs",
+        "tests/fixtures/crs-escape-seq.conf"
+      ],
+      "add": 99,
+      "delete": 62,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/ebaa0260a543711fc2ab7e9b462eef23ed105be4...63d6d23dfda3d87b42102bfc79763d9dfc1b2837",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "60e0d21fe38253b64ba7fa15bb135515288444ae"
+      }
+    },
+    {
+      "number": 33,
+      "title": "Match binary signatures and retain byte captures",
+      "branch": "review/033-match-binary-signatures-and-retain-byte-captures",
+      "head": "5e3bbd34a9572cfd9585408591a12d32e03fcef5",
+      "base": "63d6d23dfda3d87b42102bfc79763d9dfc1b2837",
+      "source": "6dd8fa6b3e379ac627ca3482cd33c80a209b96dc",
+      "files": [
+        "src/operators/pattern.rs",
+        "tests/binary_regex.rs"
+      ],
+      "add": 114,
+      "delete": 26,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/63d6d23dfda3d87b42102bfc79763d9dfc1b2837...5e3bbd34a9572cfd9585408591a12d32e03fcef5",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b98b7a07a6c056ded27e0160762f6a88eb4845b8"
+      }
+    },
+    {
+      "number": 34,
+      "title": "Import XML entity names and their Go license",
+      "branch": "review/034-import-xml-entity-names-and-their-go-license",
+      "head": "3be3e718e1fc6a7acc5f479af5a376d8d2cb4316",
+      "base": "5e3bbd34a9572cfd9585408591a12d32e03fcef5",
+      "source": "432969abdf413c3b2592be55cb8c1d2588d8485a",
+      "files": [
+        "licenses/Go-xml-BSD-3-Clause.txt",
+        "src/variables/xml_entities.rs"
+      ],
+      "add": 289,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/5e3bbd34a9572cfd9585408591a12d32e03fcef5...3be3e718e1fc6a7acc5f479af5a376d8d2cb4316",
+      "upstream_pr": null,
+      "notes": [
+        "Go XML entity reference table with the upstream BSD license."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "dcbab9f34a9a2a41cb1306658d1861cd30924983"
+      }
+    },
+    {
+      "number": 35,
+      "title": "Read XML attributes and text incrementally",
+      "branch": "review/035-read-xml-attributes-and-text-incrementally",
+      "head": "e7640f2224017cd027293defbbdcee753c0ed3a1",
+      "base": "3be3e718e1fc6a7acc5f479af5a376d8d2cb4316",
+      "source": "432969abdf413c3b2592be55cb8c1d2588d8485a",
+      "files": [
+        "src/variables/mod.rs",
+        "src/variables/request.rs",
+        "src/variables/xml.rs"
+      ],
+      "add": 308,
+      "delete": 185,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/3be3e718e1fc6a7acc5f479af5a376d8d2cb4316...e7640f2224017cd027293defbbdcee753c0ed3a1",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "0847f4ee25d098f493268462b0e26fffa62cb515"
+      }
+    },
+    {
+      "number": 36,
+      "title": "Check streaming XML targets and partial parse errors",
+      "branch": "review/036-check-streaming-xml-targets-and-partial-parse-errors",
+      "head": "128d2c5285817196c1a05b78c43547d1e8e9fdfc",
+      "base": "e7640f2224017cd027293defbbdcee753c0ed3a1",
+      "source": "432969abdf413c3b2592be55cb8c1d2588d8485a",
+      "files": [
+        "README.md",
+        "src/parser/variable.rs",
+        "tests/xml_body_processor.rs",
+        "tests/xml_stream_parity.rs"
+      ],
+      "add": 190,
+      "delete": 18,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e7640f2224017cd027293defbbdcee753c0ed3a1...128d2c5285817196c1a05b78c43547d1e8e9fdfc",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d1f2e360c3b34962584def9e0731e51198ea9fad"
+      }
+    },
+    {
+      "number": 37,
+      "title": "Publish explicit body processor selection before body processing",
+      "branch": "review/037-publish-explicit-body-processor-selection-before-bod",
+      "head": "d31955b8b4d422f1fa74858ea29236ccecd6b4ae",
+      "base": "128d2c5285817196c1a05b78c43547d1e8e9fdfc",
+      "source": "71ef4bad43852452d779c3e738f36383717cbb06",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/body_processor_selection.rs"
+      ],
+      "add": 24,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/128d2c5285817196c1a05b78c43547d1e8e9fdfc...d31955b8b4d422f1fa74858ea29236ccecd6b4ae",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "109c82ea66b4be5f4a15a871d130d64e8c496f8a"
+      }
+    },
+    {
+      "number": 38,
+      "title": "Compile dynamic comparison arguments from original bytes",
+      "branch": "review/038-compile-dynamic-comparison-arguments-from-original-b",
+      "head": "9b2166cea04ad6b6271b4c616b705034c4d54d88",
+      "base": "d31955b8b4d422f1fa74858ea29236ccecd6b4ae",
+      "source": "dff9b360907fe736f78b1bc570465d3e1775ddf2",
+      "files": [
+        "src/operators/byte_argument.rs",
+        "src/operators/mod.rs"
+      ],
+      "add": 97,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d31955b8b4d422f1fa74858ea29236ccecd6b4ae...9b2166cea04ad6b6271b4c616b705034c4d54d88",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "14d4981799326f928d42eff5fdaa5191b34d59d2"
+      }
+    },
+    {
+      "number": 39,
+      "title": "Visit byte transformation stages in pipeline order",
+      "branch": "review/039-visit-byte-transformation-stages-in-pipeline-order",
+      "head": "25295ae4be741ea86b50cbc2b0bc9a35782d3a8a",
+      "base": "9b2166cea04ad6b6271b4c616b705034c4d54d88",
+      "source": "dff9b360907fe736f78b1bc570465d3e1775ddf2",
+      "files": [
+        "src/transformations/pipeline.rs"
+      ],
+      "add": 18,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/9b2166cea04ad6b6271b4c616b705034c4d54d88...25295ae4be741ea86b50cbc2b0bc9a35782d3a8a",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "239d06f1c124a01c39ad37a53e9700e1156add75"
+      }
+    },
+    {
+      "number": 40,
+      "title": "Keep raw request components and TX keys for byte evaluation",
+      "branch": "review/040-keep-raw-request-components-and-tx-keys-for-byte-eva",
+      "head": "5b412f465d8c91431dd0e92ca38a3b79d71b3486",
+      "base": "25295ae4be741ea86b50cbc2b0bc9a35782d3a8a",
+      "source": "dff9b360907fe736f78b1bc570465d3e1775ddf2",
+      "files": [
+        "src/variables/request.rs",
+        "src/variables/tx.rs"
+      ],
+      "add": 182,
+      "delete": 64,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/25295ae4be741ea86b50cbc2b0bc9a35782d3a8a...5b412f465d8c91431dd0e92ca38a3b79d71b3486",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e4ebc51469617f350418f3faa637c63161399292"
+      }
+    },
+    {
+      "number": 41,
+      "title": "Resolve byte-valued variables and target exclusions",
+      "branch": "review/041-resolve-byte-valued-variables-and-target-exclusions",
+      "head": "1bace3c529e21a33b88db02b796ea2523161937b",
+      "base": "5b412f465d8c91431dd0e92ca38a3b79d71b3486",
+      "source": "dff9b360907fe736f78b1bc570465d3e1775ddf2",
+      "files": [
+        "src/engine/control.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs"
+      ],
+      "add": 329,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/5b412f465d8c91431dd0e92ca38a3b79d71b3486...1bace3c529e21a33b88db02b796ea2523161937b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "bb32f7043c66b2c1f0a2d9d7b499392d34847092"
+      }
+    },
+    {
+      "number": 42,
+      "title": "Preserve original bytes through variables captures and macros",
+      "branch": "review/042-preserve-original-bytes-through-variables-captures-a",
+      "head": "d6ef700c05c4620e05173701b77d8661a647eb7b",
+      "base": "1bace3c529e21a33b88db02b796ea2523161937b",
+      "source": "dff9b360907fe736f78b1bc570465d3e1775ddf2",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/byte_engine.rs"
+      ],
+      "add": 318,
+      "delete": 175,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/1bace3c529e21a33b88db02b796ea2523161937b...d6ef700c05c4620e05173701b77d8661a647eb7b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5d60aabd8f3cc3fc896209d622fe0f2b5d6648c8"
+      }
+    },
+    {
+      "number": 43,
+      "title": "Preserve TX folding in byte target exclusions",
+      "branch": "review/043-preserve-tx-folding-in-byte-target-exclusions",
+      "head": "50d69779ebba50a0540e7e207acb6abca6900fff",
+      "base": "d6ef700c05c4620e05173701b77d8661a647eb7b",
+      "source": "9296d212d8d13e6987dc5dc7485073c73a946f6e",
+      "files": [
+        "src/variables/resolver_bytes.rs"
+      ],
+      "add": 9,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d6ef700c05c4620e05173701b77d8661a647eb7b...50d69779ebba50a0540e7e207acb6abca6900fff",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "cbf9860630a5818ebf4f29d5489e812dfb4800a2"
+      }
+    },
+    {
+      "number": 44,
+      "title": "Preserve binary filenames in absolute request targets",
+      "branch": "review/044-preserve-binary-filenames-in-absolute-request-target",
+      "head": "dda0ced0815f1371871b8271fc2c23c267936dbf",
+      "base": "50d69779ebba50a0540e7e207acb6abca6900fff",
+      "source": "31a3488ea57b04befb8291941c7cd3116d86e2ea",
+      "files": [
+        "src/variables/request.rs",
+        "tests/byte_engine.rs"
+      ],
+      "add": 52,
+      "delete": 38,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/50d69779ebba50a0540e7e207acb6abca6900fff...dda0ced0815f1371871b8271fc2c23c267936dbf",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "70d79f775f1e80459e5cc991911c652a6739abf8"
+      }
+    },
+    {
+      "number": 45,
+      "title": "Pin ModSecurity match modes and CRS newline cases",
+      "branch": "review/045-pin-modsecurity-match-modes-and-crs-newline-cases",
+      "head": "f7108c31a986868de38ffc0d269c21938099cf6b",
+      "base": "dda0ced0815f1371871b8271fc2c23c267936dbf",
+      "source": "6ff6e46b7d3ef96b13920a71370782c5f25dc2fa",
+      "files": [
+        "tests/fixtures/crs-regex-defaults.conf",
+        "tests/regex_match_modes.rs"
+      ],
+      "add": 89,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/dda0ced0815f1371871b8271fc2c23c267936dbf...f7108c31a986868de38ffc0d269c21938099cf6b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e700ee76da9ea588d61db00c746269b562766a69"
+      }
+    },
+    {
+      "number": 46,
+      "title": "Expose match-time message and logdata byte snapshots",
+      "branch": "review/046-expose-match-time-message-and-logdata-byte-snapshots",
+      "head": "04b7b6b91f5c1ddd00cd73ed04f27f627848fa60",
+      "base": "f7108c31a986868de38ffc0d269c21938099cf6b",
+      "source": "d0cc1b58b042c2f842dd630c5d0c7a460adf434a",
+      "files": [
+        "src/engine/mod.rs",
+        "src/engine/transaction.rs",
+        "tests/body_processor_selection.rs",
+        "tests/rule_messages.rs"
+      ],
+      "add": 139,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/f7108c31a986868de38ffc0d269c21938099cf6b...04b7b6b91f5c1ddd00cd73ed04f27f627848fa60",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "892ebcf27d5343f44a02b8d24ece421e5f4265a7"
+      }
+    },
+    {
+      "number": 47,
+      "title": "Preserve braced byte escapes in binary patterns",
+      "branch": "review/047-preserve-braced-byte-escapes-in-binary-patterns",
+      "head": "dd54ef16cb5ac3f2933b8cb1ba3f7e5514d61f58",
+      "base": "04b7b6b91f5c1ddd00cd73ed04f27f627848fa60",
+      "source": "a5ceb3a25c837d515eae5c11dc4f751bb4b4436d",
+      "files": [
+        "src/operators/pattern.rs",
+        "tests/binary_crs_patterns.rs",
+        "tests/fixtures/crs-binary-braced-escapes.conf"
+      ],
+      "add": 165,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/04b7b6b91f5c1ddd00cd73ed04f27f627848fa60...dd54ef16cb5ac3f2933b8cb1ba3f7e5514d61f58",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5faa03a869e670fecf5a08f567fe1aa80c806c03"
+      }
+    },
+    {
+      "number": 48,
+      "title": "Snapshot primary message before later matches overwrite captures",
+      "branch": "review/048-snapshot-primary-message-before-later-matches-overwr",
+      "head": "d24443612a10ba8fc85d94c4f632c8e5d6b3f31b",
+      "base": "dd54ef16cb5ac3f2933b8cb1ba3f7e5514d61f58",
+      "source": "205b4a719fd4997bee319fe5f7be02585dea00a6",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/rule_messages.rs"
+      ],
+      "add": 58,
+      "delete": 16,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/dd54ef16cb5ac3f2933b8cb1ba3f7e5514d61f58...d24443612a10ba8fc85d94c4f632c8e5d6b3f31b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "eeade4ae3e6735ecd3c771a4b6a0ffd0123cfa69"
+      }
+    },
+    {
+      "number": 49,
+      "title": "Retain borrowed subviews after owned stages",
+      "branch": "review/049-retain-borrowed-subviews-after-owned-stages",
+      "head": "5655b3e97fa58b404ae44f8b08800476ad8273e0",
+      "base": "d24443612a10ba8fc85d94c4f632c8e5d6b3f31b",
+      "source": "6300fe3ab2e8d7f08c8170e639f6eed663427bcb",
+      "files": [
+        "src/transformations/pipeline.rs",
+        "tests/byte_pipeline_borrows.rs"
+      ],
+      "add": 41,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d24443612a10ba8fc85d94c4f632c8e5d6b3f31b...5655b3e97fa58b404ae44f8b08800476ad8273e0",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "4122767b3bb48d2326512d54b9e1dca7870971c3"
+      }
+    },
+    {
+      "number": 50,
+      "title": "Retain portions for binary macro comparisons",
+      "branch": "review/050-retain-portions-for-binary-macro-comparisons",
+      "head": "8d44005826aeeaf5863025a162287f6b76c63193",
+      "base": "5655b3e97fa58b404ae44f8b08800476ad8273e0",
+      "source": "65e9a2cda77699498b7a71782c13e1da53feccba",
+      "files": [
+        "src/operators/byte_argument.rs",
+        "tests/byte_dynamic_portions.rs"
+      ],
+      "add": 43,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/5655b3e97fa58b404ae44f8b08800476ad8273e0...8d44005826aeeaf5863025a162287f6b76c63193",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "0f2a32928cbd69428c5be3b4241d7efbdd95a690"
+      }
+    },
+    {
+      "number": 51,
+      "title": "Retain partial and forgiving base64 bytes",
+      "branch": "review/051-retain-partial-and-forgiving-base64-bytes",
+      "head": "4e95c8ca3c046e0099c9fe61c6f56834745366a8",
+      "base": "8d44005826aeeaf5863025a162287f6b76c63193",
+      "source": "806c2798ad61a13cf960aadac7074e31c26e6a20",
+      "files": [
+        "src/transformations/bytes.rs",
+        "tests/byte_base64_reference.rs"
+      ],
+      "add": 79,
+      "delete": 11,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/8d44005826aeeaf5863025a162287f6b76c63193...4e95c8ca3c046e0099c9fe61c6f56834745366a8",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "417c996a9e2f2f3609db4455e2ee68c3c7fc6a1a"
+      }
+    },
+    {
+      "number": 52,
+      "title": "Preserve CSS and JavaScript escape semantics",
+      "branch": "review/052-preserve-css-and-javascript-escape-semantics",
+      "head": "66afe545e3b091a3677d101763f020bdadfde04b",
+      "base": "4e95c8ca3c046e0099c9fe61c6f56834745366a8",
+      "source": "f81aeedcd4a30065ddba22534be736d5e89beee8",
+      "files": [
+        "src/transformations/bytes.rs",
+        "tests/byte_escape_reference.rs",
+        "tests/byte_transformations.rs"
+      ],
+      "add": 119,
+      "delete": 23,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/4e95c8ca3c046e0099c9fe61c6f56834745366a8...66afe545e3b091a3677d101763f020bdadfde04b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "f5088c137d119b07033fc05f0de2821e3c19d611"
+      }
+    },
+    {
+      "number": 53,
+      "title": "Record the reference IIS Unicode best-fit mappings",
+      "branch": "review/053-record-the-reference-iis-unicode-best-fit-mappings",
+      "head": "38364d7d40b84f2b82ea2f9887b5830d7d1efc3d",
+      "base": "66afe545e3b091a3677d101763f020bdadfde04b",
+      "source": "b55ccea1225665ffd5fc2acf69cdde0113b99861",
+      "files": [
+        "tests/fixtures/coraza-3.8.1-unicode-bestfit-20127.tsv"
+      ],
+      "add": 372,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/66afe545e3b091a3677d101763f020bdadfde04b...38364d7d40b84f2b82ea2f9887b5830d7d1efc3d",
+      "upstream_pr": null,
+      "notes": [
+        "Reference data from the Coraza v3.8.1 IIS code page 20127 map."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b81041c7462c8b75a8cf5bbf56d332d2c6571b9c"
+      }
+    },
+    {
+      "number": 54,
+      "title": "Apply the complete IIS Unicode best-fit map",
+      "branch": "review/054-apply-the-complete-iis-unicode-best-fit-map",
+      "head": "efcddf93b78037a845f85247c13a550ef4cba99c",
+      "base": "38364d7d40b84f2b82ea2f9887b5830d7d1efc3d",
+      "source": "b55ccea1225665ffd5fc2acf69cdde0113b99861",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/mod.rs",
+        "src/transformations/unicode_bestfit.rs",
+        "tests/byte_unicode_reference.rs"
+      ],
+      "add": 446,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/38364d7d40b84f2b82ea2f9887b5830d7d1efc3d...efcddf93b78037a845f85247c13a550ef4cba99c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "2a64ef56cc990efee03bee0ccdafb2ed64ba7ad9"
+      }
+    },
+    {
+      "number": 55,
+      "title": "Parse MIME parameters, multipart boundaries and part headers",
+      "branch": "review/055-parse-mime-parameters-multipart-boundaries-and-part",
+      "head": "6a603a3651f9f0b4243c463e4e89adbc68ec86fe",
+      "base": "efcddf93b78037a845f85247c13a550ef4cba99c",
+      "source": "5352162c7a127a0a37050f44ce65201950816ce2",
+      "files": [
+        "src/variables/multipart.rs"
+      ],
+      "add": 310,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/efcddf93b78037a845f85247c13a550ef4cba99c...6a603a3651f9f0b4243c463e4e89adbc68ec86fe",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice.",
+        "Internal parser preparation. The following slice connects the part reader."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "a8caac2c803dbb78a200ea51c4394018c3c2d1a6"
+      }
+    },
+    {
+      "number": 56,
+      "title": "Read multipart part payloads and alternative filenames",
+      "branch": "review/056-read-multipart-part-payloads-and-alternative-filenam",
+      "head": "e7350352c341cbd30e224cfeee2e028cf5158324",
+      "base": "6a603a3651f9f0b4243c463e4e89adbc68ec86fe",
+      "source": "5352162c7a127a0a37050f44ce65201950816ce2",
+      "files": [
+        "Cargo.toml",
+        "src/variables/mod.rs",
+        "src/variables/multipart.rs",
+        "src/variables/request.rs"
+      ],
+      "add": 241,
+      "delete": 110,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/6a603a3651f9f0b4243c463e4e89adbc68ec86fe...e7350352c341cbd30e224cfeee2e028cf5158324",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5ea8ae5b2037bbb309306f24f1f3052d9f1bf83f"
+      }
+    },
+    {
+      "number": 57,
+      "title": "Expose multipart file sizes, names and parser diagnostics",
+      "branch": "review/057-expose-multipart-file-sizes-names-and-parser-diagnos",
+      "head": "2ad1728c5a7f6da6ae519b4a414fa3503b885dc3",
+      "base": "e7350352c341cbd30e224cfeee2e028cf5158324",
+      "source": "5352162c7a127a0a37050f44ce65201950816ce2",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/parser/variable.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs"
+      ],
+      "add": 162,
+      "delete": 22,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e7350352c341cbd30e224cfeee2e028cf5158324...2ad1728c5a7f6da6ae519b4a414fa3503b885dc3",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "073f6e30973f1f4dd90cec96209829a2f5307306"
+      }
+    },
+    {
+      "number": 58,
+      "title": "Cover binary multipart fields, upload sizes and parsing flags",
+      "branch": "review/058-cover-binary-multipart-fields-upload-sizes-and-parsi",
+      "head": "4d810bc1e4399d33dd9586b45cb280ea4801da51",
+      "base": "2ad1728c5a7f6da6ae519b4a414fa3503b885dc3",
+      "source": "5352162c7a127a0a37050f44ce65201950816ce2",
+      "files": [
+        "README.md",
+        "tests/crs_evaluation.rs",
+        "tests/multipart_parity.rs"
+      ],
+      "add": 273,
+      "delete": 4,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2ad1728c5a7f6da6ae519b4a414fa3503b885dc3...4d810bc1e4399d33dd9586b45cb280ea4801da51",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "c646f68f70c1bef1911bfb1938d5f517c92dec36"
+      }
+    },
+    {
+      "number": 59,
+      "title": "Parse and compile request and response body limits",
+      "branch": "review/059-parse-and-compile-request-and-response-body-limits",
+      "head": "857a46f09f402434374e1e4a818d38003c4c5c55",
+      "base": "4d810bc1e4399d33dd9586b45cb280ea4801da51",
+      "source": "4299a8ec30ae78469d4f0e373431e1f9178a0f7b",
+      "files": [
+        "src/engine/body.rs",
+        "src/engine/mod.rs",
+        "src/engine/ruleset.rs",
+        "src/error.rs",
+        "src/lib.rs",
+        "src/parser/directive.rs",
+        "src/parser/mod.rs",
+        "tests/body_limits.rs"
+      ],
+      "add": 246,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/4d810bc1e4399d33dd9586b45cb280ea4801da51...857a46f09f402434374e1e4a818d38003c4c5c55",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "9a527c683f121d268d758624134eb138bdb59845"
+      }
+    },
+    {
+      "number": 60,
+      "title": "Expose transaction body access overrides and size error variables",
+      "branch": "review/060-expose-transaction-body-access-overrides-and-size-er",
+      "head": "08d4d64cdb074bb08dd8754d81eea2cb86ceb428",
+      "base": "857a46f09f402434374e1e4a818d38003c4c5c55",
+      "source": "4299a8ec30ae78469d4f0e373431e1f9178a0f7b",
+      "files": [
+        "src/engine/control.rs",
+        "src/parser/variable.rs",
+        "src/variables/request.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/response.rs"
+      ],
+      "add": 70,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/857a46f09f402434374e1e4a818d38003c4c5c55...08d4d64cdb074bb08dd8754d81eea2cb86ceb428",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "66f28dc82f1f4ef5a956d24c12e9098c8fd8751e"
+      }
+    },
+    {
+      "number": 61,
+      "title": "Declare body access explicitly in fixtures that inspect request bodies",
+      "branch": "review/061-declare-body-access-explicitly-in-fixtures-that-insp",
+      "head": "17afaa1be358bfadffec85546b834006f6928095",
+      "base": "08d4d64cdb074bb08dd8754d81eea2cb86ceb428",
+      "source": "4299a8ec30ae78469d4f0e373431e1f9178a0f7b",
+      "files": [
+        "tests/args_macros.rs",
+        "tests/body_processor_selection.rs",
+        "tests/byte_engine.rs",
+        "tests/crs_evaluation.rs",
+        "tests/ctl_actions.rs",
+        "tests/escape_seq_decode.rs",
+        "tests/form_decoding.rs",
+        "tests/json_body_processor.rs",
+        "tests/multi_match.rs",
+        "tests/multipart_part_headers.rs",
+        "tests/regex_match_modes.rs",
+        "tests/valueless_form_param.rs",
+        "tests/xml_body_processor.rs",
+        "tests/xml_namespace_declarations.rs",
+        "tests/xml_parity.rs",
+        "tests/xml_targets.rs"
+      ],
+      "add": 141,
+      "delete": 47,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/08d4d64cdb074bb08dd8754d81eea2cb86ceb428...17afaa1be358bfadffec85546b834006f6928095",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "3f40b2956d86e9f79acb4b93b795c4717283c66b"
+      }
+    },
+    {
+      "number": 62,
+      "title": "Enforce bounded body acquisition and callback order",
+      "branch": "review/062-enforce-bounded-body-acquisition-and-callback-order",
+      "head": "7e3618c98393056702bec86dcdd3a91d51ab5b9b",
+      "base": "17afaa1be358bfadffec85546b834006f6928095",
+      "source": "4299a8ec30ae78469d4f0e373431e1f9178a0f7b",
+      "files": [
+        "README.md",
+        "src/engine/body.rs",
+        "src/engine/diagnostics.rs",
+        "src/engine/transaction.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 461,
+      "delete": 65,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/17afaa1be358bfadffec85546b834006f6928095...7e3618c98393056702bec86dcdd3a91d51ab5b9b",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "3f9c39be741413d401aa7cf56de49270cb8b0374"
+      }
+    },
+    {
+      "number": 63,
+      "title": "Exercise body limits, partial writes, callback retries and MIME policy",
+      "branch": "review/063-exercise-body-limits-partial-writes-callback-retries",
+      "head": "f9703b473e8ef515b4737c9c6a7fa120dc67e1f6",
+      "base": "7e3618c98393056702bec86dcdd3a91d51ab5b9b",
+      "source": "4299a8ec30ae78469d4f0e373431e1f9178a0f7b",
+      "files": [
+        "tests/body_limits.rs"
+      ],
+      "add": 389,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/7e3618c98393056702bec86dcdd3a91d51ab5b9b...f9703b473e8ef515b4737c9c6a7fa120dc67e1f6",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "0c1eea55f18508fa83d23fcebd51febb8fcc054a"
+      }
+    },
+    {
+      "number": 64,
+      "title": "Inspect quoted-printable multipart transfers",
+      "branch": "review/064-inspect-quoted-printable-multipart-transfers",
+      "head": "af3f5c51d37d47f5c58a3b27e495355bf53187af",
+      "base": "f9703b473e8ef515b4737c9c6a7fa120dc67e1f6",
+      "source": "ad6779ad093dbcf5d107d066cc75a58c8b1f9a71",
+      "files": [
+        "README.md",
+        "src/variables/multipart.rs",
+        "tests/multipart_parity.rs"
+      ],
+      "add": 161,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/f9703b473e8ef515b4737c9c6a7fa120dc67e1f6...af3f5c51d37d47f5c58a3b27e495355bf53187af",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e9d31d95fe21d365d285bc2dcc819df7dc2c3801"
+      }
+    },
+    {
+      "number": 65,
+      "title": "Preserve original header names alongside normalized lookup keys",
+      "branch": "review/065-preserve-original-header-names-alongside-normalized",
+      "head": "8f69c0f7741c04ceba519e2e4725f75c69c6b4aa",
+      "base": "af3f5c51d37d47f5c58a3b27e495355bf53187af",
+      "source": "0cc9162c588fe1b0c60a7ca71b79af3385dc9fd6",
+      "files": [
+        "src/engine/control.rs",
+        "src/engine/transaction.rs",
+        "src/parser/variable.rs",
+        "src/variables/collection.rs",
+        "src/variables/request.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/response.rs",
+        "tests/header_original_names.rs"
+      ],
+      "add": 295,
+      "delete": 33,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/af3f5c51d37d47f5c58a3b27e495355bf53187af...8f69c0f7741c04ceba519e2e4725f75c69c6b4aa",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b057429aed9a6dddc3876427f09b0a8327319dae"
+      }
+    },
+    {
+      "number": 66,
+      "title": "Describe lossless connector inputs and match-time messages",
+      "branch": "review/066-describe-lossless-connector-inputs-and-match-time-me",
+      "head": "569ad4597ded220e013eba7ac8ad2a7713d11464",
+      "base": "8f69c0f7741c04ceba519e2e4725f75c69c6b4aa",
+      "source": "cd29c0113096cc7aebc8943564a6dafdd87065ef",
+      "files": [
+        "README.md"
+      ],
+      "add": 15,
+      "delete": 4,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/8f69c0f7741c04ceba519e2e4725f75c69c6b4aa...569ad4597ded220e013eba7ac8ad2a7713d11464",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "884cffa2fb95283f90ded2d97e4e538ae5563e52"
+      }
+    },
+    {
+      "number": 67,
+      "title": "Allocate observed header names only when needed",
+      "branch": "review/067-allocate-observed-header-names-only-when-needed",
+      "head": "3ac4c4d3470730665a778be4af64243d6799003d",
+      "base": "569ad4597ded220e013eba7ac8ad2a7713d11464",
+      "source": "1842da902e3cc9dc800742f2eca2ae776fe07c7e",
+      "files": [
+        "src/variables/collection.rs"
+      ],
+      "add": 1,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/569ad4597ded220e013eba7ac8ad2a7713d11464...3ac4c4d3470730665a778be4af64243d6799003d",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "13fb9cfe37e19d4a698df4f9921110d9ca0801fd"
+      }
+    },
+    {
+      "number": 68,
+      "title": "Match pinned numeric conversion for empty invalid and overflow scalars",
+      "branch": "review/068-match-pinned-numeric-conversion-for-empty-invalid-an",
+      "head": "df4f0a641aceb605a2a6056e910f91b740b8fd7c",
+      "base": "3ac4c4d3470730665a778be4af64243d6799003d",
+      "source": "90c71b8e8c6adb1dd4d108f3daf78c176cfbbd82",
+      "files": [
+        "src/operators/comparison.rs",
+        "tests/byte_operators.rs",
+        "tests/numeric_compatibility.rs"
+      ],
+      "add": 220,
+      "delete": 68,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/3ac4c4d3470730665a778be4af64243d6799003d...df4f0a641aceb605a2a6056e910f91b740b8fd7c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "cbfd15053175a48e86a17554e398582df0745ac7"
+      }
+    },
+    {
+      "number": 69,
+      "title": "Share immutable phrase programs across live rulesets",
+      "branch": "review/069-share-immutable-phrase-programs-across-live-rulesets",
+      "head": "c98d30cb9b60797a0ed943d32f4edbee5d9a89d9",
+      "base": "df4f0a641aceb605a2a6056e910f91b740b8fd7c",
+      "source": "8050c987a9a569ac2b9fa9dadb427deb69261576",
+      "files": [
+        "src/operators/pattern.rs"
+      ],
+      "add": 165,
+      "delete": 23,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/df4f0a641aceb605a2a6056e910f91b740b8fd7c...c98d30cb9b60797a0ed943d32f4edbee5d9a89d9",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "f68b88c4ea85532cffeea84ede9afa5e48b0158c"
+      }
+    },
+    {
+      "number": 70,
+      "title": "Match multipart RFC2231 continuation and parameter readings",
+      "branch": "review/070-match-multipart-rfc2231-continuation-and-parameter-r",
+      "head": "fed02ce9d18cf8854a45e0d8bebf74807255bbca",
+      "base": "c98d30cb9b60797a0ed943d32f4edbee5d9a89d9",
+      "source": "38abca382f9fd6abf8725470e759ff6354369bc4",
+      "files": [
+        "src/variables/multipart.rs",
+        "tests/multipart_parity.rs"
+      ],
+      "add": 195,
+      "delete": 17,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c98d30cb9b60797a0ed943d32f4edbee5d9a89d9...fed02ce9d18cf8854a45e0d8bebf74807255bbca",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d869bf0cfd0eb3cfcb1defda9fe4666f3445f0b1"
+      }
+    },
+    {
+      "number": 71,
+      "title": "Reject control bytes before multipart header unfolding",
+      "branch": "review/071-reject-control-bytes-before-multipart-header-unfoldi",
+      "head": "586b5a9f58e8168b18927704854deae7754e8caa",
+      "base": "fed02ce9d18cf8854a45e0d8bebf74807255bbca",
+      "source": "f7dcdffe502c8b57e63259cc7eaf7b41af8186e5",
+      "files": [
+        "src/variables/multipart.rs",
+        "tests/multipart_parity.rs"
+      ],
+      "add": 24,
+      "delete": 6,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/fed02ce9d18cf8854a45e0d8bebf74807255bbca...586b5a9f58e8168b18927704854deae7754e8caa",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "eb61469228ec63ec54c431f8421e5e9c4848ff2d"
+      }
+    },
+    {
+      "number": 72,
+      "title": "Select first Content-Type form processor before header rules",
+      "branch": "review/072-select-first-content-type-form-processor-before-head",
+      "head": "0d0ab06b8883618799eaba68d8b25374be872948",
+      "base": "586b5a9f58e8168b18927704854deae7754e8caa",
+      "source": "1298dbc4669cacd4077b8086eeb16e6a72c9c178",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/request.rs",
+        "tests/body_processor_selection.rs"
+      ],
+      "add": 112,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/586b5a9f58e8168b18927704854deae7754e8caa...0d0ab06b8883618799eaba68d8b25374be872948",
+      "upstream_pr": null,
+      "notes": [
+        "Reconcile upstream #67 on multipart sizes or forced body inspection; UNIQUE_ID is outside this slice."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "12d079215f9c14f61796c58507319fe81afb3498"
+      }
+    },
+    {
+      "number": 73,
+      "title": "Preserve rule-owned scores across phase boundaries",
+      "branch": "review/073-preserve-rule-owned-scores-across-phase-boundaries",
+      "head": "bd670987159ae4c305193d91477db80bf894e254",
+      "base": "0d0ab06b8883618799eaba68d8b25374be872948",
+      "source": "abfef70a4456f520be38e7965de3ed3965a495c7",
+      "files": [
+        "README.md",
+        "src/engine/transaction.rs",
+        "tests/score_collections.rs"
+      ],
+      "add": 69,
+      "delete": 14,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/0d0ab06b8883618799eaba68d8b25374be872948...bd670987159ae4c305193d91477db80bf894e254",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "2742c97c5816a1d13b0b916bf34b62d7c5c7f9ba"
+      }
+    },
+    {
+      "number": 74,
+      "title": "Run logging rules after interruptions using pinned lifecycle semantics",
+      "branch": "review/074-run-logging-rules-after-interruptions-using-pinned-l",
+      "head": "28c2d900a578a0b2abdbaee91bc9ec0c6abe85e7",
+      "base": "bd670987159ae4c305193d91477db80bf894e254",
+      "source": "085a0213e955b93c67360883b47488d5f8068583",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/logging_lifecycle.rs"
+      ],
+      "add": 96,
+      "delete": 6,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/bd670987159ae4c305193d91477db80bf894e254...28c2d900a578a0b2abdbaee91bc9ec0c6abe85e7",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "34666c96dc9095423b8af507ee2450a54956394f"
+      }
+    },
+    {
+      "number": 75,
+      "title": "Honor disruptive status actions and pinned redirect and drop status semantics",
+      "branch": "review/075-honor-disruptive-status-actions-and-pinned-redirect",
+      "head": "3bbda596f01848306b1482738f264cc53d252cea",
+      "base": "28c2d900a578a0b2abdbaee91bc9ec0c6abe85e7",
+      "source": "ed61ada68de3f7b5de7a15add66b356e4c2ea08b",
+      "files": [
+        "README.md",
+        "src/actions/disruptive.rs",
+        "src/actions/mod.rs",
+        "src/engine/intervention.rs",
+        "src/engine/transaction.rs",
+        "tests/disruptive_status.rs",
+        "tests/logging_lifecycle.rs"
+      ],
+      "add": 117,
+      "delete": 11,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/28c2d900a578a0b2abdbaee91bc9ec0c6abe85e7...3bbda596f01848306b1482738f264cc53d252cea",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "65364c9fa13d5635ceaf2385dc254974d811a3c0"
+      }
+    },
+    {
+      "number": 76,
+      "title": "Wrap setvar arithmetic explicitly at signed integer boundaries",
+      "branch": "review/076-wrap-setvar-arithmetic-explicitly-at-signed-integer",
+      "head": "4e34d39b2bd1c6ac5b44e0a9c6b03bb3f046d39d",
+      "base": "3bbda596f01848306b1482738f264cc53d252cea",
+      "source": "11abeffc0f0298e33862fd06a43369af05f859d6",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/collection.rs",
+        "src/variables/tx.rs",
+        "tests/setvar_wrapping.rs"
+      ],
+      "add": 109,
+      "delete": 9,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/3bbda596f01848306b1482738f264cc53d252cea...4e34d39b2bd1c6ac5b44e0a9c6b03bb3f046d39d",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "762283534c58962d669db2e7c4d2ae2b946c061c"
+      }
+    },
+    {
+      "number": 77,
+      "title": "Dispatch common byte decoders directly and borrow unchanged inputs",
+      "branch": "review/077-dispatch-common-byte-decoders-directly-and-borrow-un",
+      "head": "220bac6e2bf94c3365786c3fb4e395e0a613545b",
+      "base": "4e34d39b2bd1c6ac5b44e0a9c6b03bb3f046d39d",
+      "source": "483d9d8dc37648bb67cd8334156e217da03f857d",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/decode.rs",
+        "src/transformations/normalize.rs"
+      ],
+      "add": 91,
+      "delete": 71,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/4e34d39b2bd1c6ac5b44e0a9c6b03bb3f046d39d...220bac6e2bf94c3365786c3fb4e395e0a613545b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "630d5330bc093b5613802d8d5055c2c56599e505"
+      }
+    },
+    {
+      "number": 78,
+      "title": "Derive request components and response media types from original bytes; run CLI phase two",
+      "branch": "review/078-derive-request-components-and-response-media-types-f",
+      "head": "158f3b23c1cfdcf6c62802efcbcd98beaf9d7c92",
+      "base": "220bac6e2bf94c3365786c3fb4e395e0a613545b",
+      "source": "ef86149608c89e7a44fa50be8716f56feddc2d79",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/main.rs",
+        "src/variables/collection.rs",
+        "src/variables/request.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/response.rs",
+        "tests/request_filename_decoding.rs",
+        "tests/response_metadata.rs"
+      ],
+      "add": 123,
+      "delete": 72,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/220bac6e2bf94c3365786c3fb4e395e0a613545b...158f3b23c1cfdcf6c62802efcbcd98beaf9d7c92",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d2b0c2d1a7c1e526c7c6ee6eeb2395a9f1b9a253"
+      }
+    },
+    {
+      "number": 79,
+      "title": "Honor adjacent markers and logical rule IDs for exclusions",
+      "branch": "review/079-honor-adjacent-markers-and-logical-rule-ids-for-excl",
+      "head": "dfa75f92c668fa936a9b36740a1fcc29c53a0245",
+      "base": "158f3b23c1cfdcf6c62802efcbcd98beaf9d7c92",
+      "source": "0efa7fdc163605f0ef174c09ff518f93bf7dddba",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 75,
+      "delete": 13,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/158f3b23c1cfdcf6c62802efcbcd98beaf9d7c92...dfa75f92c668fa936a9b36740a1fcc29c53a0245",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "984936d6eba02231ed4779b6b6f15022e8fc848f"
+      }
+    },
+    {
+      "number": 80,
+      "title": "Amortize streamed body buffer growth within the configured inspection limit",
+      "branch": "review/080-amortize-streamed-body-buffer-growth-within-the-conf",
+      "head": "19b2ca76c95ca3986fe5e06c4fd2507b4c9cf8e2",
+      "base": "dfa75f92c668fa936a9b36740a1fcc29c53a0245",
+      "source": "ffe28d6d2fa89689a1a8186671e67262e1f57cd5",
+      "files": [
+        "src/engine/transaction.rs"
+      ],
+      "add": 33,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/dfa75f92c668fa936a9b36740a1fcc29c53a0245...19b2ca76c95ca3986fe5e06c4fd2507b4c9cf8e2",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "830c592597b1e8c89c9047c828d8f09eb8b0bcf6"
+      }
+    },
+    {
+      "number": 81,
+      "title": "Share numeric conversion for expanded bytes and match within substrings",
+      "branch": "review/081-share-numeric-conversion-for-expanded-bytes-and-matc",
+      "head": "8c210c4d2863637dffac9d3b3a451eca62eea2db",
+      "base": "19b2ca76c95ca3986fe5e06c4fd2507b4c9cf8e2",
+      "source": "a8081ffabaeba37b56aa559f5a2ebaa47c41aab5",
+      "files": [
+        "README.md",
+        "src/engine/diagnostics.rs",
+        "src/operators/byte_argument.rs",
+        "src/operators/comparison.rs",
+        "src/operators/mod.rs",
+        "tests/numeric_compatibility.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 120,
+      "delete": 271,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/19b2ca76c95ca3986fe5e06c4fd2507b4c9cf8e2...8c210c4d2863637dffac9d3b3a451eca62eea2db",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "a9b60a824ab11d677a4de5211f4ffbdf7d52fc9a"
+      }
+    },
+    {
+      "number": 82,
+      "title": "Evaluate each match against transaction state after preceding actions",
+      "branch": "review/082-evaluate-each-match-against-transaction-state-after",
+      "head": "8a1b83c503e216baf07b778764a32f05b8cf2c82",
+      "base": "8c210c4d2863637dffac9d3b3a451eca62eea2db",
+      "source": "1d658b9981c6da6d0ea36a622456f928dc12daa3",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 219,
+      "delete": 287,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/8c210c4d2863637dffac9d3b3a451eca62eea2db...8a1b83c503e216baf07b778764a32f05b8cf2c82",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "cf41ab7a360c7765c0a42971655163ae023e0175"
+      }
+    },
+    {
+      "number": 83,
+      "title": "Flatten JSON incrementally within a shared byte budget and preserve number tokens",
+      "branch": "review/083-flatten-json-incrementally-within-a-shared-byte-budg",
+      "head": "296ea7f38516991eb9a93d0a0ee64fdca896c43b",
+      "base": "8a1b83c503e216baf07b778764a32f05b8cf2c82",
+      "source": "a5c0c99b4c144c50c8e9565388eb885253863881",
+      "files": [
+        "Cargo.toml",
+        "README.md",
+        "src/variables/json.rs",
+        "src/variables/request.rs",
+        "tests/json_body_processor.rs"
+      ],
+      "add": 272,
+      "delete": 246,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/8a1b83c503e216baf07b778764a32f05b8cf2c82...296ea7f38516991eb9a93d0a0ee64fdca896c43b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "31aadb3d31a935fee0a73fab37d7e7da80f4ef9b"
+      }
+    },
+    {
+      "number": 84,
+      "title": "Guard the unchanged decoder pipeline against allocating temporary buffers",
+      "branch": "review/084-guard-the-unchanged-decoder-pipeline-against-allocat",
+      "head": "c2a09ae732ac3d99fa670c91cb4747e54151cdec",
+      "base": "296ea7f38516991eb9a93d0a0ee64fdca896c43b",
+      "source": "2820556ca01c816a3d76b216ae9542cd210dfd06",
+      "files": [
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 19,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/296ea7f38516991eb9a93d0a0ee64fdca896c43b...c2a09ae732ac3d99fa670c91cb4747e54151cdec",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "975e30ce4beb195ebdb10423c6183b9ecbbc91ae"
+      }
+    },
+    {
+      "number": 85,
+      "title": "Index named request collections by folded bytes while retaining observed spellings",
+      "branch": "review/085-index-named-request-collections-by-folded-bytes-whil",
+      "head": "12c33cf12a92ff1ef751a8064928d0383c7d33a8",
+      "base": "c2a09ae732ac3d99fa670c91cb4747e54151cdec",
+      "source": "5a5e798b10d0b0e0e31264278a8636719c041784",
+      "files": [
+        "src/variables/collection.rs",
+        "src/variables/multipart.rs",
+        "src/variables/request.rs"
+      ],
+      "add": 133,
+      "delete": 17,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c2a09ae732ac3d99fa670c91cb4747e54151cdec...12c33cf12a92ff1ef751a8064928d0383c7d33a8",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "6a04f12aa2deb736637d7f4217d8810192a57190"
+      }
+    },
+    {
+      "number": 86,
+      "title": "Compile selector and control programs when loading a ruleset",
+      "branch": "review/086-compile-selector-and-control-programs-when-loading-a",
+      "head": "2179f868b490a4a825c5b0a52e12a5516e59bffa",
+      "base": "12c33cf12a92ff1ef751a8064928d0383c7d33a8",
+      "source": "5a5e798b10d0b0e0e31264278a8636719c041784",
+      "files": [
+        "src/engine/control.rs",
+        "src/engine/diagnostics.rs",
+        "src/engine/ruleset.rs",
+        "src/parser/action.rs",
+        "src/parser/mod.rs",
+        "src/variables/mod.rs",
+        "src/variables/selectors.rs"
+      ],
+      "add": 252,
+      "delete": 126,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/12c33cf12a92ff1ef751a8064928d0383c7d33a8...2179f868b490a4a825c5b0a52e12a5516e59bffa",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "27911b4153ff26b907cd2b81868ef771f3fe74df"
+      }
+    },
+    {
+      "number": 87,
+      "title": "Visit indexed collection members from the byte resolver",
+      "branch": "review/087-visit-indexed-collection-members-from-the-byte-resol",
+      "head": "2b929c1f0331721815e6e4cc351300ee2ec114df",
+      "base": "2179f868b490a4a825c5b0a52e12a5516e59bffa",
+      "source": "5a5e798b10d0b0e0e31264278a8636719c041784",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/collection.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/tx.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 338,
+      "delete": 280,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2179f868b490a4a825c5b0a52e12a5516e59bffa...2b929c1f0331721815e6e4cc351300ee2ec114df",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "f8541b22d70f5be5b0915bd4e6845d9ab8694ee8"
+      }
+    },
+    {
+      "number": 88,
+      "title": "Use byte selector semantics for the public text resolver",
+      "branch": "review/088-use-byte-selector-semantics-for-the-public-text-reso",
+      "head": "4dedc32f454a76a6a7481ec64b9000085a2e8466",
+      "base": "2b929c1f0331721815e6e4cc351300ee2ec114df",
+      "source": "5a5e798b10d0b0e0e31264278a8636719c041784",
+      "files": [
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs",
+        "tests/args_macros.rs",
+        "tests/collection_selection.rs",
+        "tests/tag_target_exclusions.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 108,
+      "delete": 493,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2b929c1f0331721815e6e4cc351300ee2ec114df...4dedc32f454a76a6a7481ec64b9000085a2e8466",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "ccb42e7d8cb8f6c3e6a2122e828d064704ec36a5"
+      }
+    },
+    {
+      "number": 89,
+      "title": "Inspect binary inputs directly in the Rust detection backend",
+      "branch": "review/089-inspect-binary-inputs-directly-in-the-rust-detection",
+      "head": "b2a2e0e2506c93616db6245d402f258d159d1a63",
+      "base": "4dedc32f454a76a6a7481ec64b9000085a2e8466",
+      "source": "b258c561d165ed6dbec586616f3199d5bd0f515a",
+      "files": [
+        "src/libinjection/mod.rs",
+        "src/libinjection/sqli.rs",
+        "src/libinjection/xss.rs",
+        "tests/libinjection_bytes.rs"
+      ],
+      "add": 169,
+      "delete": 144,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/4dedc32f454a76a6a7481ec64b9000085a2e8466...b2a2e0e2506c93616db6245d402f258d159d1a63",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "72cee47c43d91f401963940f5ebc8bedccd1795f"
+      }
+    },
+    {
+      "number": 90,
+      "title": "Preserve unresolved relative parents in path normalization",
+      "branch": "review/090-preserve-unresolved-relative-parents-in-path-normali",
+      "head": "66e85b84b8ced03fa663a6d7d29887d68c3a6e97",
+      "base": "b2a2e0e2506c93616db6245d402f258d159d1a63",
+      "source": "f6062dce2bf1892a546d916d4d22528eb779a1ce",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/normalize.rs"
+      ],
+      "add": 90,
+      "delete": 85,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b2a2e0e2506c93616db6245d402f258d159d1a63...66e85b84b8ced03fa663a6d7d29887d68c3a6e97",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b7e52676b5b40e9069232d896d83d7cce5b07071"
+      }
+    },
+    {
+      "number": 91,
+      "title": "Preserve SecLang names on count matches and fold Unicode TX keys",
+      "branch": "review/091-preserve-seclang-names-on-count-matches-and-fold-uni",
+      "head": "92e840e7f07377021b2880e1997dde437e6a5d80",
+      "base": "66e85b84b8ced03fa663a6d7d29887d68c3a6e97",
+      "source": "e8addaccce4981bf1ca02221577c1c2db177c2c1",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/parser/variable.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/selectors.rs",
+        "src/variables/tx.rs",
+        "tests/collection_selection.rs"
+      ],
+      "add": 132,
+      "delete": 23,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/66e85b84b8ced03fa663a6d7d29887d68c3a6e97...92e840e7f07377021b2880e1997dde437e6a5d80",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "04ef3808a6b53c88b16260d88ef0ee99a3fd34f1"
+      }
+    },
+    {
+      "number": 92,
+      "title": "Simplify the canonical path fast-path predicate",
+      "branch": "review/092-simplify-the-canonical-path-fast-path-predicate",
+      "head": "d3e4201d2a7744ee5ad2d2230c14d898b8ab1e59",
+      "base": "92e840e7f07377021b2880e1997dde437e6a5d80",
+      "source": "836aed4782fd84ef3bd4dba021c70fffe6d0df0d",
+      "files": [
+        "src/transformations/normalize.rs"
+      ],
+      "add": 7,
+      "delete": 8,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/92e840e7f07377021b2880e1997dde437e6a5d80...d3e4201d2a7744ee5ad2d2230c14d898b8ab1e59",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "61fcfd4a789e67ea83e5ef1e716469bdfac3e551"
+      }
+    },
+    {
+      "number": 93,
+      "title": "Record the pinned CRS per-stage baseline for both detector backends",
+      "branch": "review/093-record-the-pinned-crs-per-stage-baseline-for-both-de",
+      "head": "71f3ed9f10153105870b9b096f480a924a12bfb8",
+      "base": "d3e4201d2a7744ee5ad2d2230c14d898b8ab1e59",
+      "source": "ff4514095055d0fa9f161f2fa9db7e57789a9a86",
+      "files": [
+        "tests/fixtures/crs-native-outcomes.tsv"
+      ],
+      "add": 5594,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d3e4201d2a7744ee5ad2d2230c14d898b8ab1e59...71f3ed9f10153105870b9b096f480a924a12bfb8",
+      "upstream_pr": null,
+      "notes": [
+        "Pinned per-stage fixture for CRS 4.25.0 (30cb436b261a9f5ec32a5a0677e17f3cfa1a8739). The following slice adds the reader."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "2d289f0016890b003021ac2faf5e8a08d26fe225"
+      }
+    },
+    {
+      "number": 94,
+      "title": "Check native CRS callback and stage outcomes against the baseline",
+      "branch": "review/094-check-native-crs-callback-and-stage-outcomes-against",
+      "head": "3424499971b41eb9df64c78384fdd5ffd499cd23",
+      "base": "71f3ed9f10153105870b9b096f480a924a12bfb8",
+      "source": "ff4514095055d0fa9f161f2fa9db7e57789a9a86",
+      "files": [
+        "tests/crs_conformance.rs"
+      ],
+      "add": 218,
+      "delete": 144,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/71f3ed9f10153105870b9b096f480a924a12bfb8...3424499971b41eb9df64c78384fdd5ffd499cd23",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "ebd6d847c8bded825b2f5726eb1e85fe383f754e"
+      }
+    },
+    {
+      "number": 95,
+      "title": "Run the pinned native CRS gate on both detector backends",
+      "branch": "review/095-run-the-pinned-native-crs-gate-on-both-detector-back",
+      "head": "77919c1364606826eef2eb8a84c69c93569a065a",
+      "base": "3424499971b41eb9df64c78384fdd5ffd499cd23",
+      "source": "ff4514095055d0fa9f161f2fa9db7e57789a9a86",
+      "files": [
+        ".github/workflows/ci.yml",
+        "README.md"
+      ],
+      "add": 35,
+      "delete": 23,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/3424499971b41eb9df64c78384fdd5ffd499cd23...77919c1364606826eef2eb8a84c69c93569a065a",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d928c02abe35ba7c83d54de4aae05053a54cd061"
+      }
+    },
+    {
+      "number": 96,
+      "title": "Find regex match spans without extracting unused capture groups",
+      "branch": "review/096-find-regex-match-spans-without-extracting-unused-cap",
+      "head": "e7d5e70a764e268762e579a5486eb8826a4a34ce",
+      "base": "77919c1364606826eef2eb8a84c69c93569a065a",
+      "source": "37137f68cfcdb259307d3daa59af8c426ec7e99c",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/operators/pattern.rs",
+        "src/operators/traits.rs",
+        "tests/regex_match_modes.rs"
+      ],
+      "add": 66,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/77919c1364606826eef2eb8a84c69c93569a065a...e7d5e70a764e268762e579a5486eb8826a4a34ce",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "c5df068987ce85e1fb55da0939d71db8e5af1223"
+      }
+    },
+    {
+      "number": 97,
+      "title": "Honor exact transaction-local rule tag removals across phases",
+      "branch": "review/097-honor-exact-transaction-local-rule-tag-removals-acro",
+      "head": "b381a3a37665fa96f22a9e9c45e42a5f09513e19",
+      "base": "e7d5e70a764e268762e579a5486eb8826a4a34ce",
+      "source": "641ccf378320ef2388d099c767b98b904651a736",
+      "files": [
+        "README.md",
+        "src/engine/control.rs",
+        "src/engine/transaction.rs",
+        "src/parser/action.rs",
+        "tests/crs_conformance.rs",
+        "tests/fixtures/rule-remove-by-tag.conf",
+        "tests/rule_remove_by_tag.rs"
+      ],
+      "add": 196,
+      "delete": 33,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e7d5e70a764e268762e579a5486eb8826a4a34ce...b381a3a37665fa96f22a9e9c45e42a5f09513e19",
+      "upstream_pr": null,
+      "notes": [
+        "Coordinate with upstream #65 on transaction-local tag controls."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5ec546b6b79140f14a3c450c967aaf5d5f76fb60"
+      }
+    },
+    {
+      "number": 98,
+      "title": "Evaluate static rules on borrowed bytes until the first match",
+      "branch": "review/098-evaluate-static-rules-on-borrowed-bytes-until-the-fi",
+      "head": "30c8a672d01491e861e65c592f62e542f3c50514",
+      "base": "b381a3a37665fa96f22a9e9c45e42a5f09513e19",
+      "source": "84c3b66f1b6ec6acd0313ace319f678e38c58acc",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/transformations/pipeline.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 275,
+      "delete": 29,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b381a3a37665fa96f22a9e9c45e42a5f09513e19...30c8a672d01491e861e65c592f62e542f3c50514",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "9ed39b858f54935153a0d74e67d354dc2e4bc3b4"
+      }
+    },
+    {
+      "number": 99,
+      "title": "Use a reference-tested byte-oriented libinjection port by default",
+      "branch": "review/099-use-a-reference-tested-byte-oriented-libinjection-po",
+      "head": "332d6df5309c9c508a60408c664e9b94f3cb844f",
+      "base": "30c8a672d01491e861e65c592f62e542f3c50514",
+      "source": "f50543e124469c527149aa8addef0179e5fbab47",
+      "files": [
+        ".github/workflows/ci.yml",
+        "Cargo.toml",
+        "README.md",
+        "examples/libinjection_cost.rs",
+        "src/lib.rs",
+        "src/libinjection/ffi.rs",
+        "src/libinjection/mod.rs",
+        "src/libinjection/rust.rs",
+        "tests/byte_operators.rs",
+        "tests/crs_conformance.rs",
+        "tests/fixtures/crs-native-outcomes.tsv",
+        "tests/libinjection_bytes.rs",
+        "tests/libinjection_conformance.rs",
+        "tests/libinjection_ffi.rs"
+      ],
+      "add": 211,
+      "delete": 146,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/30c8a672d01491e861e65c592f62e542f3c50514...332d6df5309c9c508a60408c664e9b94f3cb844f",
+      "upstream_pr": null,
+      "notes": [
+        "Pinned per-stage fixture for CRS 4.25.0 (30cb436b261a9f5ec32a5a0677e17f3cfa1a8739). The following slice adds the reader."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "f791bd440a5de89edbb663b2096846a6c61ab742"
+      }
+    },
+    {
+      "number": 100,
+      "title": "Borrow parsed rule actions and defer intervention metadata",
+      "branch": "review/100-borrow-parsed-rule-actions-and-defer-intervention-me",
+      "head": "2c94f2d2ac67ca06303ef3dd91b44f9739c4e173",
+      "base": "332d6df5309c9c508a60408c664e9b94f3cb844f",
+      "source": "391055367c54e6a3e307fb6b6ceac84fe0725603",
+      "files": [
+        "src/actions/mod.rs",
+        "src/engine/transaction.rs",
+        "tests/disruptive_status.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 185,
+      "delete": 159,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/332d6df5309c9c508a60408c664e9b94f3cb844f...2c94f2d2ac67ca06303ef3dd91b44f9739c4e173",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "162e81f9885e8469a15849384f938bf5b5424da4"
+      }
+    },
+    {
+      "number": 101,
+      "title": "Resolve rule data files at load and preserve ordered phrase captures",
+      "branch": "review/101-resolve-rule-data-files-at-load-and-preserve-ordered",
+      "head": "0c1e9ea11223b0be44d5cbe8f2275e90e0251140",
+      "base": "2c94f2d2ac67ca06303ef3dd91b44f9739c4e173",
+      "source": "528d0a6f8ab8a09f46d3c1ec253a24639c97db6a",
+      "files": [
+        "README.md",
+        "src/engine/diagnostics.rs",
+        "src/engine/transaction.rs",
+        "src/operators/byte_argument.rs",
+        "src/operators/mod.rs",
+        "src/operators/network.rs",
+        "src/operators/pattern.rs",
+        "src/parser/mod.rs",
+        "src/parser/operator.rs",
+        "tests/phrase_files.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 218,
+      "delete": 194,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2c94f2d2ac67ca06303ef3dd91b44f9739c4e173...0c1e9ea11223b0be44d5cbe8f2275e90e0251140",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "9db74bd0857ee3512802cd604f55c57db59b59ba"
+      }
+    },
+    {
+      "number": 102,
+      "title": "Honor allow scopes across request, response and logging rules",
+      "branch": "review/102-honor-allow-scopes-across-request-response-and-loggi",
+      "head": "670d90992f7095663d8e813636aa50d65664238b",
+      "base": "0c1e9ea11223b0be44d5cbe8f2275e90e0251140",
+      "source": "a93e5b8ac6f7a8106d343bee6f15725d82316c44",
+      "files": [
+        "README.md",
+        "src/actions/disruptive.rs",
+        "src/actions/mod.rs",
+        "src/engine/diagnostics.rs",
+        "src/engine/transaction.rs",
+        "src/parser/action.rs",
+        "tests/logging_lifecycle.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 159,
+      "delete": 37,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/0c1e9ea11223b0be44d5cbe8f2275e90e0251140...670d90992f7095663d8e813636aa50d65664238b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "2690a3afff59d921a5fba7132bc0654c3092e3df"
+      }
+    },
+    {
+      "number": 103,
+      "title": "Match containsWord operands at ModSecurity byte boundaries",
+      "branch": "review/103-match-containsword-operands-at-modsecurity-byte-boun",
+      "head": "86651b0ec75b8a3d058f64310f5f33574f70bef8",
+      "base": "670d90992f7095663d8e813636aa50d65664238b",
+      "source": "ea626b75f953fe205f04959ac564e33fce47c917",
+      "files": [
+        "README.md",
+        "src/engine/diagnostics.rs",
+        "src/operators/byte_argument.rs",
+        "src/operators/comparison.rs",
+        "src/operators/mod.rs",
+        "tests/contains_word.rs",
+        "tests/unsupported_semantics_reporting.rs"
+      ],
+      "add": 165,
+      "delete": 22,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/670d90992f7095663d8e813636aa50d65664238b...86651b0ec75b8a3d058f64310f5f33574f70bef8",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "c882b4cc074eef51932dd9e63344d87aa0094351"
+      }
+    },
+    {
+      "number": 104,
+      "title": "Keep overlapping phrase captures and accelerate byte substring searches",
+      "branch": "review/104-keep-overlapping-phrase-captures-and-accelerate-byte",
+      "head": "ced433482731822e8afaf39f2e265654370dccaa",
+      "base": "86651b0ec75b8a3d058f64310f5f33574f70bef8",
+      "source": "ee79145a3ba6ee0e071fa35c229b9f07270067fc",
+      "files": [
+        "README.md",
+        "src/operators/byte_argument.rs",
+        "src/operators/comparison.rs",
+        "src/operators/mod.rs",
+        "src/operators/pattern.rs",
+        "tests/phrase_files.rs"
+      ],
+      "add": 32,
+      "delete": 28,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/86651b0ec75b8a3d058f64310f5f33574f70bef8...ced433482731822e8afaf39f2e265654370dccaa",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "a72de1dfced32a8630927e75cfad07c1f22a367c"
+      }
+    },
+    {
+      "number": 105,
+      "title": "Move matched bytes into audit and capture storage",
+      "branch": "review/105-move-matched-bytes-into-audit-and-capture-storage",
+      "head": "ec0d7aef48c2d5756f540922e2717ce411c8e8d7",
+      "base": "ced433482731822e8afaf39f2e265654370dccaa",
+      "source": "542b1b3efab65053caea4c40cc83ef945fb73740",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/value.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 62,
+      "delete": 13,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/ced433482731822e8afaf39f2e265654370dccaa...ec0d7aef48c2d5756f540922e2717ce411c8e8d7",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5a55f79244e6972eb9532c0f1a16fd418f4274b3"
+      }
+    },
+    {
+      "number": 106,
+      "title": "Match IPv4-mapped network numbers and addresses consistently",
+      "branch": "review/106-match-ipv4-mapped-network-numbers-and-addresses-cons",
+      "head": "b1209b39cf197e4578e4eff0d4324ee103b3fd1f",
+      "base": "ec0d7aef48c2d5756f540922e2717ce411c8e8d7",
+      "source": "e532df5c83c67ee4996d2b698444fc1621e4d596",
+      "files": [
+        "src/operators/network.rs"
+      ],
+      "add": 67,
+      "delete": 7,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/ec0d7aef48c2d5756f540922e2717ce411c8e8d7...b1209b39cf197e4578e4eff0d4324ee103b3fd1f",
+      "upstream_pr": "https://github.com/zentinelproxy/zentinel-modsec/pull/74",
+      "notes": [
+        "Independent upstream PR #74. Substitute the merged upstream change when rebasing."
+      ],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "4202579591b89e7e68ebeba273cb9f4bdbf9d45a"
+      }
+    },
+    {
+      "number": 107,
+      "title": "Validate byte-range declarations and share byte-correct encoding checks",
+      "branch": "review/107-validate-byte-range-declarations-and-share-byte-corr",
+      "head": "8fcd3818acacc7ef4ed5a2571358d62225ed157b",
+      "base": "b1209b39cf197e4578e4eff0d4324ee103b3fd1f",
+      "source": "fa4e76469e3e9170e32d494aea7f17715b265404",
+      "files": [
+        "README.md",
+        "src/engine/ruleset.rs",
+        "src/operators/mod.rs",
+        "src/operators/validation.rs",
+        "tests/validation_operators.rs"
+      ],
+      "add": 239,
+      "delete": 142,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b1209b39cf197e4578e4eff0d4324ee103b3fd1f...8fcd3818acacc7ef4ed5a2571358d62225ed157b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "a85467d7fab161fd72c4d701e31feed0f6014c99"
+      }
+    },
+    {
+      "number": 108,
+      "title": "Borrow first collection values during macro expansion",
+      "branch": "review/108-borrow-first-collection-values-during-macro-expansio",
+      "head": "75a0190e9bb126dc112cb23eada6406f89f7849f",
+      "base": "8fcd3818acacc7ef4ed5a2571358d62225ed157b",
+      "source": "6c09e487a48acadb3b970e85ad9e297f77c6b124",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/collection.rs",
+        "src/variables/tx.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 146,
+      "delete": 56,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/8fcd3818acacc7ef4ed5a2571358d62225ed157b...75a0190e9bb126dc112cb23eada6406f89f7849f",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d08daf31133a935f2d9f8373df39c1e924984b99"
+      }
+    },
+    {
+      "number": 109,
+      "title": "Resolve inspected response length and directory request basenames",
+      "branch": "review/109-resolve-inspected-response-length-and-directory-requ",
+      "head": "db6b7c947252757fea72fe5784927e81ba14d7a5",
+      "base": "75a0190e9bb126dc112cb23eada6406f89f7849f",
+      "source": "046bede5017212fa2562803c3b1f9b21f5dbb958",
+      "files": [
+        "README.md",
+        "src/parser/variable.rs",
+        "src/variables/resolver_bytes.rs",
+        "tests/request_filename_decoding.rs",
+        "tests/response_metadata.rs"
+      ],
+      "add": 113,
+      "delete": 8,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/75a0190e9bb126dc112cb23eada6406f89f7849f...db6b7c947252757fea72fe5784927e81ba14d7a5",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e6ac555d706f3514894b83ad55f1f08d5c002c26"
+      }
+    },
+    {
+      "number": 110,
+      "title": "Skip delimiter searches for consecutive URL escapes",
+      "branch": "review/110-skip-delimiter-searches-for-consecutive-url-escapes",
+      "head": "b6ffdc5dd90e8f3fedc0cc07ae9ce11bad413504",
+      "base": "db6b7c947252757fea72fe5784927e81ba14d7a5",
+      "source": "f99bac95741d0bf6794b2c2a292f22c990e26c67",
+      "files": [
+        "src/operators/validation.rs"
+      ],
+      "add": 10,
+      "delete": 2,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/db6b7c947252757fea72fe5784927e81ba14d7a5...b6ffdc5dd90e8f3fedc0cc07ae9ce11bad413504",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e2198db375a7653a59ec832ef7834c09b1f9bff8"
+      }
+    },
+    {
+      "number": 111,
+      "title": "Use the direct error assertion for invalid validation rules",
+      "branch": "review/111-use-the-direct-error-assertion-for-invalid-validatio",
+      "head": "bd9a00af14b524531b251d40c5d1a624d7efccd5",
+      "base": "b6ffdc5dd90e8f3fedc0cc07ae9ce11bad413504",
+      "source": "f35687f7c50beefa852f16e7a5da1866137288cf",
+      "files": [
+        "tests/validation_operators.rs"
+      ],
+      "add": 1,
+      "delete": 3,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b6ffdc5dd90e8f3fedc0cc07ae9ce11bad413504...bd9a00af14b524531b251d40c5d1a624d7efccd5",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "8b2bc584b9a28ed1ed2d25012cc0249c8e1e43fa"
+      }
+    },
+    {
+      "number": 112,
+      "title": "Apply bounded disruption and status updates to earlier rule IDs",
+      "branch": "review/112-apply-bounded-disruption-and-status-updates-to-earli",
+      "head": "11aeb7343f3f3b4537d2feec215c1e7e9b3d1283",
+      "base": "bd9a00af14b524531b251d40c5d1a624d7efccd5",
+      "source": "bb7c46c8d0c542f6629cf2d1c87f12aaa1441fd6",
+      "files": [
+        "README.md",
+        "src/engine/diagnostics.rs",
+        "src/engine/ruleset.rs",
+        "src/parser/mod.rs",
+        "tests/unsupported_semantics_reporting.rs",
+        "tests/update_action_by_id.rs"
+      ],
+      "add": 260,
+      "delete": 27,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/bd9a00af14b524531b251d40c5d1a624d7efccd5...11aeb7343f3f3b4537d2feec215c1e7e9b3d1283",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "9198a281f9f3ecbacce9ac8a233ddc4cdf5cd8f1"
+      }
+    },
+    {
+      "number": 113,
+      "title": "Avoid owning fingerprints for verdict-only detector calls",
+      "branch": "review/113-avoid-owning-fingerprints-for-verdict-only-detector",
+      "head": "fa4eb4dbabac51d8e72bf621230bbf2804b51326",
+      "base": "11aeb7343f3f3b4537d2feec215c1e7e9b3d1283",
+      "source": "5af0740a0f98300527cdba34b61b91d035c8a1cd",
+      "files": [
+        "src/libinjection/ffi.rs",
+        "src/libinjection/mod.rs",
+        "src/libinjection/rust.rs"
+      ],
+      "add": 53,
+      "delete": 17,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/11aeb7343f3f3b4537d2feec215c1e7e9b3d1283...fa4eb4dbabac51d8e72bf621230bbf2804b51326",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "11959531e5dd72e79c40033fc0564b5fb35bf89c"
+      }
+    },
+    {
+      "number": 114,
+      "title": "Cover positive verdict allocation costs for both detection backends",
+      "branch": "review/114-cover-positive-verdict-allocation-costs-for-both-det",
+      "head": "081d698cee02b5437d084409a3dca6b9b7e0b7f6",
+      "base": "fa4eb4dbabac51d8e72bf621230bbf2804b51326",
+      "source": "fdaba5e68bc3e5631c735d44b2babff4b6a3eb05",
+      "files": [
+        "src/libinjection/rust.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 30,
+      "delete": 0,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/fa4eb4dbabac51d8e72bf621230bbf2804b51326...081d698cee02b5437d084409a3dca6b9b7e0b7f6",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "59b0eefa0e4fea8b00833929feefa245da199e3c"
+      }
+    },
+    {
+      "number": 115,
+      "title": "Validate action update quoting before token normalization",
+      "branch": "review/115-validate-action-update-quoting-before-token-normaliz",
+      "head": "b5bbdc603788fdf820bdd76845bee330a5839e50",
+      "base": "081d698cee02b5437d084409a3dca6b9b7e0b7f6",
+      "source": "ab9526d5c84fbf08e5ee5d38a7f54fbabbd15a52",
+      "files": [
+        "src/parser/mod.rs",
+        "tests/update_action_by_id.rs"
+      ],
+      "add": 58,
+      "delete": 37,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/081d698cee02b5437d084409a3dca6b9b7e0b7f6...b5bbdc603788fdf820bdd76845bee330a5839e50",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "42a31a709d8464639f670b329cb438ea455f7d5f"
+      }
+    },
+    {
+      "number": 116,
+      "title": "Use the runtime macro grammar when validating byte-range rules",
+      "branch": "review/116-use-the-runtime-macro-grammar-when-validating-byte-r",
+      "head": "b9847b200a9d976c87aea62a6047dc52c6eae68b",
+      "base": "b5bbdc603788fdf820bdd76845bee330a5839e50",
+      "source": "a22704c9ffbb0288cd574e99d5f54f224a874276",
+      "files": [
+        "src/engine/mod.rs",
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "tests/validation_operators.rs"
+      ],
+      "add": 17,
+      "delete": 20,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b5bbdc603788fdf820bdd76845bee330a5839e50...b9847b200a9d976c87aea62a6047dc52c6eae68b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b0216e98151e8c68b836a956621d73b6285ee48f"
+      }
+    },
+    {
+      "number": 117,
+      "title": "Validate consecutive percent escapes in one indexed run",
+      "branch": "review/117-validate-consecutive-percent-escapes-in-one-indexed",
+      "head": "ef34a2f2a18027fb7d16e0671bd9ab82863d809a",
+      "base": "b9847b200a9d976c87aea62a6047dc52c6eae68b",
+      "source": "8692a953e2bc51c672391bd720be95bef4c661fb",
+      "files": [
+        "src/operators/validation.rs"
+      ],
+      "add": 15,
+      "delete": 16,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b9847b200a9d976c87aea62a6047dc52c6eae68b...ef34a2f2a18027fb7d16e0671bd9ab82863d809a",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "b93e3b7e2808683f7c45bfe503124bd3c2755b95"
+      }
+    },
+    {
+      "number": 118,
+      "title": "Preserve configuration boundaries and validate include expansion",
+      "branch": "review/118-preserve-configuration-boundaries-and-validate-inclu",
+      "head": "ce40894d74fa3acabef78db74eeb8a8e246925ee",
+      "base": "ef34a2f2a18027fb7d16e0671bd9ab82863d809a",
+      "source": "f2ae8f3cdc8e3420a1cca5074c7670aa1715d6fa",
+      "files": [
+        "README.md",
+        "src/parser/lexer.rs",
+        "src/parser/mod.rs",
+        "tests/config_loading.rs"
+      ],
+      "add": 164,
+      "delete": 29,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/ef34a2f2a18027fb7d16e0671bd9ab82863d809a...ce40894d74fa3acabef78db74eeb8a8e246925ee",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "d361ef3165cc74b88f544ef9c0d4167e4b62b921"
+      }
+    },
+    {
+      "number": 119,
+      "title": "Roll back failed parser appends across includes and glob matches",
+      "branch": "review/119-roll-back-failed-parser-appends-across-includes-and",
+      "head": "8b19b216d8cd9ff2eca881be3f54904584fe945c",
+      "base": "ce40894d74fa3acabef78db74eeb8a8e246925ee",
+      "source": "3a00cc320ea334f56da0a01208c91c3ee4ae5e15",
+      "files": [
+        "src/parser/mod.rs",
+        "tests/config_loading.rs"
+      ],
+      "add": 71,
+      "delete": 8,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/ce40894d74fa3acabef78db74eeb8a8e246925ee...8b19b216d8cd9ff2eca881be3f54904584fe945c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "fd9e615bfbcf0d8e83940c67648c7a232e9fde63"
+      }
+    },
+    {
+      "number": 120,
+      "title": "Compress Latin whitespace at UTF-8 character boundaries",
+      "branch": "review/120-compress-latin-whitespace-at-utf-8-character-boundar",
+      "head": "aff49f901d94b14b882c2db013a1372462ddd658",
+      "base": "8b19b216d8cd9ff2eca881be3f54904584fe945c",
+      "source": "45936608a48ac249e672c728f0530297ffe0df24",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/normalize.rs",
+        "tests/byte_transformations.rs"
+      ],
+      "add": 78,
+      "delete": 41,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/8b19b216d8cd9ff2eca881be3f54904584fe945c...aff49f901d94b14b882c2db013a1372462ddd658",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "c9de593f26a04ed3bd558234e0c4e05e8469dc63"
+      }
+    },
+    {
+      "number": 121,
+      "title": "Evaluate static variable counts before materializing matched targets",
+      "branch": "review/121-evaluate-static-variable-counts-before-materializing",
+      "head": "07b70af9135273c6be5b6d4322afa67b10fe2555",
+      "base": "aff49f901d94b14b882c2db013a1372462ddd658",
+      "source": "e6b3518baa37cebe30a1e1e625082ac89f73b0cf",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/count_operator.rs",
+        "tests/skipped_rule_allocation.rs"
+      ],
+      "add": 68,
+      "delete": 4,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/aff49f901d94b14b882c2db013a1372462ddd658...07b70af9135273c6be5b6d4322afa67b10fe2555",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "6415f7a06d08d5636dedffe56cd072c0a7ca79ea"
+      }
+    },
+    {
+      "number": 122,
+      "title": "Keep singleton collection values inline and cache regex capture shape",
+      "branch": "review/122-keep-singleton-collection-values-inline-and-cache-re",
+      "head": "e98b67694500b4000f7684f24898fa1388f03faf",
+      "base": "07b70af9135273c6be5b6d4322afa67b10fe2555",
+      "source": "527868c777fbc9f384005b8a096aaec424428799",
+      "files": [
+        "src/operators/pattern.rs",
+        "src/variables/collection.rs",
+        "src/variables/resolver_bytes.rs"
+      ],
+      "add": 42,
+      "delete": 9,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/07b70af9135273c6be5b6d4322afa67b10fe2555...e98b67694500b4000f7684f24898fa1388f03faf",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "15e04d6484cfc7a6de2b70657b48aee4b048f9f4"
+      }
+    },
+    {
+      "number": 123,
+      "title": "Compile immutable rule dispatch metadata for each phase",
+      "branch": "review/123-compile-immutable-rule-dispatch-metadata-for-each-ph",
+      "head": "d38b43be6b151450319c23173f23f6f170e0bc70",
+      "base": "e98b67694500b4000f7684f24898fa1388f03faf",
+      "source": "dd006027c90375865d553ed131b5f1a9bb01f745",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 177,
+      "delete": 54,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e98b67694500b4000f7684f24898fa1388f03faf...d38b43be6b151450319c23173f23f6f170e0bc70",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "1c79a05a0ceb06c2b44fbe93ab944167bed0613e"
+      }
+    },
+    {
+      "number": 124,
+      "title": "Skip inert short byte transformation pipelines",
+      "branch": "review/124-skip-inert-short-byte-transformation-pipelines",
+      "head": "860fa53ab87c1309f31a1872e5222871d2dc81ac",
+      "base": "d38b43be6b151450319c23173f23f6f170e0bc70",
+      "source": "139ceaa4456a16d328c565b5633161911b533ec4",
+      "files": [
+        "src/transformations/normalize.rs",
+        "src/transformations/pipeline.rs"
+      ],
+      "add": 171,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d38b43be6b151450319c23173f23f6f170e0bc70...860fa53ab87c1309f31a1872e5222871d2dc81ac",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "0fa3e4636399f116627b484c3a3db5fccb84c775"
+      }
+    },
+    {
+      "number": 125,
+      "title": "Preserve the first escape offset when decoding URL bytes",
+      "branch": "review/125-preserve-the-first-escape-offset-when-decoding-url-b",
+      "head": "c7d0cfe9502a3e4b9994f2b4fa4d16631d8c201b",
+      "base": "860fa53ab87c1309f31a1872e5222871d2dc81ac",
+      "source": "08950153e71fbb68e03c57fca5acec6643bddf73",
+      "files": [
+        "src/transformations/bytes.rs",
+        "tests/byte_transformations.rs"
+      ],
+      "add": 26,
+      "delete": 4,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/860fa53ab87c1309f31a1872e5222871d2dc81ac...c7d0cfe9502a3e4b9994f2b4fa4d16631d8c201b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5690f7a168d6071973f94a2b4395fb9a27833277"
+      }
+    },
+    {
+      "number": 126,
+      "title": "Compile collection member selectors after rule target updates",
+      "branch": "review/126-compile-collection-member-selectors-after-rule-targe",
+      "head": "1d6fc60dd1d46517cebdd587b18ad92d85bf5c61",
+      "base": "c7d0cfe9502a3e4b9994f2b4fa4d16631d8c201b",
+      "source": "e0a0c399eefff9f2cb9bf4b9ae186cecc0e54e21",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/selectors.rs"
+      ],
+      "add": 146,
+      "delete": 119,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c7d0cfe9502a3e4b9994f2b4fa4d16631d8c201b...1d6fc60dd1d46517cebdd587b18ad92d85bf5c61",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "532c293cdb88662fbba9615fc121eaeff0c20555"
+      }
+    },
+    {
+      "number": 127,
+      "title": "Skip resolution for empty immutable target collections",
+      "branch": "review/127-skip-resolution-for-empty-immutable-target-collectio",
+      "head": "db516e27369e9a97064fca74c8879a707146ddfd",
+      "base": "1d6fc60dd1d46517cebdd587b18ad92d85bf5c61",
+      "source": "abcece343598443f3516874c5ae29d616f12c88b",
+      "files": [
+        "src/engine/transaction.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 44,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/1d6fc60dd1d46517cebdd587b18ad92d85bf5c61...db516e27369e9a97064fca74c8879a707146ddfd",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "ac8a73fc767a62511f13cdbd123c34783aaf4365"
+      }
+    },
+    {
+      "number": 128,
+      "title": "Visit scalar variable bytes without temporary result collections",
+      "branch": "review/128-visit-scalar-variable-bytes-without-temporary-result",
+      "head": "9be37b121f037725f76e94bf0cc544bfa3362f6d",
+      "base": "db516e27369e9a97064fca74c8879a707146ddfd",
+      "source": "ce8995971dbafc381ead48b7c65978ca8d6f144f",
+      "files": [
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs"
+      ],
+      "add": 82,
+      "delete": 144,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/db516e27369e9a97064fca74c8879a707146ddfd...9be37b121f037725f76e94bf0cc544bfa3362f6d",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "31ee342accb7f6e4a9c402bf5dec733f184f54a2"
+      }
+    },
+    {
+      "number": 129,
+      "title": "Materialize matched audit representations on first access",
+      "branch": "review/129-materialize-matched-audit-representations-on-first-a",
+      "head": "e3d46ff7d115cadc2962e450d2f536637ddb3201",
+      "base": "9be37b121f037725f76e94bf0cc544bfa3362f6d",
+      "source": "df9f095d9a804fc68ab7f259218899b0d2e90c19",
+      "files": [
+        "src/engine/match_log.rs",
+        "src/engine/mod.rs",
+        "src/engine/transaction.rs",
+        "tests/client_addr_and_matched_data.rs"
+      ],
+      "add": 94,
+      "delete": 16,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/9be37b121f037725f76e94bf0cc544bfa3362f6d...e3d46ff7d115cadc2962e450d2f536637ddb3201",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "29d39437f7cae164f342df30666dccda2f5a5c20"
+      }
+    },
+    {
+      "number": 130,
+      "title": "Store short matched values inline and share binary audit bytes",
+      "branch": "review/130-store-short-matched-values-inline-and-share-binary-a",
+      "head": "c8847343bc59067159fb15241aea0a0add04ea76",
+      "base": "e3d46ff7d115cadc2962e450d2f536637ddb3201",
+      "source": "2fa87b10c175896cc15afc0376c2eed57b675d66",
+      "files": [
+        "src/variables/mod.rs",
+        "src/variables/resolver.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/value.rs"
+      ],
+      "add": 182,
+      "delete": 38,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e3d46ff7d115cadc2962e450d2f536637ddb3201...c8847343bc59067159fb15241aea0a0add04ea76",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "285b3c04a6266f253d79aa1bcb19997dbd3a6bd9"
+      }
+    },
+    {
+      "number": 131,
+      "title": "Fast-path empty and single-stage byte transformations",
+      "branch": "review/131-fast-path-empty-and-single-stage-byte-transformation",
+      "head": "c29d2a39db23ac714b6bd9e40f404e6640ae378d",
+      "base": "c8847343bc59067159fb15241aea0a0add04ea76",
+      "source": "9496ebbe5dea13f48788f31b16d7920b3ce52b41",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/transformations/normalize.rs",
+        "src/transformations/pipeline.rs"
+      ],
+      "add": 77,
+      "delete": 35,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c8847343bc59067159fb15241aea0a0add04ea76...c29d2a39db23ac714b6bd9e40f404e6640ae378d",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e71233a422f064b92d854d2280bafbc58d2db9c9"
+      }
+    },
+    {
+      "number": 132,
+      "title": "Resolve rule targets in place and skip fully removed collections",
+      "branch": "review/132-resolve-rule-targets-in-place-and-skip-fully-removed",
+      "head": "1693c5315dcbe4b98d6c8de24e722d3b6a9ff346",
+      "base": "c29d2a39db23ac714b6bd9e40f404e6640ae378d",
+      "source": "92a6e0bd0de0fd9ba4f803c50b419dc6b75acfe1",
+      "files": [
+        "src/engine/control.rs",
+        "src/engine/transaction.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 101,
+      "delete": 36,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/c29d2a39db23ac714b6bd9e40f404e6640ae378d...1693c5315dcbe4b98d6c8de24e722d3b6a9ff346",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "4bd4882b01a48f952b3c5f54b93d6d9a64047672"
+      }
+    },
+    {
+      "number": 133,
+      "title": "Use ordered scalar storage for TX and reuse compiled match names",
+      "branch": "review/133-use-ordered-scalar-storage-for-tx-and-reuse-compiled",
+      "head": "82e60b4ff68846f2860ae5d92ab2eb7549332109",
+      "base": "1693c5315dcbe4b98d6c8de24e722d3b6a9ff346",
+      "source": "19ad98c510a21d2bfaed4036442edc64d66e5f4b",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/mod.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/selectors.rs",
+        "src/variables/tx.rs",
+        "src/variables/value.rs",
+        "tests/setvar_operation.rs"
+      ],
+      "add": 179,
+      "delete": 68,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/1693c5315dcbe4b98d6c8de24e722d3b6a9ff346...82e60b4ff68846f2860ae5d92ab2eb7549332109",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "086f3ff0383f2d4b79410a3f70d58b724e34014d"
+      }
+    },
+    {
+      "number": 134,
+      "title": "Publish rule IDs from immutable phase positions on first access",
+      "branch": "review/134-publish-rule-ids-from-immutable-phase-positions-on-f",
+      "head": "79ab133081bf7340271d27e0ebe30e2546c4c453",
+      "base": "82e60b4ff68846f2860ae5d92ab2eb7549332109",
+      "source": "ea502fa80bb124f47cfc37fd9a1a6efd3ecad5d5",
+      "files": [
+        "src/engine/match_log.rs",
+        "src/engine/phase.rs",
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "tests/chain_matched_reporting.rs"
+      ],
+      "add": 150,
+      "delete": 48,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/82e60b4ff68846f2860ae5d92ab2eb7549332109...79ab133081bf7340271d27e0ebe30e2546c4c453",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "5d9b5fa796d2e2c2dbd597551895e39500408074"
+      }
+    },
+    {
+      "number": 135,
+      "title": "Precompute ordered targets for phase-stable request collections",
+      "branch": "review/135-precompute-ordered-targets-for-phase-stable-request",
+      "head": "977c21ee23d6522b806e96235569c5f2ad29f27a",
+      "base": "79ab133081bf7340271d27e0ebe30e2546c4c453",
+      "source": "8b22f945e5ad35b14f56f06b3c68fc248b5fcb34",
+      "files": [
+        "src/engine/mod.rs",
+        "src/engine/ruleset.rs",
+        "src/engine/target_indices.rs",
+        "src/engine/transaction.rs"
+      ],
+      "add": 138,
+      "delete": 27,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/79ab133081bf7340271d27e0ebe30e2546c4c453...977c21ee23d6522b806e96235569c5f2ad29f27a",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "de19bd4c0c38835f1291e7b6e8795f3f05d1e731"
+      }
+    },
+    {
+      "number": 136,
+      "title": "Reuse the input for static numeric matches",
+      "branch": "review/136-reuse-the-input-for-static-numeric-matches",
+      "head": "2d1133a11ad619d2dc7e126e4ed2ab60ed7e7a2d",
+      "base": "977c21ee23d6522b806e96235569c5f2ad29f27a",
+      "source": "4d9cb21cb1297e65927603c58b326b4ce8cc4b18",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "src/operators/comparison.rs",
+        "src/operators/mod.rs",
+        "src/operators/traits.rs",
+        "tests/numeric_compatibility.rs"
+      ],
+      "add": 147,
+      "delete": 19,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/977c21ee23d6522b806e96235569c5f2ad29f27a...2d1133a11ad619d2dc7e126e4ed2ab60ed7e7a2d",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "7abdb08d4c716255cc0710245e271d8876571c16"
+      }
+    },
+    {
+      "number": 137,
+      "title": "Keep audit name preparation on the compiled rule path",
+      "branch": "review/137-keep-audit-name-preparation-on-the-compiled-rule-pat",
+      "head": "e63cdce06b3b7796b02504e65d8a8a93bd307cc3",
+      "base": "2d1133a11ad619d2dc7e126e4ed2ab60ed7e7a2d",
+      "source": "97b5dfa0db22638978d79eaa212d04fc61c3c59e",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/selectors.rs"
+      ],
+      "add": 16,
+      "delete": 13,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2d1133a11ad619d2dc7e126e4ed2ab60ed7e7a2d...e63cdce06b3b7796b02504e65d8a8a93bd307cc3",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "6b206ba937ac7063946b49920815c0a3d326b874"
+      }
+    },
+    {
+      "number": 138,
+      "title": "Borrow a singleton matched rule ID from the compiled ruleset",
+      "branch": "review/138-borrow-a-singleton-matched-rule-id-from-the-compiled",
+      "head": "a0bcc5d71e63a10c1267993bb3c0b48df6a5e015",
+      "base": "e63cdce06b3b7796b02504e65d8a8a93bd307cc3",
+      "source": "20ee8581ff172f6d359223d5373afe581b272b63",
+      "files": [
+        "src/engine/match_log.rs",
+        "src/engine/transaction.rs"
+      ],
+      "add": 37,
+      "delete": 6,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/e63cdce06b3b7796b02504e65d8a8a93bd307cc3...a0bcc5d71e63a10c1267993bb3c0b48df6a5e015",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "83f5da27da7acc4101083ea1f444b4ed1bd3b2df"
+      }
+    },
+    {
+      "number": 139,
+      "title": "Render binary audit values in blocks using standard ASCII escapes",
+      "branch": "review/139-render-binary-audit-values-in-blocks-using-standard",
+      "head": "64f382b342277e8417e1de4f14313573f2c19c51",
+      "base": "a0bcc5d71e63a10c1267993bb3c0b48df6a5e015",
+      "source": "a6b7a42d2770d1ac8ed754231c23091699fc0a9b",
+      "files": [
+        "src/variables/value.rs"
+      ],
+      "add": 57,
+      "delete": 6,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/a0bcc5d71e63a10c1267993bb3c0b48df6a5e015...64f382b342277e8417e1de4f14313573f2c19c51",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "8963b55fc6b6d17c567317ca4a14cf18fea8b562"
+      }
+    },
+    {
+      "number": 140,
+      "title": "Record the first matching stage directly during static searches",
+      "branch": "review/140-record-the-first-matching-stage-directly-during-stat",
+      "head": "bff794d0ec2747360876632341eb33d13f23e9cb",
+      "base": "64f382b342277e8417e1de4f14313573f2c19c51",
+      "source": "f0437e57997cc6afcfcf340b014a2f3f97d7df84",
+      "files": [
+        "src/engine/transaction.rs",
+        "src/operators/pattern.rs",
+        "src/operators/traits.rs",
+        "src/transformations/pipeline.rs",
+        "tests/byte_operators.rs"
+      ],
+      "add": 130,
+      "delete": 49,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/64f382b342277e8417e1de4f14313573f2c19c51...bff794d0ec2747360876632341eb33d13f23e9cb",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "cf57331391fe1c43962d98c354c884b5b01418cd"
+      }
+    },
+    {
+      "number": 141,
+      "title": "Compile collection exclusions and filter each canonical bucket once",
+      "branch": "review/141-compile-collection-exclusions-and-filter-each-canoni",
+      "head": "68de3bcae95c1cc2557e25a9195296860aab85fc",
+      "base": "bff794d0ec2747360876632341eb33d13f23e9cb",
+      "source": "31b796f35ba3a10a4b67df4c0d25a20fb74d05f3",
+      "files": [
+        "src/transformations/bytes.rs",
+        "src/variables/collection.rs",
+        "src/variables/request.rs",
+        "src/variables/resolver_bytes.rs",
+        "src/variables/selectors.rs",
+        "tests/collection_selection.rs"
+      ],
+      "add": 118,
+      "delete": 50,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/bff794d0ec2747360876632341eb33d13f23e9cb...68de3bcae95c1cc2557e25a9195296860aab85fc",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "8511eb2ffa5ee3387e298d179296493be0d3feb5"
+      }
+    },
+    {
+      "number": 142,
+      "title": "Share large text buffers across transaction snapshots",
+      "branch": "review/142-share-large-text-buffers-across-transaction-snapshot",
+      "head": "15ff8d89e9a802ec92e8881f3056c4fb9b5336d3",
+      "base": "68de3bcae95c1cc2557e25a9195296860aab85fc",
+      "source": "b8bc7e56c13d1a19e8e02818b6e4ee30272bd64f",
+      "files": [
+        "src/variables/value.rs"
+      ],
+      "add": 67,
+      "delete": 18,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/68de3bcae95c1cc2557e25a9195296860aab85fc...15ff8d89e9a802ec92e8881f3056c4fb9b5336d3",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "e4da01461b767e75b99fdcc8380d47c23fd8f2cf"
+      }
+    },
+    {
+      "number": 143,
+      "title": "Prepare literal TX assignments and ordered setvar actions at load time",
+      "branch": "review/143-prepare-literal-tx-assignments-and-ordered-setvar-ac",
+      "head": "f23cc79af605c4822b67ec1d902dc1c5d0009888",
+      "base": "15ff8d89e9a802ec92e8881f3056c4fb9b5336d3",
+      "source": "a49f41167a2c25916b6b22bf20f24af1ef4ff72c",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "src/variables/tx.rs"
+      ],
+      "add": 84,
+      "delete": 36,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/15ff8d89e9a802ec92e8881f3056c4fb9b5336d3...f23cc79af605c4822b67ec1d902dc1c5d0009888",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "857e01ca8636bb8e5376c3807ad7e79511ff484d"
+      }
+    },
+    {
+      "number": 144,
+      "title": "Merge active rule ID intervals for logarithmic removal checks",
+      "branch": "review/144-merge-active-rule-id-intervals-for-logarithmic-remov",
+      "head": "0802a720bb42786814e15ccc5c4c5facdb36601e",
+      "base": "f23cc79af605c4822b67ec1d902dc1c5d0009888",
+      "source": "f127cab05702c879562048e6dc18de520ba980f9",
+      "files": [
+        "src/engine/control.rs"
+      ],
+      "add": 42,
+      "delete": 15,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/f23cc79af605c4822b67ec1d902dc1c5d0009888...0802a720bb42786814e15ccc5c4c5facdb36601e",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "dbe794ee6176dc374a33662e6841c9d000dcba05"
+      }
+    },
+    {
+      "number": 145,
+      "title": "Verify TX key spelling and binary dynamic assignments in audit records",
+      "branch": "review/145-verify-tx-key-spelling-and-binary-dynamic-assignment",
+      "head": "2ce9b94c109c23c7970ecf9fcfa0ea3fecd3cc92",
+      "base": "0802a720bb42786814e15ccc5c4c5facdb36601e",
+      "source": "0d6c3b9d547c9c96ed53fde7a633c9d66408eea6",
+      "files": [
+        "src/engine/ruleset.rs",
+        "tests/setvar_effects.rs"
+      ],
+      "add": 22,
+      "delete": 5,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/0802a720bb42786814e15ccc5c4c5facdb36601e...2ce9b94c109c23c7970ecf9fcfa0ea3fecd3cc92",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "f4e030277ef370f4b8ac49d4b0f5a1a0a5d7f9c5"
+      }
+    },
+    {
+      "number": 146,
+      "title": "Insert new removal ranges into the active interval union",
+      "branch": "review/146-insert-new-removal-ranges-into-the-active-interval-u",
+      "head": "95c8f5cbc88fb315570d5ce3ecbafb4b9159506c",
+      "base": "2ce9b94c109c23c7970ecf9fcfa0ea3fecd3cc92",
+      "source": "90d85d61186a5c413252b70d0c7f058960947089",
+      "files": [
+        "src/engine/control.rs"
+      ],
+      "add": 23,
+      "delete": 12,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/2ce9b94c109c23c7970ecf9fcfa0ea3fecd3cc92...95c8f5cbc88fb315570d5ce3ecbafb4b9159506c",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "4552be2b7b1d968d423844604f939d242b14c4b3"
+      }
+    },
+    {
+      "number": 147,
+      "title": "Vectorize checks for printable blocks in binary audit values",
+      "branch": "review/147-vectorize-checks-for-printable-blocks-in-binary-audi",
+      "head": "cde18ce2ffcbee7ed353d44c8f253eb53194e45a",
+      "base": "95c8f5cbc88fb315570d5ce3ecbafb4b9159506c",
+      "source": "ac8bb84069fcc3aa01c7eb48ffa5259ea587f7fb",
+      "files": [
+        "src/variables/value.rs"
+      ],
+      "add": 27,
+      "delete": 4,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/95c8f5cbc88fb315570d5ce3ecbafb4b9159506c...cde18ce2ffcbee7ed353d44c8f253eb53194e45a",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "44042e3323637717d2663ab0d1c1c610c5ea9553"
+      }
+    },
+    {
+      "number": 148,
+      "title": "Avoid generic evaluation for absent targets and literal numeric TX rules",
+      "branch": "review/148-avoid-generic-evaluation-for-absent-targets-and-lite",
+      "head": "b6162d7e9b66f0e1b4b87706510c470561e67ca3",
+      "base": "cde18ce2ffcbee7ed353d44c8f253eb53194e45a",
+      "source": "a22d582f1d172bbaa9a47467c7bdb8d4e440b725",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/target_indices.rs",
+        "src/engine/transaction.rs",
+        "src/variables/tx.rs",
+        "tests/numeric_compatibility.rs",
+        "tests/rule_flow_identity.rs"
+      ],
+      "add": 160,
+      "delete": 10,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/cde18ce2ffcbee7ed353d44c8f253eb53194e45a...b6162d7e9b66f0e1b4b87706510c470561e67ca3",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "41c930dac9540b7136cdc9be3ebd0cb93097adc9"
+      }
+    },
+    {
+      "number": 149,
+      "title": "Scan request target delimiters and copy plain path spans directly",
+      "branch": "review/149-scan-request-target-delimiters-and-copy-plain-path-s",
+      "head": "d7f7ed60a070bab3139b229475099786cb00e23a",
+      "base": "b6162d7e9b66f0e1b4b87706510c470561e67ca3",
+      "source": "50ea35ea98133291da16e723810eaad23a8ce004",
+      "files": [
+        "src/variables/request.rs",
+        "tests/request_filename_decoding.rs"
+      ],
+      "add": 62,
+      "delete": 35,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/b6162d7e9b66f0e1b4b87706510c470561e67ca3...d7f7ed60a070bab3139b229475099786cb00e23a",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "2288291c746d15a24ca27f676baee0fe08e971b8"
+      }
+    },
+    {
+      "number": 150,
+      "title": "Select structured body processors from the borrowed media type",
+      "branch": "review/150-select-structured-body-processors-from-the-borrowed",
+      "head": "acb111d7c73f602416eb7bab498a6249ba2a5187",
+      "base": "d7f7ed60a070bab3139b229475099786cb00e23a",
+      "source": "7568b060db007ed9e4b5db3e318f82a37c522ad7",
+      "files": [
+        "src/engine/transaction.rs"
+      ],
+      "add": 24,
+      "delete": 40,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d7f7ed60a070bab3139b229475099786cb00e23a...acb111d7c73f602416eb7bab498a6249ba2a5187",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "eb621646a47209e76eea9dd69f95d7cbb1117f60"
+      }
+    },
+    {
+      "number": 151,
+      "title": "Track only the active chain starter during phase evaluation",
+      "branch": "review/151-track-only-the-active-chain-starter-during-phase-eva",
+      "head": "d03ecc366215e41bc17078b80de5af3caa146f0f",
+      "base": "acb111d7c73f602416eb7bab498a6249ba2a5187",
+      "source": "95f89afa0dab8eb337aa599ace47d553f4a45c47",
+      "files": [
+        "src/engine/transaction.rs"
+      ],
+      "add": 9,
+      "delete": 35,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/acb111d7c73f602416eb7bab498a6249ba2a5187...d03ecc366215e41bc17078b80de5af3caa146f0f",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "32ff9e931b7bfa4f907030797f2c9191a04fa87b"
+      }
+    },
+    {
+      "number": 152,
+      "title": "Render singly consumed binary audit text into its public buffer",
+      "branch": "review/152-render-singly-consumed-binary-audit-text-into-its-pu",
+      "head": "653a95719a84bdfa69612fcbbfaea15eff6549f4",
+      "base": "d03ecc366215e41bc17078b80de5af3caa146f0f",
+      "source": "24e03fbe8225e62b5b3869840070de06f361b9e4",
+      "files": [
+        "src/variables/value.rs"
+      ],
+      "add": 35,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/d03ecc366215e41bc17078b80de5af3caa146f0f...653a95719a84bdfa69612fcbbfaea15eff6549f4",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "6e6801d6c9a31c03530c4b915bbc7a231fc0273d"
+      }
+    },
+    {
+      "number": 153,
+      "title": "Reuse verified TX positions for frequent numeric comparisons",
+      "branch": "review/153-reuse-verified-tx-positions-for-frequent-numeric-com",
+      "head": "7bb10efa02bad10faf0af3b7f16ff7d6371f731b",
+      "base": "653a95719a84bdfa69612fcbbfaea15eff6549f4",
+      "source": "3594fa0e54d275449a59e165765438e34bdd0f15",
+      "files": [
+        "src/engine/ruleset.rs",
+        "src/engine/transaction.rs",
+        "src/variables/tx.rs",
+        "tests/numeric_compatibility.rs"
+      ],
+      "add": 89,
+      "delete": 1,
+      "compare": "https://github.com/phihos/zentinel-modsec/compare/653a95719a84bdfa69612fcbbfaea15eff6549f4...7bb10efa02bad10faf0af3b7f16ff7d6371f731b",
+      "upstream_pr": null,
+      "notes": [],
+      "verification": {
+        "command": [
+          "cargo",
+          "check",
+          "--offline",
+          "--all-targets",
+          "--features",
+          "libinjection-ffi"
+        ],
+        "exit": 0,
+        "tree": "0ccc29fc6a113eb9241bd59f89221db5068bc115"
+      }
+    }
+  ]
+}
