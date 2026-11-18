@@ -1048,14 +1048,22 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && !chain_state.in_chain;
-            if let Some(outcome) = self.evaluate_rule(
-                rule,
-                &dispatch[idx],
-                link_rule_id,
-                tag_actions,
-                standalone,
-                available,
-            )? {
+            let outcome = if dispatch[idx]
+                .targets
+                .may_match(available, rule.variables.len())
+            {
+                self.evaluate_rule(
+                    rule,
+                    &dispatch[idx],
+                    link_rule_id,
+                    tag_actions,
+                    standalone,
+                    available,
+                )?
+            } else {
+                None
+            };
+            if let Some(outcome) = outcome {
                 let RuleOutcome {
                     first_data,
                     first_message,
@@ -1430,6 +1438,39 @@ impl Transaction {
             Ok(())
         };
 
+        if dispatch.single_tx_numeric
+            && tag_actions.is_empty()
+            && !self.controls.has_target_removals(logical_id)
+        {
+            let selection = &dispatch.selections[0];
+            let crate::variables::MemberSelector::Key(key) = &selection.member else {
+                unreachable!("compiled literal TX key")
+            };
+            let value = match (rule.variables[0].count_mode, self.tx.canonical_value(key)) {
+                (true, Some(_)) => b"1".as_slice(),
+                (true, None) => b"0".as_slice(),
+                (false, Some(value)) => value,
+                (false, None) => return Ok(outcome),
+            };
+            let matched = dispatch
+                .numeric
+                .expect("compiled numeric TX predicate")
+                .matches(value);
+            if matched != rule.operator_negated {
+                let value = ByteValue::from(value);
+                let result = ByteOperatorResult {
+                    matched,
+                    ..Default::default()
+                };
+                evaluate(
+                    self,
+                    selection.match_name.as_deref(),
+                    value.as_bytes(),
+                    Some((&value, result)),
+                )?;
+            }
+            return Ok(outcome);
+        }
         if rule.variables.is_empty() {
             // SecAction has no target and matches exactly once.
             evaluate(self, None, b"", None)?;
