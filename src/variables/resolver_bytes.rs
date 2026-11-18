@@ -58,7 +58,9 @@ impl<'a> VariableResolver<'a> {
                 let (selected, regex) = match &selection.member {
                     MemberSelector::All => (None, None),
                     MemberSelector::Key(key) => (Some(key.as_ref()), None),
-                    MemberSelector::Regex(Some(regex)) => (None, Some(regex)),
+                    MemberSelector::Regex(Some(regex)) | MemberSelector::TxAsciiPrefix(regex) => {
+                        (None, Some(regex))
+                    }
                     MemberSelector::Regex(None) => return,
                 };
                 map.visit_filtered(
