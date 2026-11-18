@@ -8,7 +8,7 @@ use std::sync::{Arc, LazyLock, Mutex, Weak};
 /// Count variables retain the selector as their match key, including regex
 /// delimiters. The reference preserves argument selector case and folds the
 /// selector of other collections.
-pub(crate) fn count_name(spec: &VariableSpec) -> ByteValue {
+fn count_name(spec: &VariableSpec) -> ByteValue {
     let prefix = spec.name.seclang_name();
     let key = match &spec.selection {
         Some(Selection::Key(key)) => std::borrow::Cow::Borrowed(key.as_bytes()),
@@ -54,6 +54,9 @@ pub(crate) fn compile_selector(
 /// Selection data shared by requests after target updates have been applied.
 pub(crate) struct TargetSelection {
     pub member: MemberSelector,
+    /// Fixed audit name for count targets and literal TX keys. Other named
+    /// collections report the observed spelling of each member.
+    pub match_name: Option<Box<ByteValue>>,
     exclusions: Box<[(Box<str>, MemberSelector)]>,
 }
 
@@ -119,7 +122,18 @@ impl TargetSelection {
                 (collection.into(), member)
             })
             .collect();
-        Self { member, exclusions }
+        let match_name = if spec.count_mode {
+            Some(Box::new(count_name(spec)))
+        } else if let (VariableName::Tx, MemberSelector::Key(key)) = (spec.name, &member) {
+            Some(Box::new(qualified_name("TX", Some(key))))
+        } else {
+            None
+        };
+        Self {
+            member,
+            match_name,
+            exclusions,
+        }
     }
 
     pub fn excludes(&self, prefix: &str, key: Option<&[u8]>) -> bool {

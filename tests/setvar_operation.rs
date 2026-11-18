@@ -134,3 +134,29 @@ fn capture_clears_the_slots_the_match_did_not_fill() {
     assert_eq!(tx_var(&tx, "one"), "a");
     assert_eq!(tx_var(&tx, "two"), "");
 }
+
+#[test]
+fn captures_clear_numeric_keys_written_through_the_public_tx_collection() {
+    use zentinel_modsec::variables::{ByteCollection, MutableCollection};
+
+    let engine = ModSecurity::from_string(
+        r#"SecRule REQUEST_METHOD "@rx (GET)" "id:1,phase:1,pass,capture""#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.tx_mut().set("9".into(), "old".into());
+    tx.tx_mut().increment_bytes(b"7", 1);
+    tx.tx_mut().set_bytes(&b"01"[..], "keep");
+    tx.tx_mut().set_bytes(&b"7x"[..], "also keep");
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(
+        tx.tx().all_bytes(),
+        [
+            (&b"01"[..], &b"keep"[..]),
+            (b"7x", b"also keep"),
+            (b"0", b"GET"),
+            (b"1", b"GET")
+        ]
+    );
+}
