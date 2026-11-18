@@ -256,8 +256,11 @@ impl Transaction {
     /// Create a new transaction.
     pub fn new(ruleset: Arc<CompiledRuleset>, default_status: u16) -> Self {
         Self {
+            request: RequestData::with_limits(
+                ruleset.body_config().argument_limit,
+                ruleset.body_config().request_json_depth_limit,
+            ),
             ruleset,
-            request: RequestData::new(),
             request_line: OnceLock::new(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
@@ -1586,6 +1589,9 @@ impl Transaction {
 
     fn macro_value_bytes<'a>(&'a self, name: &'a str) -> &'a [u8] {
         let Some((collection, key)) = name.split_once('.') else {
+            if name.eq_ignore_ascii_case("arguments_limit_reached") {
+                return self.request.argument_limit_flag();
+            }
             if name.eq_ignore_ascii_case("matched_var") {
                 return self
                     .matched_vars

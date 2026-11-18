@@ -193,6 +193,19 @@ impl Parser {
             "secruleupdateactionbyid" => self.parse_action_update(lexer),
             "secrequestbodyaccess" => self.parse_boolean_directive(lexer, "SecRequestBodyAccess"),
             "secresponsebodyaccess" => self.parse_boolean_directive(lexer, "SecResponseBodyAccess"),
+            "secargumentslimit" => {
+                self.parse_positive_limit(lexer, "SecArgumentsLimit", Directive::SecArgumentsLimit)
+            }
+            "secrequestbodyjsondepthlimit" => self.parse_positive_limit(
+                lexer,
+                "SecRequestBodyJsonDepthLimit",
+                Directive::SecRequestBodyJsonDepthLimit,
+            ),
+            "secresponsebodyjsondepthlimit" => self.parse_positive_limit(
+                lexer,
+                "SecResponseBodyJsonDepthLimit",
+                Directive::SecResponseBodyJsonDepthLimit,
+            ),
             "secrequestbodylimit" => self.parse_body_limit(lexer, true),
             "secresponsebodylimit" => self.parse_body_limit(lexer, false),
             "secrequestbodylimitaction" => self.parse_body_limit_action(lexer, true),
@@ -535,6 +548,27 @@ impl Parser {
     fn peek_more_arguments(&self, lexer: &mut Lexer) -> bool {
         lexer.skip_whitespace();
         !matches!(lexer.peek(), None | Some('\n') | Some('\r') | Some('#'))
+    }
+
+    fn parse_positive_limit(
+        &mut self,
+        lexer: &mut Lexer,
+        name: &str,
+        directive: fn(usize) -> Directive,
+    ) -> Result<Directive> {
+        let value = self.expect_argument(lexer, name)?;
+        value
+            .parse::<isize>()
+            .ok()
+            .filter(|limit| *limit > 0)
+            .filter(|_| !self.peek_more_arguments(lexer))
+            .map(|limit| directive(limit as usize))
+            .ok_or_else(|| {
+                Error::parse(
+                    format!("{name} requires a positive integer"),
+                    self.location.to_string(),
+                )
+            })
     }
 
     /// Parse a bounded byte count for request or response acquisition.

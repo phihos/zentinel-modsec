@@ -9,6 +9,12 @@ pub const MAX_BODY_LIMIT: usize = 1_073_741_824;
 /// Immutable body policy compiled from SecLang directives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BodyConfig {
+    /// Maximum parsed arguments per query, URL-encoded body, or JSON document.
+    pub argument_limit: usize,
+    /// Maximum JSON container nesting for requests.
+    pub request_json_depth_limit: usize,
+    /// Maximum JSON container nesting for responses.
+    pub response_json_depth_limit: usize,
     /// Whether request bytes may be acquired for inspection.
     pub request_access: bool,
     /// Maximum retained request prefix length in bytes.
@@ -28,6 +34,9 @@ pub struct BodyConfig {
 impl Default for BodyConfig {
     fn default() -> Self {
         Self {
+            argument_limit: crate::variables::DEFAULT_ARGUMENT_LIMIT,
+            request_json_depth_limit: crate::variables::json::DEFAULT_DEPTH_LIMIT,
+            response_json_depth_limit: crate::variables::json::DEFAULT_DEPTH_LIMIT,
             request_access: false,
             request_limit: 134_217_728,
             request_limit_action: BodyLimitAction::Reject,

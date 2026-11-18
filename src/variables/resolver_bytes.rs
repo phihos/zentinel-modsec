@@ -250,6 +250,9 @@ impl<'a> VariableResolver<'a> {
                 "REQUEST_BODY_LENGTH",
                 request.request_body_length_variable().as_bytes(),
             ),
+            ArgumentsLimitReached => {
+                scalar("ARGUMENTS_LIMIT_REACHED", request.argument_limit_flag())
+            }
             InboundDataError => scalar(
                 "INBOUND_DATA_ERROR",
                 if request.inbound_data_error {

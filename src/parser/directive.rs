@@ -43,6 +43,12 @@ pub enum Directive {
     SecRequestBodyAccess(bool),
     /// SecResponseBodyAccess directive.
     SecResponseBodyAccess(bool),
+    /// Maximum number of parsed arguments in a collection.
+    SecArgumentsLimit(usize),
+    /// Maximum nesting of request JSON containers.
+    SecRequestBodyJsonDepthLimit(usize),
+    /// Maximum nesting of response JSON containers.
+    SecResponseBodyJsonDepthLimit(usize),
     /// SecRequestBodyLimit directive.
     SecRequestBodyLimit(usize),
     /// SecResponseBodyLimit directive.
