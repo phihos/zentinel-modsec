@@ -3,14 +3,14 @@
 use crate::error::{Error, Result};
 use crate::operators::{compile_operator, Operator};
 use crate::parser::{
-    Action, Directive, DisruptiveAction, FlowAction, MetadataAction, OperatorName, OperatorSpec,
-    Parser, RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection, UpdateTargetById,
-    VariableSpec,
+    Action, DataAction, Directive, DisruptiveAction, FlowAction, MetadataAction, OperatorName,
+    OperatorSpec, Parser, RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection,
+    UpdateTargetById, VariableSpec,
 };
 use crate::transformations::TransformationPipeline;
 
 use super::phase::Phase;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// A parsed SecRule ready for execution.
@@ -109,10 +109,94 @@ impl Default for Rules {
     }
 }
 
+/// Execution metadata for a finalized rule. The public parsed rule and its ordered
+/// actions remain the source for captures, control arguments and audit messages.
+#[derive(Default)]
+pub(super) struct RuleDispatch {
+    pub selections: Box<[crate::variables::TargetSelection]>,
+    pub dynamic: bool,
+    pub capture: bool,
+    pub multi_match: bool,
+    /// Start of the suffix containing every setvar and control, or the action count.
+    pub effects_from: usize,
+    pub removable_by_tag: bool,
+    pub target_removable_by_tag: bool,
+    pub flow: CompiledFlow,
+    /// Last effective disruptive action, or the action count for pass.
+    disruptive: usize,
+}
+
+#[derive(Default, Clone, Copy)]
+pub(super) enum CompiledFlow {
+    #[default]
+    Next,
+    Chain,
+    Skip(u32),
+    SkipAfter(usize),
+}
+
+impl RuleDispatch {
+    fn compile(
+        rule: &CompiledRule,
+        rules: &Rules,
+        programs: &crate::variables::SelectorPrograms,
+        removed_tags: &HashSet<&str>,
+        target_tags: &HashSet<&str>,
+    ) -> Self {
+        let mut dispatch = Self {
+            selections: rule
+                .variables
+                .iter()
+                .map(|spec| crate::variables::TargetSelection::compile(spec, programs))
+                .collect(),
+            effects_from: rule.actions.len(),
+            disruptive: rule.actions.len(),
+            dynamic: rule.operator_spec.argument.contains("%{")
+                && !rule.operator_spec.name.uses_data_file(),
+            ..Self::default()
+        };
+        for (index, action) in rule.actions.iter().enumerate() {
+            match action {
+                Action::Data(DataAction::Capture) => dispatch.capture = true,
+                Action::Data(DataAction::SetVar(_)) | Action::Control(_) => {
+                    dispatch.effects_from = dispatch.effects_from.min(index);
+                }
+                Action::Metadata(MetadataAction::Tag(tag)) => {
+                    dispatch.removable_by_tag |= removed_tags.contains(tag.as_str());
+                    dispatch.target_removable_by_tag |= target_tags.contains(tag.as_str());
+                }
+                Action::Flow(FlowAction::MultiMatch) => dispatch.multi_match = true,
+                Action::Flow(FlowAction::Chain) => dispatch.flow = CompiledFlow::Chain,
+                Action::Flow(FlowAction::Skip(n)) => dispatch.flow = CompiledFlow::Skip(*n),
+                Action::Flow(FlowAction::SkipAfter(marker)) => {
+                    let destination = rules
+                        .marker(marker, rule.phase)
+                        .unwrap_or(rules.for_phase(rule.phase).len());
+                    dispatch.flow = CompiledFlow::SkipAfter(destination);
+                }
+                Action::Disruptive(DisruptiveAction::Pass) => {
+                    dispatch.disruptive = rule.actions.len()
+                }
+                Action::Disruptive(_) => dispatch.disruptive = index,
+                _ => {}
+            }
+        }
+        dispatch
+    }
+
+    pub(super) fn disruptive<'a>(&self, rule: &'a CompiledRule) -> Option<&'a DisruptiveAction> {
+        match rule.actions.get(self.disruptive) {
+            Some(Action::Disruptive(action)) => Some(action),
+            _ => None,
+        }
+    }
+}
+
 /// A fully compiled ruleset ready for transaction processing.
 pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
+    dispatch: [Vec<RuleDispatch>; 5],
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
     body_config: super::body::BodyConfig,
@@ -137,6 +221,7 @@ impl CompiledRuleset {
     pub fn new() -> Self {
         Self {
             rules: Rules::new(),
+            dispatch: Default::default(),
             selectors: Default::default(),
             controls: Default::default(),
             engine_mode: RuleEngineMode::default(),
@@ -358,6 +443,36 @@ impl CompiledRuleset {
                 }
             }
         }
+        // All updates, markers and possible transaction controls are known now.
+        let mut removed_tags = HashSet::new();
+        let mut target_tags = HashSet::new();
+        for ctl in ruleset.controls.values() {
+            match ctl {
+                super::control::CtlDirective::RuleRemoveByTag(tag) => {
+                    removed_tags.insert(tag.as_str());
+                }
+                super::control::CtlDirective::RuleRemoveTargetByTag { tag, .. } => {
+                    target_tags.insert(tag.as_str());
+                }
+                _ => {}
+            }
+        }
+        ruleset.dispatch = Phase::ALL.map(|phase| {
+            ruleset
+                .rules
+                .for_phase(phase)
+                .iter()
+                .map(|rule| {
+                    RuleDispatch::compile(
+                        rule,
+                        &ruleset.rules,
+                        &ruleset.selectors,
+                        &removed_tags,
+                        &target_tags,
+                    )
+                })
+                .collect()
+        });
         ruleset.body_config.validate()?;
         if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
             ruleset.body_config.request_limit_action =
@@ -377,6 +492,10 @@ impl CompiledRuleset {
     /// Get rules for a phase.
     pub fn rules_for_phase(&self, phase: Phase) -> &[CompiledRule] {
         self.rules.for_phase(phase)
+    }
+
+    pub(super) fn dispatch_for_phase(&self, phase: Phase) -> &[RuleDispatch] {
+        &self.dispatch[usize::from(phase.number() - 1)]
     }
 
     /// Get total rule count.

@@ -150,3 +150,49 @@ SecRule TX:count "@eq 2" "id:2,phase:1,pass"
         ["1", "2"]
     );
 }
+
+#[test]
+fn compiled_tag_dispatch_still_depends_on_this_transactions_controls() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule REQUEST_METHOD "@streq POST" "id:1,phase:1,pass,ctl:ruleRemoveByTag=method-check,ctl:ruleRemoveTargetByTag=report;ARGS_GET:color"
+SecRule REQUEST_METHOD "@rx ." "id:2,phase:2,pass,tag:method-check"
+SecRule REQUEST_METHOD "@rx ." "id:3,phase:2,pass,tag:report,chain"
+SecRule ARGS_GET:color "@streq green" "t:none"
+SecRule ARGS_GET:color "@streq green" "id:4,phase:2,pass,tag:unrelated"
+"#,
+    )
+    .unwrap();
+    for (method, expected) in [
+        ("GET", vec!["2", "3", "4"]),
+        ("POST", vec!["1", "4"]),
+        ("GET", vec!["2", "3", "4"]),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/?color=green", method, "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.matched_rules(), expected, "{method}");
+    }
+}
+
+#[test]
+fn empty_collections_preserve_counts_negation_and_chain_effects() {
+    let engine = ModSecurity::from_string(
+        r#"
+SecRule ARGS "!@streq unused" "id:1,phase:1,pass"
+SecRule &ARGS "@eq 0" "id:2,phase:1,pass,setvar:tx.note=blue"
+SecRule TX:note "@streq blue" "id:3,phase:1,pass,chain,setvar:tx.collected=yes"
+SecRule REQUEST_COOKIES "!@streq unused" "t:none"
+SecRule ARGS|TX:collected "@streq yes" "id:4,phase:1,pass"
+SecRule REQUEST_COOKIES|ARGS:present "@streq " "id:5,phase:1,pass"
+"#,
+    )
+    .unwrap();
+    for (uri, expected) in [("/", vec!["2", "4"]), ("/?present=", vec!["1", "5"])] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri(uri, "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.matched_rules(), expected);
+    }
+}

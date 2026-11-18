@@ -57,3 +57,28 @@ fn crs_style_method_enforcement_allows_get() {
          SecRule REQUEST_METHOD \"!@within %{tx.allowed_methods}\" \"id:911100,phase:1,deny\""
     ));
 }
+
+#[test]
+fn counted_duplicate_names_preserve_multimatch_captures_and_dynamic_operands() {
+    use zentinel_modsec::variables::Collection;
+
+    let engine = ModSecurity::from_string(
+        r#"SecRuleEngine On
+SecRule &REQUEST_HEADERS:X-Report "@rx ^(.+)$" "id:10,phase:1,pass,capture,multiMatch,t:hexEncode,setvar:tx.visits=+1"
+SecRule &REQUEST_HEADERS:X-Report "@streq %{tx.0}" "id:11,phase:1,pass,t:hexEncode"
+"#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    for _ in 0..12 {
+        tx.add_request_header("X-Report", "page").unwrap();
+    }
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["10", "11"]);
+    assert_eq!(tx.tx().get("0"), Some(vec!["3132"]));
+    assert_eq!(tx.tx().get("1"), Some(vec!["3132"]));
+    assert_eq!(tx.tx().get("visits"), Some(vec!["2"]));
+    assert_eq!(tx.matched_data()[0].variable, "REQUEST_HEADERS:x-report");
+    assert_eq!(tx.matched_data()[0].value_bytes, b"12");
+}

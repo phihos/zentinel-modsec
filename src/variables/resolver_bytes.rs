@@ -1,6 +1,8 @@
 //! Lossless resolution used by transaction evaluation.
 use super::*;
-use crate::variables::{folded_key, ByteValue, HashMapCollection, SelectorPrograms};
+use crate::variables::{
+    folded_key, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms, TargetSelection,
+};
 
 pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
     let Some(key) = member.filter(|k| !k.is_empty()) else {
@@ -26,38 +28,22 @@ impl<'a> VariableResolver<'a> {
         resolver
     }
 
-    pub(crate) fn with_selectors(mut self, programs: &'a SelectorPrograms) -> Self {
-        self.programs = Some(programs);
-        self
-    }
-
-    fn matches_regex(&self, pattern: &str, kind: VariableName, key: &[u8]) -> bool {
-        self.programs
-            .and_then(|p| p.get(pattern, kind))
-            .is_some_and(|re| re.is_match(key))
-    }
-
     /// Resolve original value and key bytes, applying exclusions before counts.
     pub fn resolve_bytes(&self, spec: &VariableSpec) -> Vec<(ByteValue, ByteValue)> {
         let mut out = Vec::new();
-        let mut append = |prefix: &str, key: Option<&[u8]>, value: &[u8]| {
-            out.push((qualified_name(prefix, key), value.into()));
-        };
-        if self.programs.is_some() {
-            self.visit_values(spec, append);
-        } else {
-            let mut programs = SelectorPrograms::default();
-            if let Some(Selection::Regex(pattern)) = &spec.selection {
-                programs.add(pattern, spec.name);
-            }
-            for target in &spec.exclusions {
-                if let Some((kind, pattern)) = super::super::selectors::regex_exclusion(target) {
-                    programs.add(pattern, kind);
-                }
-            }
-            self.with_selectors(&programs)
-                .visit_values(spec, &mut append);
+        let mut programs = SelectorPrograms::default();
+        if let Some(Selection::Regex(pattern)) = &spec.selection {
+            programs.add(pattern, spec.name);
         }
+        for target in &spec.exclusions {
+            if let Some((kind, pattern)) = super::super::selectors::regex_exclusion(target) {
+                programs.add(pattern, kind);
+            }
+        }
+        let selection = TargetSelection::compile(spec, &programs);
+        self.visit_values(spec, &selection, |prefix, key, value| {
+            out.push((qualified_name(prefix, key), value.into()));
+        });
         out
     }
 
@@ -66,82 +52,40 @@ impl<'a> VariableResolver<'a> {
     pub(crate) fn visit_values(
         &self,
         spec: &VariableSpec,
+        selection: &TargetSelection,
         mut visit: impl FnMut(&str, Option<&[u8]>, &[u8]),
     ) {
         let name = spec.name;
-        let selection = &spec.selection;
         let request = self.request;
         let mut emit =
             |prefix: &str, canonical: Option<&[u8]>, original: Option<&[u8]>, value: &[u8]| {
-                let excluded = spec.exclusions.iter().any(|target| {
-                    let (collection, selector) = target
-                        .split_once(':')
-                        .map_or((target.as_str(), None), |(c, s)| (c, Some(s)));
-                    if !collection.eq_ignore_ascii_case(prefix) {
-                        return false;
-                    }
-                    let Some(selector) = selector.filter(|s| !s.is_empty()) else {
-                        return true;
-                    };
-                    let Some(key) = canonical else {
-                        return false;
-                    };
-                    if let Some(pattern) =
-                        selector.strip_prefix('/').and_then(|s| s.strip_suffix('/'))
-                    {
-                        self.matches_regex(pattern, name, key)
-                    } else {
-                        folded_key(selector.as_bytes()).as_ref() == key
-                    }
-                });
-                if !excluded {
+                if !selection.excludes(prefix, canonical) {
                     visit(prefix, original, value);
                 }
             };
 
-        let mut collection = |map: &HashMapCollection,
-                              prefix: &str,
-                              names: bool,
-                              literal: Option<&[u8]>| {
-            let selected = match selection {
-                // NamedCollectionNames::FindString indexes the existing canonical
-                // bucket directly. Rule parsing preserves the case of ARGS names selectors.
-                Some(Selection::Key(key))
-                    if matches!(
-                        name,
-                        VariableName::ArgsNames
-                            | VariableName::ArgsGetNames
-                            | VariableName::ArgsPostNames
-                    ) && !key.is_empty() =>
-                {
-                    Some(std::borrow::Cow::Borrowed(key.as_bytes()))
+        let mut collection =
+            |map: &HashMapCollection, prefix: &str, names: bool, literal: Option<&[u8]>| {
+                if map.is_empty() {
+                    return;
                 }
-                Some(Selection::Key(key)) if !key.is_empty() => Some(folded_key(key.as_bytes())),
-                _ => None,
+                let (selected, regex) = match &selection.member {
+                    MemberSelector::All => (None, None),
+                    MemberSelector::Key(key) => (Some(key.as_ref()), None),
+                    MemberSelector::Regex(Some(regex)) => (None, Some(regex)),
+                    MemberSelector::Regex(None) => return,
+                };
+                map.visit(literal.or(selected), |key, original, value| {
+                    if regex.is_none_or(|re| re.is_match(key)) {
+                        emit(
+                            prefix,
+                            Some(key),
+                            Some(original),
+                            if names { original } else { value },
+                        );
+                    }
+                });
             };
-            let regex = match selection {
-                Some(Selection::Regex(pattern)) if name != VariableName::Xml => {
-                    let Some(regex) = self
-                        .programs
-                        .and_then(|programs| programs.get(pattern, name))
-                    else {
-                        return;
-                    };
-                    Some(regex)
-                }
-                _ => None,
-            };
-            map.visit(literal.or(selected.as_deref()), |key, original, value| {
-                if regex.is_none_or(|re| re.is_match(key)) {
-                    emit(
-                        prefix,
-                        Some(key),
-                        Some(original),
-                        if names { original } else { value },
-                    );
-                }
-            });
-        };
 
         use VariableName::*;
         match name {
@@ -196,7 +140,7 @@ impl<'a> VariableResolver<'a> {
                 None,
             ),
             Tx => collection(self.tx.members(), "TX", false, None),
-            Xml => match XmlTarget::from_selection(selection.as_ref()) {
+            Xml => match XmlTarget::from_selection(spec.selection.as_ref()) {
                 Some(XmlTarget::Elements) => collection(&request.xml, "XML", false, Some(b"/*")),
                 Some(XmlTarget::Attributes) => {
                     collection(&request.xml, "XML", false, Some(b"//@*"))
@@ -213,19 +157,8 @@ impl<'a> VariableResolver<'a> {
                 };
                 let mut matched = |key: &[u8], value: &[u8]| {
                     let canonical = folded_key(key);
-                    match selection {
-                        Some(Selection::Regex(pattern))
-                            if !self.matches_regex(pattern, name, &canonical) =>
-                        {
-                            return
-                        }
-                        Some(Selection::Key(literal))
-                            if !literal.is_empty()
-                                && folded_key(literal.as_bytes()) != canonical =>
-                        {
-                            return
-                        }
-                        _ => (),
+                    if !selection.member.matches(Some(&canonical)) {
+                        return;
                     }
                     emit(
                         prefix,
@@ -307,11 +240,90 @@ impl<'a> VariableResolver<'a> {
                     }
                 }
             }
-            _ => {
-                for (key, value) in self.resolve_variable(name) {
-                    scalar(&key, value.as_bytes());
+            RequestBodyLength => scalar(
+                "REQUEST_BODY_LENGTH",
+                request.request_body_length_variable().as_bytes(),
+            ),
+            InboundDataError => scalar(
+                "INBOUND_DATA_ERROR",
+                if request.inbound_data_error {
+                    b"1"
+                } else {
+                    b""
+                },
+            ),
+            OutboundDataError => scalar(
+                "OUTBOUND_DATA_ERROR",
+                if self.response.outbound_data_error {
+                    b"1"
+                } else {
+                    b""
+                },
+            ),
+            FilesCombinedSize => scalar(
+                "FILES_COMBINED_SIZE",
+                request.files_combined_size.to_string().as_bytes(),
+            ),
+            MultipartStrictCheck | MultipartStrictError => scalar(
+                "MULTIPART_STRICT_ERROR",
+                if request.multipart_strict_error {
+                    b"1"
+                } else {
+                    b""
+                },
+            ),
+            MultipartDuplicatePartHeader => scalar(
+                "MULTIPART_DUPLICATE_PART_HEADER",
+                if request.multipart_duplicate_part_header {
+                    b"1"
+                } else {
+                    b"0"
+                },
+            ),
+            MultipartInvalidQuoting => scalar(
+                "MULTIPART_INVALID_QUOTING",
+                if request.multipart_invalid_quoting {
+                    b"1"
+                } else {
+                    b"0"
+                },
+            ),
+            ReqBodyProcessor => scalar("REQBODY_PROCESSOR", request.body_processor.as_bytes()),
+            // The error flag is always present. The message exists only after a processor error.
+            ReqBodyError | ReqBodyProcessorError => scalar(
+                "REQBODY_ERROR",
+                if request.body_error.is_some() {
+                    b"1"
+                } else {
+                    b"0"
+                },
+            ),
+            ReqBodyErrorMsg | ReqBodyProcessorErrorMsg => {
+                if let Some(message) = &request.body_error {
+                    scalar("REQBODY_ERROR_MSG", message.as_bytes());
                 }
             }
+            ResponseProtocol => scalar("RESPONSE_PROTOCOL", self.response.protocol.as_bytes()),
+            ResponseStatus => scalar(
+                "RESPONSE_STATUS",
+                self.response.status.to_string().as_bytes(),
+            ),
+            RemoteAddr => scalar("REMOTE_ADDR", request.client_ip.as_bytes()),
+            RemotePort => scalar("REMOTE_PORT", request.client_port.to_string().as_bytes()),
+            ServerName => scalar("SERVER_NAME", request.server_name.as_bytes()),
+            ServerAddr => scalar("SERVER_ADDR", request.server_addr.as_bytes()),
+            ServerPort => scalar("SERVER_PORT", request.server_port.to_string().as_bytes()),
+            MatchedVar => {
+                if let Some(value) = self.matched_var {
+                    scalar("MATCHED_VAR", value.as_bytes());
+                }
+            }
+            MatchedVarName => {
+                if let Some((key, _)) = self.matched_vars.last() {
+                    scalar("MATCHED_VAR_NAME", key.as_bytes());
+                }
+            }
+            _ => (),
         }
     }
 }

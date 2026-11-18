@@ -76,17 +76,40 @@ pub struct HashMapCollection {
     fold_keys: bool,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct CollectionValues {
-    values: Vec<ByteValue>,
+    values: MemberValues,
     // Allocated only when the observed name differs from the lookup key.
     // Every slot then aligns with exactly one value, including duplicates.
     original_names: Option<Vec<ByteValue>>,
 }
+// Most keys have one value, including every TX scalar. Keep that value in
+// the bucket and allocate a contiguous list only when a duplicate arrives.
+#[derive(Debug, Clone)]
+enum MemberValues {
+    Single(ByteValue),
+    Multiple(Vec<ByteValue>),
+}
+
+impl MemberValues {
+    fn push(&mut self, value: ByteValue) {
+        match self {
+            Self::Single(first) => {
+                *self = Self::Multiple(vec![std::mem::take(first), value]);
+            }
+            Self::Multiple(values) => values.push(value),
+        }
+    }
+}
+
 impl std::ops::Deref for CollectionValues {
-    type Target = Vec<ByteValue>;
+    type Target = [ByteValue];
+
     fn deref(&self) -> &Self::Target {
-        &self.values
+        match &self.values {
+            MemberValues::Single(first) => std::slice::from_ref(first),
+            MemberValues::Multiple(values) => values,
+        }
     }
 }
 impl CollectionValues {
@@ -142,6 +165,10 @@ impl HashMapCollection {
         }
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     /// Visit one indexed bucket or all buckets. The callback sees the lookup
     /// key, observed name, and original value without allocating a result list.
     pub(crate) fn visit(&self, literal: Option<&[u8]>, mut f: impl FnMut(&[u8], &[u8], &[u8])) {
@@ -192,7 +219,7 @@ impl HashMapCollection {
         match self.data.entry(key) {
             Entry::Vacant(entry) => {
                 entry.insert(CollectionValues {
-                    values: vec![value],
+                    values: MemberValues::Single(value),
                     original_names: None,
                 });
             }
@@ -221,7 +248,7 @@ impl HashMapCollection {
         match self.data.entry(key) {
             Entry::Vacant(entry) => {
                 entry.insert(CollectionValues {
-                    values: vec![value],
+                    values: MemberValues::Single(value),
                     original_names: differs.then(|| vec![original_name]),
                 });
             }
@@ -249,7 +276,7 @@ impl HashMapCollection {
         self.data.insert(
             key,
             CollectionValues {
-                values: vec![value.into()],
+                values: MemberValues::Single(value.into()),
                 original_names,
             },
         );
