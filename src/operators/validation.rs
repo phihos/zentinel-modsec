@@ -55,6 +55,19 @@ impl ValidateByteRangeOperator {
 }
 
 impl Operator for ValidateByteRangeOperator {
+    fn short_token_minimums(&self) -> [u8; 2] {
+        if self.empty_operand {
+            return [0; 2];
+        }
+        let allows = |is_member: fn(u8) -> bool| {
+            (0..=u8::MAX).all(|byte| !is_member(byte) || self.allowed[usize::from(byte)])
+        };
+        [
+            u8::from(allows(|b| b.is_ascii_alphanumeric())) * 65,
+            u8::from(allows(super::token_byte)) * 65,
+        ]
+    }
+
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         Ok(
             if self.empty_operand || self.first_invalid(value).is_some() {
@@ -82,6 +95,10 @@ impl Operator for ValidateByteRangeOperator {
 pub struct ValidateUrlEncodingOperator;
 
 impl Operator for ValidateUrlEncodingOperator {
+    fn short_token_minimums(&self) -> [u8; 2] {
+        [65; 2]
+    }
+
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         Ok(if is_valid_url_encoding(value) {
             ByteOperatorResult::no_match()
@@ -125,6 +142,10 @@ fn is_valid_url_encoding(input: &[u8]) -> bool {
 pub struct ValidateUtf8EncodingOperator;
 
 impl Operator for ValidateUtf8EncodingOperator {
+    fn short_token_minimums(&self) -> [u8; 2] {
+        [65; 2]
+    }
+
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         Ok(if std::str::from_utf8(value).is_err() {
             ByteOperatorResult::matched(b"invalid UTF-8 encoding".as_slice())
