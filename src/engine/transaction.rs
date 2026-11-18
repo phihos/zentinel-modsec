@@ -939,18 +939,16 @@ impl Transaction {
 
             // Handle skipAfter
             if let Some(ref marker) = skip_after {
-                if let Some(marker_idx) = self.ruleset.marker(marker, phase) {
-                    if marker_idx > idx {
-                        idx = marker_idx;
+                // A marker records the index of the next rule. An adjacent
+                // marker therefore points to the current index.
+                match self.ruleset.marker(marker, phase) {
+                    Some(next) if next >= idx => {
+                        idx = next;
                         skip_after = None;
                         continue;
                     }
+                    _ => break,
                 }
-                // The marker is unknown, or sits at or behind the current
-                // position: ModSecurity does not jump backwards, so the rest of
-                // the phase is skipped.
-                idx += 1;
-                continue;
             }
 
             // A ctl:ruleEngine=Off from an earlier rule stops this phase where
@@ -998,7 +996,8 @@ impl Transaction {
                 .map_or(rule.actions.as_slice(), |start| {
                     rules[start].actions.as_slice()
                 });
-            let outcome = self.evaluate_rule(rule, tag_actions)?;
+            let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
+            let outcome = self.evaluate_rule(rule, link_rule_id, tag_actions)?;
             let matched = !outcome.matches.is_empty();
 
             if matched {
@@ -1014,7 +1013,6 @@ impl Transaction {
                     .actions
                     .iter()
                     .any(|a| matches!(a, Action::Data(DataAction::Capture)));
-                let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
                 let mut first_message = None;
 
                 // `capture` and `setvar` run once for each variable the
@@ -1273,7 +1271,12 @@ impl Transaction {
     }
 
     /// Evaluate a single rule.
-    fn evaluate_rule(&self, rule: &CompiledRule, tag_actions: &[Action]) -> Result<RuleOutcome> {
+    fn evaluate_rule(
+        &self,
+        rule: &CompiledRule,
+        link_rule_id: Option<&str>,
+        tag_actions: &[Action],
+    ) -> Result<RuleOutcome> {
         let resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
@@ -1293,7 +1296,7 @@ impl Transaction {
         // this transaction. The check is hoisted so rules with no exclusion --
         // effectively all of them -- pay one comparison rather than a scan per
         // variable.
-        let filter_targets = self.controls.has_target_removals(rule.id.as_deref());
+        let filter_targets = self.controls.has_target_removals(link_rule_id);
         let filter_tag_targets = self.controls.has_tag_target_removals(tag_actions);
 
         let mut all_values = Vec::new();
@@ -1305,7 +1308,7 @@ impl Transaction {
                 resolved.retain(|(name, _)| {
                     !(filter_targets
                         && self.controls.is_target_removed_bytes(
-                            rule.id.as_deref(),
+                            link_rule_id,
                             spec,
                             name.as_bytes(),
                         )

@@ -264,6 +264,9 @@ impl CompiledRuleset {
                     // SecAction is like a rule that always matches
                     let phase = extract_phase(&sec_action.actions);
                     let id = extract_id(&sec_action.actions);
+                    if id_is_removed(&id, &removals) {
+                        continue;
+                    }
                     let transformations = extract_transformations(&sec_action.actions)?;
 
                     // Create a rule with unconditional match operator
