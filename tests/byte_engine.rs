@@ -88,6 +88,30 @@ SecRule ARGS:y "@streq %{tx.1}" "id:2,phase:2,pass""#,
 }
 
 #[test]
+fn request_line_uses_the_current_uri_method_and_protocol_in_each_phase() {
+    let ms = ModSecurity::from_string(
+        r#"SecRule REQUEST_LINE "@unconditionalMatch" "id:10,phase:1,pass"
+SecRule REQUEST_LINE "@unconditionalMatch" "id:20,phase:2,pass"
+SecRule REQUEST_LINE "@unconditionalMatch" "id:50,phase:5,pass""#,
+    )
+    .unwrap();
+    let mut tx = ms.new_transaction();
+    tx.process_uri("/first", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_uri_bytes(b"/second\xff", b"POST", b"HTTP/2")
+        .unwrap();
+    tx.process_request_body().unwrap();
+    tx.process_uri("/third", "HEAD", "HTTP/3").unwrap();
+    tx.process_logging().unwrap();
+
+    let data = tx.matched_data();
+    assert_eq!(data.len(), 3);
+    assert_eq!(data[0].value_bytes, b"GET /first HTTP/1.1");
+    assert_eq!(data[1].value_bytes, b"POST /second\xff HTTP/2");
+    assert_eq!(data[2].value_bytes, b"HEAD /third HTTP/3");
+}
+
+#[test]
 fn arbitrary_header_and_request_line_bytes_reach_their_variables() {
     let ms = load_with_request_body(
         r#"SecRuleEngine DetectionOnly

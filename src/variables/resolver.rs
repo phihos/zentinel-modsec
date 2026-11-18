@@ -1,5 +1,7 @@
 //! Variable resolution engine.
 
+use std::sync::OnceLock;
+
 use super::{ByteValue, RequestData, ResponseData, TxCollection};
 #[path = "resolver_bytes.rs"]
 mod byte_resolution;
@@ -17,6 +19,7 @@ pub struct VariableResolver<'a> {
     #[allow(dead_code)]
     captures: &'a [String],
     matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
+    request_line: Option<&'a OnceLock<Box<[u8]>>>,
 }
 
 impl<'a> VariableResolver<'a> {
@@ -37,7 +40,13 @@ impl<'a> VariableResolver<'a> {
             matched_vars,
             captures,
             matched_bytes: None,
+            request_line: None,
         }
+    }
+
+    pub(crate) fn with_request_line(mut self, line: &'a OnceLock<Box<[u8]>>) -> Self {
+        self.request_line = Some(line);
+        self
     }
 
     /// Resolve a variable specification to values.
@@ -53,6 +62,33 @@ impl<'a> VariableResolver<'a> {
 mod tests {
     use super::*;
     use crate::parser::parse_single_variable;
+
+    #[test]
+    fn request_line_cache_retains_only_complete_lines_within_its_bound() {
+        let response = ResponseData::new();
+        let tx = TxCollection::new();
+        let spec = parse_single_variable("REQUEST_LINE").unwrap();
+        let limit = byte_resolution::MAX_CACHED_REQUEST_LINE;
+        for len in [limit - 1, limit, limit + 1] {
+            let mut request = RequestData::new();
+            request.method = "M".into();
+            request.protocol = "P".into();
+            request.uri_raw = "x".repeat(len - 4);
+            let line = format!("M {} P", request.uri_raw);
+            let cache = OnceLock::new();
+            for _ in 0..2 {
+                let values = VariableResolver::new(&request, &response, &tx, None, &[], &[])
+                    .with_request_line(&cache)
+                    .resolve(&spec);
+                assert_eq!(values[0].1, line);
+            }
+            assert_eq!(cache.get().is_some(), len <= limit);
+
+            request.uri_raw = "/updated".into();
+            let direct = VariableResolver::new(&request, &response, &tx, None, &[], &[]);
+            assert_eq!(direct.resolve(&spec)[0].1, "M /updated P");
+        }
+    }
 
     fn exclusion_matches(name: &str, target: &str) -> bool {
         let (collection, key) = name.split_once(':').unwrap();

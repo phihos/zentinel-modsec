@@ -1,7 +1,7 @@
 //! Transaction processing for ModSecurity.
 
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use super::body::{BodyState, BodyWriteResult};
 use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
@@ -36,6 +36,7 @@ pub struct Transaction {
     ruleset: Arc<CompiledRuleset>,
     /// Request data.
     request: RequestData,
+    request_line: OnceLock<Box<[u8]>>,
     /// Response data.
     response: ResponseData,
     /// TX collection (mutable variables).
@@ -240,6 +241,7 @@ impl Transaction {
         Self {
             ruleset,
             request: RequestData::new(),
+            request_line: OnceLock::new(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
             numeric_tx_indices: [usize::MAX; super::ruleset::NUMERIC_TX_SLOTS],
@@ -349,6 +351,7 @@ impl Transaction {
 
     /// Process the request URI.
     pub fn process_uri(&mut self, uri: &str, method: &str, protocol: &str) -> Result<()> {
+        self.request_line.take();
         self.request.set_uri_bytes(uri.as_bytes());
         self.request.set_method(method);
         self.request.set_protocol(protocol);
@@ -357,6 +360,7 @@ impl Transaction {
 
     /// Process an original request line without replacing invalid UTF-8.
     pub fn process_uri_bytes(&mut self, uri: &[u8], method: &[u8], protocol: &[u8]) -> Result<()> {
+        self.request_line.take();
         self.request.set_uri_bytes(uri);
         self.request.set_method_bytes(method);
         self.request.set_protocol_bytes(protocol);
@@ -1237,7 +1241,8 @@ impl Transaction {
             &self.response,
             &self.tx,
             &self.matched_vars,
-        );
+        )
+        .with_request_line(&self.request_line);
         let by_id = self.controls.has_target_removals(logical_id);
         let by_tag = if tag_actions.is_empty() {
             TagTargetRemoval::None
