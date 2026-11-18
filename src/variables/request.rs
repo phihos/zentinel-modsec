@@ -501,7 +501,32 @@ fn trim_ascii(mut value: &[u8]) -> &[u8] {
     value
 }
 
-fn parse_form_bytes(input: &[u8], collection: &mut HashMapCollection) {
+fn parse_form_bytes(mut input: &[u8], collection: &mut HashMapCollection) {
+    // Keep an escaped or opaque field from forcing unrelated plain fields
+    // through the byte decoder. Always cut at an actual form separator.
+    const BLOCK_BYTES: usize = 1024;
+    while let Some(tail) = input.get(BLOCK_BYTES..) {
+        let Some(separator) = memchr::memchr(b'&', tail) else {
+            break;
+        };
+        let end = BLOCK_BYTES + separator;
+        parse_form_block(&input[..end], collection);
+        input = &input[end + 1..];
+    }
+    parse_form_block(input, collection);
+}
+
+fn parse_form_block(input: &[u8], collection: &mut HashMapCollection) {
+    // Unescaped text needs no per-field decoder or UTF-8 validation.
+    if memchr::memchr2(b'%', b'+', input).is_none() {
+        if let Ok(text) = std::str::from_utf8(input) {
+            for pair in text.split('&').filter(|pair| !pair.is_empty()) {
+                let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+                collection.add_bytes(key, value);
+            }
+            return;
+        }
+    }
     for pair in input.split(|&b| b == b'&').filter(|pair| !pair.is_empty()) {
         let equal = pair.iter().position(|&b| b == b'=');
         let (key, value) = equal.map_or((pair, &b""[..]), |i| (&pair[..i], &pair[i + 1..]));
@@ -515,6 +540,89 @@ fn parse_form_bytes(input: &[u8], collection: &mut HashMapCollection) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn form_parsing_preserves_observed_names_binary_data_and_field_boundaries() {
+        use crate::variables::ByteCollection;
+
+        fn check(input: &[u8], expected: &[(&[u8], &[u8], &[u8])]) {
+            let mut request = RequestData::new();
+            let mut uri = b"/form?".to_vec();
+            uri.extend_from_slice(input);
+            request.set_uri_bytes(&uri);
+            request.body.extend_from_slice(input);
+            request.parse_form_body();
+            assert_eq!(request.args_get.all_bytes_with_names(), expected);
+            assert_eq!(request.args_post.all_bytes_with_names(), expected);
+        }
+
+        // The first '=' separates a field. Empty segments vanish, while an
+        // empty name and a bare name remain separate observed members.
+        let plain: &[(&[u8], &[u8], &[u8])] = &[
+            (b"k", b"K", b"one"),
+            (b"k", b"k", b"two=2"),
+            (b"", b"", b"empty"),
+            (b"bare", b"bare", b""),
+        ];
+        check(b"&&K=one&=empty&k=two=2&bare&&", plain);
+        check(b"%4B=one&=empty&k=two%3D2&bare&", plain);
+        check(b"K=one&=empty&k=two=2&b%61re", plain);
+        check(
+            "Ö=é&ö=茶".as_bytes(),
+            &[
+                ("ö".as_bytes(), "Ö".as_bytes(), "é".as_bytes()),
+                ("ö".as_bytes(), "ö".as_bytes(), "茶".as_bytes()),
+            ],
+        );
+        check(
+            b"k=%ff&x=a%26b&bad=%G1%&plus=a+b&plus=a%2Bb",
+            &[
+                (b"k", b"k", b"\xff"),
+                (b"x", b"x", b"a&b"),
+                (b"bad", b"bad", b"%G1%"),
+                (b"plus", b"plus", b"a b"),
+                (b"plus", b"plus", b"a+b"),
+            ],
+        );
+        check(
+            b"x=\xff&\xfe=%2b",
+            &[(b"x", b"x", b"\xff"), (b"\xfe", b"\xfe", b"+")],
+        );
+    }
+
+    #[test]
+    fn form_decoding_preserves_fields_across_block_boundaries() {
+        use crate::variables::ByteCollection;
+
+        for separator in [1023, 1024, 1025, 8192] {
+            for opaque in [false, true] {
+                let byte = if opaque { 0xff } else { b'a' };
+                let first = vec![byte; separator - 2];
+                let second = vec![if opaque { b'z' } else { 0xfe }; 2048];
+                let mut form = b"A=".to_vec();
+                form.extend_from_slice(&first);
+                form.extend_from_slice(b"&&B=");
+                form.extend_from_slice(&second);
+                form.extend_from_slice(b"&a=%26%3D&b=two+words&bare");
+
+                let mut req = RequestData::new();
+                parse_form_bytes(&form, &mut req.args_post);
+                let expected: &[(&[u8], &[u8], &[u8])] = &[
+                    (b"a", b"A", &first),
+                    (b"a", b"a", b"&="),
+                    (b"b", b"B", &second),
+                    (b"b", b"b", b"two words"),
+                    (b"bare", b"bare", b""),
+                ];
+                assert_eq!(req.args_post.all_bytes_with_names(), expected);
+
+                // The threshold may also lie within a sole field.
+                let mut req = RequestData::new();
+                parse_form_bytes(&form[..separator], &mut req.args_get);
+                assert_eq!(req.args_get.all_bytes_with_names(), &expected[..1]);
+            }
+        }
+    }
 
     #[test]
     fn test_parse_cookie_header() {
