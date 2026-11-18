@@ -20,6 +20,6 @@ pub use request::RequestData;
 pub(crate) use resolver::qualified_name;
 pub use resolver::VariableResolver;
 pub use response::ResponseData;
-pub(crate) use selectors::{compile_selector, regex_exclusion, SelectorPrograms};
+pub(crate) use selectors::{compile_selector, count_name, regex_exclusion, SelectorPrograms};
 pub use tx::TxCollection;
 pub use value::ByteValue;
