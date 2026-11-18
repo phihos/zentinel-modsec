@@ -24,6 +24,7 @@ fn header_bit(key: &[u8]) -> u64 {
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub(super) struct WidthSources {
     pub arguments: bool,
+    pub restpath: bool,
     pub filename: bool,
     pub optional_targets: bool,
 }
@@ -38,7 +39,7 @@ pub(super) struct RequestCollections {
 
 impl RequestCollections {
     pub fn new(request: &RequestData, sources: WidthSources) -> Self {
-        let present = (u8::from(!request.args_get.is_empty()) * GET)
+        let mut present = (u8::from(!request.args_get.is_empty()) * GET)
             | (u8::from(!request.args_post.is_empty()) * POST)
             | (u8::from(!request.cookies.is_empty()) * COOKIES)
             | (u8::from(!request.xml.is_empty()) * XML);
@@ -47,7 +48,11 @@ impl RequestCollections {
             widths[2] = Widths::default();
             widths[2].include(request.path_bytes());
         }
-        if sources.arguments && present & (GET | POST) != 0 {
+        if sources.restpath || request.args_path.is_some() {
+            // Merged ARGS can gain values in the middle of a phase. Keep the
+            // ordinary lookups active and their widths unbounded.
+            present |= GET;
+        } else if sources.arguments && present & (GET | POST) != 0 {
             let [get_values, get_names] = request.args_get.argument_widths();
             let [post_values, post_names] = request.args_post.argument_widths();
             widths[0] = get_values.union(post_values);
@@ -308,8 +313,7 @@ mod tests {
                     &request,
                     WidthSources {
                         arguments: true,
-                        filename: false,
-                        optional_targets: false,
+                        ..Default::default()
                     },
                 ))
                 .indices(&targets)

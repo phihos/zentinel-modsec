@@ -120,6 +120,15 @@ pub trait Operator: Send + Sync {
         self.execute_bytes(value)
     }
 
+    /// Evaluate a REST path match and publish its named arguments to the transaction.
+    fn execute_with_path_arguments(
+        &self,
+        value: &[u8],
+        _write: &mut dyn FnMut(&str, &[u8]),
+    ) -> crate::Result<ByteOperatorResult> {
+        self.execute_bytes(value)
+    }
+
     /// Minimum matching byte lengths on ASCII alphanumerics and on path tokens
     /// (alphanumerics plus `_-./:`), capped at 65. Zero disables a bound.
     fn short_token_minimums(&self) -> [u8; 2] {

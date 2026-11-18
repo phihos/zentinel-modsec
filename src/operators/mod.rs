@@ -7,6 +7,7 @@ mod detection;
 mod national_id;
 mod network;
 mod pattern;
+mod restpath;
 pub(crate) mod schema;
 mod traits;
 mod validation;
@@ -66,6 +67,7 @@ pub(crate) fn compile_with_dataset(
                 Ok(Arc::new(IpMatchOperator::from_dataset(records)))
             }
         }
+        OperatorName::RestPath => Ok(Arc::new(restpath::RestPath::new(argument)?)),
         OperatorName::Rx => Ok(Arc::new(RxOperator::new(argument)?)),
         OperatorName::Pm => Ok(Arc::new(PmOperator::new(argument)?)),
         OperatorName::PmFromFile | OperatorName::Pmf => {

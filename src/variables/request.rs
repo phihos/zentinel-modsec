@@ -42,6 +42,8 @@ pub struct RequestData {
     pub headers: HashMapCollection,
     /// GET arguments.
     pub args_get: HashMapCollection,
+    /// Named parameters extracted by REST path rules, allocated on first match.
+    pub(crate) args_path: Option<Box<HashMapCollection>>,
     /// POST arguments.
     pub args_post: HashMapCollection,
     /// Cookies.
@@ -127,6 +129,7 @@ impl Default for RequestData {
             binary_protocol: Default::default(),
             headers: HashMapCollection::named(),
             args_get: HashMapCollection::named(),
+            args_path: None,
             args_post: HashMapCollection::named(),
             cookies: HashMapCollection::named(),
             xml: HashMapCollection::named(),
@@ -469,6 +472,9 @@ impl RequestData {
     pub fn all_args(&self) -> Vec<(&str, &str)> {
         let mut all = self.args_get.all();
         all.extend(self.args_post.all());
+        if let Some(path) = &self.args_path {
+            all.extend(path.all());
+        }
         all
     }
 }

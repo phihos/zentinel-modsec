@@ -1470,6 +1470,7 @@ impl Transaction {
         let mut bound_operator = None;
         let dynamic = dispatch.dynamic;
         let schema = rule.operator_spec.name == crate::parser::OperatorName::ValidateSchema;
+        let restpath = rule.operator_spec.name == crate::parser::OperatorName::RestPath;
         let capture = dispatch.capture;
         let multi_match = dispatch.multi_match;
 
@@ -1509,7 +1510,16 @@ impl Transaction {
                 } else {
                     rule.operator.as_ref()
                 };
-                if schema {
+                if restpath {
+                    operator.execute_with_path_arguments(value, &mut |name, value| {
+                        tx.request
+                            .args_path
+                            .get_or_insert_with(|| {
+                                Box::new(crate::variables::HashMapCollection::named())
+                            })
+                            .set_bytes(name, value);
+                    })?
+                } else if schema {
                     let body = tx.schema_body().unwrap_or(value);
                     // Schema violations refer to the target and transformation stage that ran.
                     let mut result = operator.execute_rule_bytes(body, capture)?;
@@ -1684,7 +1694,7 @@ impl Transaction {
                     &arg[2..arg.len() - 1]
                 })
             });
-            let search = (!schema && (!dynamic || within.is_some()))
+            let search = (!restpath && !schema && (!dynamic || within.is_some()))
                 .then_some(StaticSearch { within, ..search });
             self.resolve_rule_target(
                 spec,
@@ -1775,7 +1785,12 @@ impl Transaction {
             Args | ArgsNames => request
                 .args_get
                 .first_value_bytes(key)
-                .or_else(|| request.args_post.first_value_bytes(key)),
+                .or_else(|| request.args_post.first_value_bytes(key))
+                .or_else(|| request.args_path.as_ref()?.first_value_bytes(key)),
+            ArgsPath => request
+                .args_path
+                .as_ref()
+                .and_then(|path| path.first_value_bytes(key)),
             ArgsGet | ArgsGetNames => request.args_get.first_value_bytes(key),
             ArgsPost | ArgsPostNames => request.args_post.first_value_bytes(key),
             RequestHeaders | RequestHeadersNames => request.headers.first_value_bytes(key),

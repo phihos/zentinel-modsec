@@ -309,6 +309,11 @@ records, one per line. `@pmFromDataset` treats each record as one phrase.
 and skips invalid entries. Rules bind to the definition in effect at their
 position, including across configuration reloads.
 
+`@restpath /orders/{id}` searches the inspected value for that route and
+stores the matched parameter in `ARGS_PATH:id`. A parameter ends at the next
+slash or question mark. `ARGS` and `ARGS_NAMES` include path parameters after
+query and body parameters. `ARGS_COMBINED_SIZE` counts the query and body.
+
 With `capture`, phrase matches populate `TX:0` through `TX:9` in input order
 using the original bytes. If phrases overlap, each capture takes the longest phrase at
 the next matching start, including starts inside an earlier match.

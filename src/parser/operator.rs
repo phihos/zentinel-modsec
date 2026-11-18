@@ -28,6 +28,8 @@ pub enum OperatorName {
     PmFromFile,
     /// Match phrases from a named inline dataset.
     PmFromDataset,
+    /// Match a route and populate ARGS_PATH.
+    RestPath,
     /// Phrase match (alias).
     Pmf,
 
@@ -128,6 +130,7 @@ pub enum OperatorName {
 static OPERATOR_MAP: phf::Map<&'static str, OperatorName> = phf_map! {
     "rx" => OperatorName::Rx,
     "pm" => OperatorName::Pm,
+    "restpath" => OperatorName::RestPath,
     "pmfromdataset" => OperatorName::PmFromDataset,
     "pmfromfile" => OperatorName::PmFromFile,
     "pmf" => OperatorName::Pmf,
@@ -208,7 +211,9 @@ impl OperatorName {
     }
 
     pub(crate) fn has_literal_source(self) -> bool {
-        self.uses_data_file() || self.uses_dataset() || self == Self::ValidateNid
+        self.uses_data_file()
+            || self.uses_dataset()
+            || matches!(self, Self::ValidateNid | Self::RestPath)
     }
 
     /// Check if this operator requires an argument.

@@ -259,6 +259,7 @@ impl RuleDispatch {
                         OperatorName::IpMatchFromDataset
                             | OperatorName::GeoLookup
                             | OperatorName::StrMatch
+                            | OperatorName::RestPath
                     );
                 }
                 Action::Data(DataAction::SetVar(op)) => {
@@ -692,6 +693,7 @@ impl CompiledRuleset {
                 .iter()
                 .zip(&mut ruleset.dispatch[phase.index()])
             {
+                sources.restpath |= rule.operator_spec.name == OperatorName::RestPath;
                 plan.targets.finalize();
                 plan.targets
                     .add_width_sources(&mut sources, &rule.variables);

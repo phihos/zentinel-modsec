@@ -80,6 +80,14 @@ impl<'a> VariableResolver<'a> {
                 let prefix = if names { "ARGS_NAMES" } else { "ARGS" };
                 collection(&request.args_get, prefix, names, None);
                 collection(&request.args_post, prefix, names, None);
+                if let Some(path) = &request.args_path {
+                    collection(path, prefix, names, None);
+                }
+            }
+            ArgsPath => {
+                if let Some(path) = &request.args_path {
+                    collection(path, "ARGS_PATH", false, None);
+                }
             }
             ArgsGet => collection(&request.args_get, "ARGS_GET", false, None),
             ArgsPost => collection(&request.args_post, "ARGS_POST", false, None),

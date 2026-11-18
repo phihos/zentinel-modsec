@@ -35,6 +35,8 @@ pub enum VariableName {
     Args,
     /// `ARGS_GET`
     ArgsGet,
+    /// `ARGS_PATH`
+    ArgsPath,
     /// `ARGS_POST`
     ArgsPost,
     /// `ARGS_NAMES`
@@ -315,6 +317,7 @@ impl VariableName {
             VariableName::Xml
             | VariableName::Args
             | VariableName::ArgsGet
+            | VariableName::ArgsPath
             | VariableName::ArgsPost
             | VariableName::ArgsNames
             | VariableName::ArgsGetNames
@@ -457,6 +460,7 @@ macro_rules! variable_names {
 
 variable_names! {
     "ARGS" => VariableName::Args,
+    "ARGS_PATH" => VariableName::ArgsPath,
     "ARGS_GET" => VariableName::ArgsGet,
     "ARGS_POST" => VariableName::ArgsPost,
     "ARGS_NAMES" => VariableName::ArgsNames,
@@ -578,6 +582,7 @@ impl VariableName {
             self,
             Self::Args
                 | Self::ArgsGet
+                | Self::ArgsPath
                 | Self::ArgsPost
                 | Self::ArgsNames
                 | Self::RequestHeaders
