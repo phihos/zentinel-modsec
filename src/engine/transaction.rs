@@ -22,24 +22,13 @@ use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
 };
 
-/// Whether a lowercased Content-Type denotes a JSON body.
-///
-/// Covers the `+json` structured suffix (RFC 6839) as well as `application/json`,
-/// so `application/vnd.api+json`, `application/problem+json` and friends are
-/// inspected rather than silently falling through to the urlencoded parser.
-fn is_json_content_type(ct_lower: &str) -> bool {
-    let media_type = ct_lower.split(';').next().unwrap_or("").trim();
-    media_type == "application/json" || media_type == "text/json" || media_type.ends_with("+json")
-}
-
-/// Whether a lowercased Content-Type denotes an XML body.
-///
-/// Covers the `+xml` structured suffix (RFC 6839), so SOAP
-/// (`application/soap+xml`), Atom and friends are inspected rather than
-/// falling through to a parser that finds nothing in them.
-fn is_xml_content_type(ct_lower: &str) -> bool {
-    let media_type = ct_lower.split(';').next().unwrap_or("").trim();
-    media_type == "application/xml" || media_type == "text/xml" || media_type.ends_with("+xml")
+/// Recognize the two media types for this processor and its structured suffix.
+fn structured_media_type(media: &str, application: &str, text: &str, suffix: &str) -> bool {
+    media.eq_ignore_ascii_case(application)
+        || media.eq_ignore_ascii_case(text)
+        || media
+            .rsplit_once('+')
+            .is_some_and(|(_, subtype)| subtype.eq_ignore_ascii_case(suffix))
 }
 
 /// A ModSecurity transaction for processing a single request.
@@ -427,23 +416,6 @@ impl Transaction {
             return Ok(());
         }
 
-        let content_type = self
-            .request
-            .headers
-            .get_bytes(b"content-type")
-            .and_then(|v| {
-                v.first().and_then(|value| {
-                    // Only the media type controls processor selection. Opaque
-                    // boundary parameter bytes must not require UTF-8.
-                    let media = value.split(|&byte| byte == b';').next().unwrap_or_default();
-                    std::str::from_utf8(media).ok().map(str::to_owned)
-                })
-            });
-        let ct_lower = content_type
-            .as_deref()
-            .map(|ct| ct.trim_start().to_ascii_lowercase())
-            .unwrap_or_default();
-
         // ctl:requestBodyAccess=Off, typically set in phase 1, suppresses body
         // parsing entirely. Phase 2 rules still run; they just find no ARGS_POST
         // or FILES, which is what disabling body access means.
@@ -478,6 +450,18 @@ impl Transaction {
             return Ok(());
         }
 
+        // Parameters may contain opaque bytes. Only the trimmed media type
+        // participates in JSON and XML selection.
+        let media = self
+            .request
+            .headers
+            .first_value_bytes(b"content-type")
+            .and_then(|header| {
+                let end = memchr::memchr(b';', header).unwrap_or(header.len());
+                std::str::from_utf8(&header[..end]).ok()
+            })
+            .unwrap_or_default()
+            .trim();
         if self.request.body_processor == "MULTIPART" {
             // Multipart body processor: populates ARGS_POST, FILES and
             // MULTIPART_PART_HEADERS. Never fall back to the urlencoded
@@ -488,9 +472,9 @@ impl Transaction {
                      body arguments were not extracted"
                 );
             }
-        } else if is_xml_content_type(&ct_lower) {
+        } else if structured_media_type(media, "application/xml", "text/xml", "xml") {
             self.process_xml_body();
-        } else if is_json_content_type(&ct_lower) {
+        } else if structured_media_type(media, "application/json", "text/json", "json") {
             // JSON bodies previously fell through to the urlencoded parser,
             // which extracts nothing usable from them -- so ARGS was empty and
             // rules like CRS 942100 (`SecRule ARGS "@detectSQLi"`) had nothing
@@ -516,9 +500,9 @@ impl Transaction {
         let content_type = self
             .request
             .headers
-            .get_bytes(b"content-type")
-            .and_then(|values| values.first().map(|value| value.to_vec()))
-            .unwrap_or_default();
+            .first_value_bytes(b"content-type")
+            .unwrap_or_default()
+            .to_vec();
         self.request.parse_multipart_body_bytes(&content_type)
     }
 
