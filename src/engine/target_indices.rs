@@ -97,7 +97,7 @@ impl RequestCollections {
         }
         if sources.arguments && present & (GET | POST) != 0 {
             widths[..2].fill(Widths::default());
-            let mut remaining = 32;
+            let mut remaining = 4096;
             let mut visit = |name: &[u8], value: &[u8]| {
                 widths[0].include(value);
                 widths[1].include(name);

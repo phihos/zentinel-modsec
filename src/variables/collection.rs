@@ -178,19 +178,29 @@ impl HashMapCollection {
         self.data.get(key).map(|members| &**members)
     }
 
-    /// Visit every original name and value within a shared member budget.
+    /// Bound both the bytes inspected and the number of tiny or empty fields.
     pub(crate) fn visit_bounded(
         &self,
-        remaining: &mut usize,
+        budget: &mut usize,
         mut visit: impl FnMut(&[u8], &[u8]),
     ) -> bool {
+        const MIN_COST: usize = 32;
+        if self.data.len() > *budget / MIN_COST {
+            return false;
+        }
         for (key, members) in &self.data {
-            if members.len() > *remaining {
+            if members.len() > *budget / MIN_COST {
                 return false;
             }
-            *remaining -= members.len();
             for (index, value) in members.iter().enumerate() {
-                visit(members.name(key, index).as_bytes(), value.as_bytes());
+                let name = members.name(key, index).as_bytes();
+                let value = value.as_bytes();
+                let cost = (name.len() + value.len()).max(MIN_COST);
+                let Some(left) = budget.checked_sub(cost) else {
+                    return false;
+                };
+                *budget = left;
+                visit(name, value);
             }
         }
         true
