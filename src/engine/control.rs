@@ -291,6 +291,14 @@ impl CtlDirective {
     }
 }
 
+/// How a logical rule's active tag controls restrict a given collection.
+#[derive(PartialEq, Eq)]
+pub(super) enum TagTargetRemoval {
+    None,
+    Members,
+    All,
+}
+
 /// Parse `942100`, `942100-942999`, or a comma-separated mix of the two.
 fn parse_id_ranges(value: &str) -> Option<Vec<RuleIdRange>> {
     let mut ranges = Vec::new();
@@ -500,6 +508,23 @@ impl TransactionControls {
         self.removed_tag_targets
             .iter()
             .any(|(tag, _, _)| super::ruleset::has_tag(actions, tag))
+    }
+
+    pub(super) fn tag_target_removal(
+        &self,
+        actions: &[crate::parser::Action],
+        var: &VariableSpec,
+    ) -> TagTargetRemoval {
+        let mut removal = TagTargetRemoval::None;
+        for (tag, target, _) in &self.removed_tag_targets {
+            if target.name == var.name && super::ruleset::has_tag(actions, tag) {
+                if target.selection.is_none() {
+                    return TagTargetRemoval::All;
+                }
+                removal = TagTargetRemoval::Members;
+            }
+        }
+        removal
     }
 
     /// Whether a value is excluded by an exact matching rule tag.

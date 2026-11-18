@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use super::body::{BodyState, BodyWriteResult};
 use super::chain::ChainState;
-use super::control::{CtlDirective, TransactionControls};
+use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
 use super::match_log::{MatchLog, RawMatch};
 use super::phase::Phase;
@@ -1174,7 +1174,8 @@ impl Transaction {
         logical_id: Option<&str>,
         tag_actions: &[Action],
         search: Option<&StaticSearch<'_>>,
-    ) -> Result<ResolvedTarget> {
+        target: &mut ResolvedTarget,
+    ) -> Result<()> {
         let resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
@@ -1182,41 +1183,50 @@ impl Transaction {
             &self.matched_vars,
         );
         let by_id = self.controls.has_target_removals(logical_id);
-        let by_tag = !tag_actions.is_empty() && self.controls.has_tag_target_removals(tag_actions);
-        let mut resolved = Ok(ResolvedTarget::default());
+        let by_tag = if tag_actions.is_empty() {
+            TagTargetRemoval::None
+        } else {
+            self.controls.tag_target_removal(tag_actions, spec)
+        };
+        let mut error = None;
         let mut count = 0usize;
-        resolver.visit_values(spec, selection, |prefix, member, value| {
-            if (by_id && self.controls.removed_member(logical_id, spec, member))
-                || (by_tag && self.controls.removed_tag_member(tag_actions, spec, member))
-            {
-                return;
-            }
-            if spec.count_mode {
-                count += 1;
-                return;
-            }
-            let Ok(target) = &mut resolved else {
-                return;
-            };
-            if let Some(search) = search.filter(|_| target.first.is_none()) {
-                match search.first_match(value) {
-                    Ok(None) => (),
-                    Ok(Some(stage)) => {
-                        target.first =
-                            Some((crate::variables::qualified_name(prefix, member), stage));
-                    }
-                    Err(error) => resolved = Err(error),
+        if by_tag != TagTargetRemoval::All {
+            resolver.visit_values(spec, selection, |prefix, member, value| {
+                if (by_id && self.controls.removed_member(logical_id, spec, member))
+                    || (by_tag == TagTargetRemoval::Members
+                        && self.controls.removed_tag_member(tag_actions, spec, member))
+                {
+                    return;
                 }
-            } else {
-                // A match can change selection controls or mutate the collection.
-                // Snapshot remaining members before running the first match's actions.
-                target.remaining.push((
-                    crate::variables::qualified_name(prefix, member),
-                    value.to_vec(),
-                ));
-            }
-        });
-        let mut target = resolved?;
+                if spec.count_mode {
+                    count += 1;
+                    return;
+                }
+                if error.is_some() {
+                    return;
+                }
+                if let Some(search) = search.filter(|_| target.first.is_none()) {
+                    match search.first_match(value) {
+                        Ok(None) => (),
+                        Ok(Some(stage)) => {
+                            target.first =
+                                Some((crate::variables::qualified_name(prefix, member), stage));
+                        }
+                        Err(e) => error = Some(e),
+                    }
+                } else {
+                    // A match can change selection controls or mutate the collection.
+                    // Snapshot remaining members before running the first match's actions.
+                    target.remaining.push((
+                        crate::variables::qualified_name(prefix, member),
+                        value.to_vec(),
+                    ));
+                }
+            });
+        }
+        if let Some(error) = error {
+            return Err(error);
+        }
         if spec.count_mode {
             // Presence checks on a named header or TX variable normally produce 0 or 1.
             let value: Cow<'_, [u8]> = match count {
@@ -1234,7 +1244,7 @@ impl Transaction {
                     .push((crate::variables::count_name(spec), value.into_owned()));
             }
         }
-        Ok(target)
+        Ok(())
     }
 
     /// An empty collection contributes no values, even to a negated operator.
@@ -1377,12 +1387,14 @@ impl Transaction {
             if self.empty_collection_target(spec) {
                 continue;
             }
-            let target = self.resolve_rule_target(
+            let mut target = ResolvedTarget::default();
+            self.resolve_rule_target(
                 spec,
                 selection,
                 logical_id,
                 tag_actions,
                 search.as_ref(),
+                &mut target,
             )?;
             if let Some((name, stage)) = target.first {
                 evaluate(self, Some(&name), &stage.value, Some(stage.result))?;
