@@ -30,7 +30,7 @@ impl<'a> VariableResolver<'a> {
                 programs.add(pattern, kind);
             }
         }
-        let selection = TargetSelection::compile(spec, &programs);
+        let selection = TargetSelection::for_lookup(spec, &programs);
         self.visit_values(spec, &selection, |prefix, key, value| {
             out.push((qualified_name(prefix, key), value.into()));
         });
