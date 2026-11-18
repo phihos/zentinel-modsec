@@ -265,7 +265,7 @@ fn report_macros(found: &mut Diagnostics, value: &str, id: &str) {
         let supported = match lower.split_once('.') {
             Some((collection, _)) => matches!(
                 collection,
-                "tx" | "request_headers" | "args" | "args_get" | "args_post"
+                "tx" | "request_headers" | "args" | "args_get" | "args_post" | "response_args"
             ),
             None => {
                 matches!(

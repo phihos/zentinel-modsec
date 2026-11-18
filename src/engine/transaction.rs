@@ -1713,6 +1713,11 @@ impl Transaction {
             self.request.args_get.first_value_bytes(key)
         } else if collection.eq_ignore_ascii_case("args_post") {
             self.request.args_post.first_value_bytes(key)
+        } else if collection.eq_ignore_ascii_case("response_args") {
+            self.response
+                .json
+                .as_deref()
+                .and_then(|json| json.args.first_value_bytes(key))
         } else {
             return &[];
         };
