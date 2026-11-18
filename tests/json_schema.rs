@@ -1,0 +1,92 @@
+use std::fs;
+use tempfile::tempdir;
+use zentinel_modsec::ModSecurity;
+
+const SCHEMA: &str = r##"{"type":"object","required":["count"],"properties":{"count":{"$ref":"#/$defs/count"}},"$defs":{"count":{"type":"integer","minimum":1}}}"##;
+
+#[test]
+fn schemas_validate_target_bytes_or_json_captured_in_the_current_phase() {
+    let dir = tempdir().unwrap();
+    let config = dir.path().join("policy.conf");
+    fs::write(dir.path().join("payload.json"), SCHEMA).unwrap();
+    fs::write(
+        &config,
+        r#"SecRuleEngine DetectionOnly
+SecRequestBodyAccess On
+SecRule ARGS:q "@validateSchema payload.json" "id:1,phase:1,pass"
+SecRule ARGS:q "@validateSchema payload.json" "id:2,phase:2,pass"
+SecRule ARGS:q "!@validateSchema payload.json" "id:3,phase:2,pass""#,
+    )
+    .unwrap();
+    let engine = ModSecurity::from_file(config.to_str().unwrap()).unwrap();
+    fs::remove_file(dir.path().join("payload.json")).unwrap();
+    for (q, body, expected) in [
+        ("42", r#"{"count":2}"#, &["1", "3"][..]),
+        ("", r#"{"count":0}"#, &["2"][..]),
+        ("null", r#"{"count":"two"}"#, &["1", "2"][..]),
+        ("", "", &["3"][..]),
+        ("ordinary", "", &["1", "2"][..]),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri(&format!("/?q={q}"), "POST", "HTTP/1.1")
+            .unwrap();
+        tx.add_request_header("Content-Type", "application/json")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        tx.append_request_body(body.as_bytes()).unwrap();
+        tx.process_request_body().unwrap();
+        assert_eq!(tx.matched_rules(), expected, "q={q:?} body={body:?}");
+    }
+}
+
+#[test]
+fn schema_files_and_references_stay_under_the_rule_directory() {
+    let parent = tempdir().unwrap();
+    let root = parent.path().join("policy");
+    fs::create_dir(&root).unwrap();
+    let config = root.join("policy.conf");
+    let load = |path: &str| {
+        fs::write(
+            &config,
+            format!(r#"SecRule ARGS "@validateSchema {path}" "id:1,phase:1,pass""#),
+        )
+        .unwrap();
+        ModSecurity::from_file(config.to_str().unwrap())
+    };
+    fs::write(root.join("companion.json"), r#"{"type":"integer"}"#).unwrap();
+    fs::write(root.join("local.json"), r#"{"$ref":"companion.json"}"#).unwrap();
+    let mut tx = load("local.json").unwrap().new_transaction();
+    tx.process_uri("/?a=one", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1"]);
+    fs::write(parent.path().join("outside.json"), "true").unwrap();
+    for reference in [
+        "../outside.json",
+        "https://example.invalid/schema.json",
+        "missing.json",
+    ] {
+        fs::write(
+            root.join("local.json"),
+            serde_json::json!({"$ref": reference}).to_string(),
+        )
+        .unwrap();
+        assert!(load("local.json").is_err(), "{reference}");
+    }
+    fs::write(root.join("bad.json"), "{").unwrap();
+    fs::write(root.join("bad-type.json"), r#"{"type":5}"#).unwrap();
+    for path in [
+        "../outside.json",
+        "missing.json",
+        "bad.json",
+        "bad-type.json",
+        "sample.xsd",
+    ] {
+        assert!(load(path).is_err(), "{path}");
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(parent.path().join("outside.json"), root.join("link.json"))
+            .unwrap();
+        assert!(load("link.json").is_err());
+    }
+}

@@ -74,7 +74,7 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
         if let Some(operator) = operator {
             let reason = match operator.name {
                 OperatorName::VerifyCc | OperatorName::VerifySsn | OperatorName::VerifyCpf |
-                OperatorName::ValidateHash | OperatorName::ValidateDtd | OperatorName::ValidateSchema |
+                OperatorName::ValidateHash | OperatorName::ValidateDtd |
                 OperatorName::Rbl | OperatorName::GeoLookup | OperatorName::GsbLookup |
                 OperatorName::InspectFile | OperatorName::FuzzyHash | OperatorName::Rsub =>
                     Some("operator is a placeholder and always returns no match (negation may invert that result)"),
