@@ -1,5 +1,17 @@
 # Coraza parity handoff — 2026-11-18
 
+## URL transformations, keyed macros and response inspection
+
+Engine `902b2db` matches Coraza 3.8.1's URL encoding on all 256 input bytes.
+Missing TX and request-header members expand to their original macro names,
+including in operators and audit messages. A present empty member stays empty.
+`ctl:forceResponseBodyVariable` can select a response outside the configured MIME
+list when body access is enabled. Commit `6f62c80` adjusts one unit test fixture.
+
+Both detector backends matched all external CRS 4.25.0 case outcomes and all 22
+Coraza blocking traces. The 24 complete Rust connector audit fixtures retained
+their previous bytes. [Checks and reference programs](https://github.com/phihos/zentinel-modsec/tree/measure/policy-parity/benches/results/rule-compatibility)
+
 ## Coraza rule and body compatibility
 
 Engine `19cc499` implements ordered load-time exclusions, Coraza TX assignment

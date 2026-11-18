@@ -325,6 +325,9 @@ it match. These operators produce load-time warnings with rule IDs.
 `normalizePath`, `normalizePathWin`, `removeComments`, `removeCommentsChar`,
 `replaceComments`, `cmdLine`, `md5`, `sha1`, `sha256`, `length`, `none`.
 The three parity transformations are placeholders and warn with affected IDs.
+`t:urlEncode` preserves ASCII letters, digits and `*`, encodes a space as
+`+`, and uses lowercase percent escapes for other bytes. For example,
+`a *,` becomes `a+*%2c`. `t:urlDecode` reads a literal `+` as a space.
 
 Multipart fields, names and filenames retain their original bytes. The parser
 honors quoted parameters and extended filenames, preserves repeated parts, and
@@ -387,6 +390,9 @@ selector/exclusion regexes and unsupported macro sources also warn with IDs.
 `setvar` requires a nonempty member of TX. The engine expands the value before interpreting signed integer addition or subtraction, and preserves the original bytes of plain assignments.
 
 `multiMatch` evaluates the original value and each changed transformation stage.
+For supported keyed macros, a missing member expands to the name inside the
+braces, preserving its spelling. For example, an absent `%{Tx.Code}` expands
+to `Tx.Code`. An existing member with an empty value expands to an empty string.
 The byte APIs preserve binary input, captures and macro expansions; string APIs
 provide display values. Header lookup ignores ASCII case while match metadata
 preserves each original header name.
