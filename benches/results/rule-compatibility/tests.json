@@ -1,0 +1,15 @@
+{
+  "fork_tests": "6f62c807fbcaeeffe45673aa4b976f4a276586aa",
+  "qualified_runtime": "902b2db8ac8b7e0d1dc9a87b94b6dd1fc2a688f0",
+  "tests_passed": {
+    "default": 727,
+    "ffi": 729
+  },
+  "strict_clippy_exit": {
+    "default": 0,
+    "ffi": 0
+  },
+  "format_exit": 0,
+  "go_response_control_transactions": 10,
+  "reference_detector_tests_passed": 8
+}

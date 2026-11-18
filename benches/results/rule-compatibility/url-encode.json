@@ -1,0 +1,7 @@
+{
+  "input": "bytes 0 through 255 in ascending order",
+  "coraza": "3.8.1",
+  "rust_and_go_output_bytes": 640,
+  "equal": true,
+  "sha256": "f3f4a3984f4703e34a73111d1c05d19639eaaf8a77a5961e1ecdf0ed99571a68"
+}

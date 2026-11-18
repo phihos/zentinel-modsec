@@ -1,0 +1,149 @@
+{
+  "engine": "902b2db8ac8b7e0d1dc9a87b94b6dd1fc2a688f0",
+  "tree": "580db18f1a428b18cd19f39caaeaf56309373667",
+  "lock_sha256": "cba784ead225fc8a87679a2ada704cd96d74da0251f31ea9ec4d0d8f1155d83e",
+  "native_crs": "30cb436b261a9f5ec32a5a0677e17f3cfa1a8739",
+  "external_crs": "4.25.0",
+  "reference_coraza": "3.8.1",
+  "qualification_scripts": {
+    "qualify.py": "59f7f422b378801f5b2272673157d54422fe4221b6882ce09efc7a466e5b9ec5",
+    "verify.py": "9df1211819547e74ac7f4b9255c92125cbc79ea95c461983f0bee7cc30102b83",
+    "external.py": "cf7ad0eb04d021dd95f50f7aa17f5a0139fbbbcd328ae9c2b6720d5112ef0604"
+  },
+  "reference_inputs_sha256": {
+    "main.rs": "e91e09356a0657aa217d1cfb02d2ff7832bb4ad132846d89fc8c30fd523d0fe6",
+    "ftw-v2.1": "c8fd3fe6601ffcff0e2895bbf13c8cf727e8120f9828b4410a5f439241825fde",
+    "ftw-zentinel-v2.conf": "9ddeb44d69c61e2d29771ab1aba96a58ff9881d84edee74ba21ae428206e176d",
+    "@coraza.conf-recommended": "78ce259a1f37313c8eed9239c40025684d55cc04926ff6a9f7cc1f3281beb211"
+  },
+  "previous_native_stage_sha256": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b",
+  "blocking_config_sha256": "1281449331b7e49872943ba675af791473310236f39318aba1ba5daedc2121ed",
+  "engines": {
+    "default": {
+      "library_sha256": "086fb81b29d283efa5c61c20fdfdf934c76fd641d816c0a1c21a8582ec8a3f58",
+      "native": {
+        "total_stages": 5263,
+        "evaluated": 5187,
+        "passed": 5096,
+        "skipped": 76,
+        "comment_only_records": 1,
+        "changed": {},
+        "sha256": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b",
+        "command_exit": 0
+      },
+      "blocking": {
+        "cases": 22,
+        "historical_changes": [],
+        "coraza_changes": [],
+        "sha256": "10e6af9118209b77317d85f9067d1774033c15762d2f4ae47d4f9b885570e355"
+      },
+      "audit": {
+        "cases": 24,
+        "changed_fields_by_fixture": {},
+        "sha256": "1623edf088618a9c440c2ccf6bacb10c6c91833d56cfa74c0dcc1d1a4234b6cd"
+      }
+    },
+    "ffi": {
+      "library_sha256": "6062a88228d8b096de8d00a4b0c9c6cd46003d95e122e9c41bcd02a411faadeb",
+      "native": {
+        "total_stages": 5263,
+        "evaluated": 5187,
+        "passed": 5096,
+        "skipped": 76,
+        "comment_only_records": 1,
+        "changed": {},
+        "sha256": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b",
+        "command_exit": 0
+      },
+      "blocking": {
+        "cases": 22,
+        "historical_changes": [],
+        "coraza_changes": [],
+        "sha256": "10e6af9118209b77317d85f9067d1774033c15762d2f4ae47d4f9b885570e355"
+      },
+      "audit": {
+        "cases": 24,
+        "changed_fields_by_fixture": {},
+        "sha256": "1623edf088618a9c440c2ccf6bacb10c6c91833d56cfa74c0dcc1d1a4234b6cd"
+      }
+    }
+  },
+  "external": {
+    "default": {
+      "success": {
+        "count": 4655,
+        "delta": [],
+        "sha256": "4f97c9d2f793ed3bb8b289cf04082bcc36c3b9f1305c0f1339f7bdbf61479991"
+      },
+      "failed": {
+        "count": 17,
+        "delta": [],
+        "sha256": "74c4cf3aad9ab25604cb2f40c126e76889fec8931869186b9ec260bb8a308e7c"
+      },
+      "errored": {
+        "count": 1,
+        "delta": [],
+        "sha256": "701c01d188d74d06e6a07a9194c7c4d2d4aed25d4d76245d0850b5fc0cff85e1"
+      }
+    },
+    "ffi": {
+      "success": {
+        "count": 4655,
+        "delta": [],
+        "sha256": "4f97c9d2f793ed3bb8b289cf04082bcc36c3b9f1305c0f1339f7bdbf61479991"
+      },
+      "failed": {
+        "count": 17,
+        "delta": [],
+        "sha256": "74c4cf3aad9ab25604cb2f40c126e76889fec8931869186b9ec260bb8a308e7c"
+      },
+      "errored": {
+        "count": 1,
+        "delta": [],
+        "sha256": "460df791ff19612f32f2950a20bd413b2c95a28683aa4de7631dc99e39f7cd28"
+      }
+    },
+    "coraza": {
+      "success": {
+        "count": 4655,
+        "delta": [],
+        "sha256": "4f97c9d2f793ed3bb8b289cf04082bcc36c3b9f1305c0f1339f7bdbf61479991"
+      },
+      "failed": {
+        "count": 17,
+        "delta": [],
+        "sha256": "74c4cf3aad9ab25604cb2f40c126e76889fec8931869186b9ec260bb8a308e7c"
+      },
+      "errored": {
+        "count": 1,
+        "delta": [],
+        "sha256": "9642ee78b52665802941c78237202f6adf5d10638abae69c9fd5ff1fe31deaea"
+      }
+    }
+  },
+  "external_classification_changes": {
+    "default": {
+      "from_previous": {},
+      "from_current_coraza": {}
+    },
+    "ffi": {
+      "from_previous": {},
+      "from_current_coraza": {}
+    },
+    "coraza": {
+      "from_previous": {},
+      "from_current_coraza": {}
+    }
+  },
+  "audit_historical_sha256": "1623edf088618a9c440c2ccf6bacb10c6c91833d56cfa74c0dcc1d1a4234b6cd",
+  "blocking_historical_sha256": "10e6af9118209b77317d85f9067d1774033c15762d2f4ae47d4f9b885570e355",
+  "blocking_pinned_coraza_sha256": "d8cbdc9d186b629c5278692f53c02e9072fe14a4e487b7511a876bef71c49c05",
+  "blocking_fixture_sha256": "0ab546fd8e710f912fb59479618091127301afaaedfa31e6f2d4a3279edb5b65",
+  "audit_harness_sha256": "4853904bd9353a5bb040782aa954ea8fb55af1cf64cf0c1ed23e655f243aefe1",
+  "native_fixture_sha256": "951fed273d7e2cb7087b2e4de1336f78d35c0c2ca48afba2a67b97b7a5a45cbd",
+  "historical_reference_commit": "20db5d8b74fd3ecc926f9375b734fb30e35e43e1",
+  "receipt_hashes": {
+    "receipt.json": "d56af3456691cb412fc18761fba0fe7d6cf93278ced57467e318c3460fddec0b",
+    "external/receipt.json": "d3f221c2582c05ec97ef7ebf7221326adaaa426692583b26d421e2f6e7b1c32e"
+  }
+}
