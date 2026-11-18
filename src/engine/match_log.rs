@@ -2,7 +2,11 @@
 //! public byte and text representations together, sometimes between phases.
 use std::sync::{Mutex, OnceLock};
 
-use super::{phase::Phase, ruleset::CompiledRuleset, transaction::MatchedData};
+use super::{
+    phase::Phase,
+    ruleset::{CompiledRule, CompiledRuleset},
+    transaction::MatchedData,
+};
 use crate::variables::ByteValue;
 
 pub(super) struct RawMatch {
@@ -13,16 +17,22 @@ pub(super) struct RawMatch {
 
 /// A transaction keeps its immutable compiled ruleset alive for every audit read.
 #[derive(Clone, Copy)]
-pub(super) struct RuleLocation {
-    pub phase: Phase,
-    pub index: usize,
-}
+pub(super) struct RuleLocation(usize);
 
 impl RuleLocation {
+    pub fn new(phase: Phase, index: usize) -> Self {
+        // Each index addresses an existing Vec<CompiledRule> element. Its
+        // minimum size leaves three spare bits even in the largest such Vec.
+        const { assert!(size_of::<CompiledRule>() >= 8 && Phase::ALL.len() <= 8) };
+        Self((index << 3) | phase.index())
+    }
+
+    fn rule(self, ruleset: &CompiledRuleset) -> &CompiledRule {
+        &ruleset.rules_for_phase(Phase::ALL[self.0 & 7])[self.0 >> 3]
+    }
+
     fn id(self, ruleset: &CompiledRuleset) -> Option<&str> {
-        ruleset.rules_for_phase(self.phase)[self.index]
-            .id
-            .as_deref()
+        self.rule(ruleset).id.as_deref()
     }
 }
 
@@ -61,10 +71,7 @@ impl MatchRecord for (RuleLocation, RawMatch) {
         defaults.counts.iter().map(move |&entry| {
             let (variable, value) = super::initialization::TxDefaults::count_value(dispatch, entry);
             (
-                RuleLocation {
-                    phase,
-                    index: usize::from(entry.0),
-                },
+                RuleLocation::new(phase, usize::from(entry.0)),
                 RawMatch {
                     variable,
                     portion: Some(value.clone()),
@@ -89,10 +96,7 @@ impl MatchRecord for RuleLocation {
             .unwrap()
             .ids
             .iter()
-            .map(|&index| RuleLocation {
-                phase: Phase::RequestHeaders,
-                index: usize::from(index),
-            })
+            .map(|&index| RuleLocation::new(Phase::RequestHeaders, usize::from(index)))
     }
 
     fn publish(self, ruleset: &CompiledRuleset) -> String {
@@ -115,10 +119,10 @@ impl MatchedRules {
     pub fn from_defaults(ids: &[u8]) -> Self {
         match ids {
             [] => Self::Empty,
-            [index] => Self::One(RuleLocation {
-                phase: Phase::RequestHeaders,
-                index: usize::from(*index),
-            }),
+            [index] => Self::One(RuleLocation::new(
+                Phase::RequestHeaders,
+                usize::from(*index),
+            )),
             _ => Self::Many(MatchLog::with_default_prefix(true)),
         }
     }
@@ -138,7 +142,7 @@ impl MatchedRules {
     pub fn as_slice<'a>(&'a self, ruleset: &'a CompiledRuleset, phase: Phase) -> &'a [String] {
         match self {
             Self::Empty => &[],
-            Self::One(loc) => ruleset.rules_for_phase(loc.phase)[loc.index].id.as_slice(),
+            Self::One(loc) => loc.rule(ruleset).id.as_slice(),
             Self::Many(records) => records.as_slice(ruleset, phase),
         }
     }

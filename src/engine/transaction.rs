@@ -1066,14 +1066,14 @@ impl Transaction {
                     first_message,
                 } = outcome;
                 if let Some(data) = first_data {
-                    let source = RuleLocation {
+                    let source = RuleLocation::new(
                         phase,
-                        index: if rule.id.is_some() {
+                        if rule.id.is_some() {
                             idx
                         } else {
                             starter_index
                         },
-                    };
+                    );
                     let data = (source, data);
                     if standalone {
                         self.matched_data.extend(&ruleset, std::iter::once(data));
@@ -1101,13 +1101,8 @@ impl Transaction {
                         .extend(&ruleset, pending_chain_data.drain(..));
                 }
                 if starter.id.is_some() {
-                    self.matched_rules.push(
-                        &ruleset,
-                        RuleLocation {
-                            phase,
-                            index: starter_index,
-                        },
-                    );
+                    self.matched_rules
+                        .push(&ruleset, RuleLocation::new(phase, starter_index));
                 }
 
                 if self.record_rule_messages {
