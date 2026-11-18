@@ -5,12 +5,11 @@ use crate::operators::{compile_operator, Operator};
 use crate::parser::{
     Action, DataAction, Directive, DisruptiveAction, FlowAction, MetadataAction, OperatorName,
     OperatorSpec, Parser, RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection,
-    UpdateTargetById, VariableSpec,
+    SetVarValue, UpdateTargetById, VariableSpec,
 };
 use crate::transformations::TransformationPipeline;
 
 use super::phase::Phase;
-use crate::parser::SetVarValue;
 use crate::variables::{folded_key, ByteValue};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -184,9 +183,8 @@ impl RuleDispatch {
                             SetVarValue::String(text) => Some(text.as_str().into()),
                             _ => None,
                         },
-                        key: (!op.key.contains("%{")).then(|| {
-                            ByteValue::from(crate::variables::folded_key(op.key.as_bytes()))
-                        }),
+                        key: (!op.key.contains("%{"))
+                            .then(|| ByteValue::from(folded_key(op.key.as_bytes()))),
                     });
                 }
                 Action::Control(_) => {
