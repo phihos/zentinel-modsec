@@ -864,6 +864,8 @@ impl Transaction {
             .flatten()
     }
 
+    // Keep target selection and the single-rule fast paths in the phase loop.
+    #[inline(always)]
     fn evaluate_rule(
         &mut self,
         rule: &CompiledRule,
