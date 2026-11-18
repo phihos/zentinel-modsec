@@ -86,3 +86,69 @@ fn cli_checks_phase_two_on_bodyless_requests() {
         .unwrap()
         .contains("BLOCKED (Phase 2)"));
 }
+
+#[test]
+fn response_content_length_tracks_inspected_bytes_across_phases() {
+    use zentinel_modsec::variables::Collection;
+
+    // The empty scalar is observable. A missing match never writes the marker.
+    for (access, media, action, chunks, inspected) in [
+        ("On", "text/plain", "ProcessPartial", &[][..], Some("0")),
+        ("On", "text/plain", "ProcessPartial", &["é", "a"], Some("3")),
+        (
+            "On",
+            "text/plain",
+            "ProcessPartial",
+            &["ab", "cd"],
+            Some("4"),
+        ),
+        (
+            "On",
+            "text/plain",
+            "ProcessPartial",
+            &["ab", "cdef"],
+            Some("4"),
+        ),
+        ("On", "image/png", "ProcessPartial", &["abc"], None),
+        ("Off", "text/plain", "ProcessPartial", &["abc"], None),
+        ("On", "text/plain", "Reject", &["ab", "cdef"], None),
+    ] {
+        let engine = ModSecurity::from_string(&format!(
+            r#"SecRuleEngine On
+SecResponseBodyAccess {access}
+SecResponseBodyMimeType text/plain
+SecResponseBodyLimit 4
+SecResponseBodyLimitAction {action}
+SecRule RESPONSE_CONTENT_LENGTH "@rx ^[0-9]*$" "id:3,phase:3,pass,setvar:tx.len3=v%{{MATCHED_VAR}}"
+SecRule RESPONSE_CONTENT_LENGTH "@rx ^[0-9]*$" "id:4,phase:4,pass,setvar:tx.len4=v%{{MATCHED_VAR}}"
+SecRule RESPONSE_CONTENT_LENGTH "@rx ^[0-9]*$" "id:5,phase:5,pass,setvar:tx.len5=v%{{MATCHED_VAR}}"#
+        ))
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        tx.add_response_header("Content-Type", media).unwrap();
+        tx.add_response_header("Content-Length", "99").unwrap();
+        tx.process_response_headers_with_status(200, "HTTP/1.1")
+            .unwrap();
+        assert_eq!(tx.tx().get("len3"), Some(vec!["v"]));
+        for chunk in chunks {
+            tx.write_response_body(chunk.as_bytes()).unwrap();
+        }
+        // ProcessPartial runs phase 4 as soon as the limit is reached.
+        let after_write = if inspected == Some("4") {
+            Some(vec!["v4"])
+        } else {
+            None
+        };
+        assert_eq!(tx.tx().get("len4"), after_write);
+        tx.process_response_body().unwrap();
+        let expected = format!("v{}", inspected.unwrap_or_default());
+        if action == "Reject" {
+            assert_eq!(tx.intervention().unwrap().status, 500);
+            assert_eq!(tx.tx().get("len4"), None);
+        } else {
+            assert_eq!(tx.tx().get("len4"), Some(vec![expected.as_str()]));
+        }
+        tx.process_logging().unwrap();
+        assert_eq!(tx.tx().get("len5"), Some(vec![expected.as_str()]));
+    }
+}

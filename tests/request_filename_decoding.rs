@@ -71,3 +71,27 @@ fn query_bytes_do_not_change_a_text_path_or_previous_query() {
     assert_eq!(request.path_bytes(), b"/\xff");
     assert_eq!(request.query_bytes(), "label=café".as_bytes());
 }
+
+#[test]
+fn basename_retains_the_decoded_path_when_it_ends_in_a_separator() {
+    use zentinel_modsec::variables::Collection;
+
+    let engine = ModSecurity::from_string(
+        r#"SecRule REQUEST_BASENAME "@rx ^.*$" "id:1,phase:1,pass,setvar:tx.base=%{MATCHED_VAR}""#,
+    )
+    .unwrap();
+    for (uri, expected) in [
+        ("/", "/"),
+        ("/catalog/", "/catalog/"),
+        ("/shelf/caf%C3%A9%2F?sort=name", "/shelf/café/"),
+        ("/shelf%5C", "/shelf\\"),
+        ("/shelf%5Cbook", "book"),
+        ("/shelf/book", "book"),
+        ("*", "*"),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri(uri, "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.tx().get("base"), Some(vec![expected]), "{uri}");
+    }
+}

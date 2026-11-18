@@ -248,3 +248,58 @@ fn capture_publication_moves_the_subgroup_buffer_into_tx() {
     // One additional result buffer, plus fixed regex/collection metadata.
     assert!(group <= whole + data.len() + 2048, "{whole} -> {group}");
 }
+
+#[test]
+fn a_macro_first_value_lookup_does_not_copy_the_duplicate_bucket() {
+    let engine = ModSecurity::from_string(
+        r#"SecRule REQUEST_METHOD "@streq %{ArGs.label}" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    let measure = |duplicates| {
+        let mut tx = engine.new_transaction();
+        let uri = format!("/?label=GET{}", "&label=more".repeat(duplicates));
+        tx.process_uri(&uri, "GET", "HTTP/1.1").unwrap();
+        REQUESTED_BYTES.set(0);
+        TRACKING.set(true);
+        tx.process_request_headers().unwrap();
+        TRACKING.set(false);
+        assert_eq!(tx.matched_rules(), ["1"]);
+        REQUESTED_BYTES.get()
+    };
+    measure(0);
+    let one = measure(0);
+    let many = measure(256);
+    assert!(
+        many <= one + 128,
+        "macro allocated by duplicate count: {one} -> {many}"
+    );
+}
+
+#[test]
+fn verdict_only_detectors_skip_owned_fingerprints() {
+    use zentinel_modsec::libinjection::{
+        detect_sqli, detect_xss, is_sqli, is_xss, DetectionResult,
+    };
+
+    // Warm both entry points before measuring their positive verdicts.
+    type Detector = (fn(&str) -> bool, fn(&str) -> DetectionResult, &'static str);
+    let detectors: [Detector; 2] = [
+        (is_sqli, detect_sqli, r#"-1839" or "1"="2"#),
+        (is_xss, detect_xss, "<script>"),
+    ];
+    for (verdict, detailed, input) in detectors {
+        assert!(verdict(input));
+        assert!(detailed(input).fingerprint.is_some());
+        ALLOCATIONS.set(0);
+        TRACKING.set(true);
+        let matched = verdict(input);
+        TRACKING.set(false);
+        let verdict_allocations = ALLOCATIONS.get();
+        ALLOCATIONS.set(0);
+        TRACKING.set(true);
+        let result = detailed(input);
+        TRACKING.set(false);
+        assert!(matched && result.is_injection);
+        assert!(ALLOCATIONS.get() > verdict_allocations);
+    }
+}

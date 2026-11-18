@@ -170,6 +170,14 @@ impl HashMapCollection {
         self.add_bytes(key, value);
     }
 
+    /// Borrow the first member without collecting the rest of its bucket.
+    pub(crate) fn first_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {
+        self.data
+            .get(self.lookup_key(key).as_ref())?
+            .first()
+            .map(ByteValue::as_bytes)
+    }
+
     pub(super) fn last_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {
         self.data.get(key)?.last().map(ByteValue::as_bytes)
     }

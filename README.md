@@ -167,6 +167,9 @@ not only a nonzero HTTP status. Status arguments retain the public `u16` domain.
 
 Response headers can be supplied with `process_response_headers_with_status()`;
 `process_response_body()` runs phase 4 after MIME/access checks.
+`RESPONSE_CONTENT_LENGTH` holds the inspected byte count starting in phase 4,
+including zero for an inspected empty body and the retained prefix length for
+`ProcessPartial`. It stays empty when inspection is skipped.
 
 ### Detection only and anomaly scoring
 
@@ -240,15 +243,25 @@ async fn waf(
 **Directives:** `SecRule`, `SecAction`, `SecMarker`, `SecRuleEngine`,
 `SecDefaultAction`, `SecRuleRemoveById`, `SecRuleUpdateTargetById`,
 `SecRuleUpdateTargetByTag`, `Include`.
+Relative includes resolve beside their declaring file. A glob applies only to
+the written operand. An unmatched glob is allowed, and an unreadable matched
+file fails the load. As in Coraza 3.8.1, one configuration can expand up to
+100 `Include` directives, including nested directives. Each glob counts once.
 Body directives are implemented: `SecRequestBodyAccess`, `SecResponseBodyAccess`,
 `SecRequestBodyLimit`, `SecResponseBodyLimit`, their `LimitAction` settings,
 `SecResponseBodyMimeType` and `SecResponseBodyMimeTypesClear`. Limits must be
 between 1 byte and 1 GiB. MIME directives replace the list, matching the pinned
 reference implementation. In-memory spooling and no-files limits remain
 unsupported and warn; the hard body limit still bounds retained bytes.
-`SecRuleUpdateActionById` remains unsupported, with affected rule IDs in its
-load-time warning. Other unknown directives also warn
-at load. `SecComponentSignature` is accepted as metadata.
+`SecRuleUpdateActionById 112 "deny,status:409"` changes an earlier standalone
+rule or the starter of a `SecRule` chain. Standalone `SecAction` rules are
+also supported. Supply one positive ID and a comma-separated list of
+`pass`, `deny` and unsigned 16-bit `status` values without spaces.
+A status-only update preserves the disruptive action. The last supplied
+status and the last disruptive action each take effect. A missing or removed
+ID, ID range, unsupported action, incomplete chain, or chain containing
+`SecAction` rejects the load.
+Other unknown directives warn at load. `SecComponentSignature` is accepted as metadata.
 
 `SecRuleUpdateTargetByTag attack-sqli "!ARGS:password"` excludes that argument
 from every rule carrying the exact, case-sensitive `attack-sqli` tag. Positive
@@ -264,11 +277,6 @@ loading; malformed runtime controls produce load-time warnings with rule IDs.
 case-sensitive tag for this transaction, including later phases. A tagged
 chain starter selects its entire chain. Untagged rules continue to execute.
 
-Relative includes resolve beside the declaring file. A glob with no matches is
-allowed. An unreadable match fails the load. Each configuration accepts up to
-100 include directives, counting a glob once. If a parse fails, the parser
-retains the configuration it held before the call.
-
 **Operators:** `@rx`, `@pm`, `@pmFromFile`, `@contains`, `@containsWord`, `@beginsWith`,
 `@endsWith`, `@within`, `@streq`, `@eq`, `@ne`, `@gt`, `@ge`, `@lt`, `@le`,
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
@@ -283,6 +291,11 @@ the next matching start, including starts inside an earlier match.
 by the input edges or bytes outside ASCII A–Z and a–z. An empty operand matches
 every value. Coraza 3.8.1 does not implement this operator. `@strmatch` uses
 substring matching and emits a load-time compatibility warning.
+
+`@validateByteRange` accepts decimal bytes and inclusive ranges, for example
+`9,13,32-126`. Rules with an invalid static entry fail at load. A macro-supplied
+list is checked after expansion. An omitted range matches every input, including
+an empty value. A descending range contributes no permitted bytes.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,
