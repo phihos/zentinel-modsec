@@ -4,11 +4,14 @@
 //! rules without adding branches or log noise to the request path.
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::ruleset::{has_chain, numeric_id, rule_actions};
 use crate::parser::{
-    Action, DataAction, Directive, FlowAction, LoggingAction, MetadataAction, OperatorName,
-    Selection, SetVarValue, VariableName, VariableSpec, XmlTarget,
+    Action, DataAction, Directive, LoggingAction, MetadataAction, OperatorName, Selection,
+    SetVarValue, VariableName, VariableSpec, XmlTarget,
 };
 use crate::variables::SelectorPrograms;
+
+type ControlWarnings = BTreeMap<String, (&'static str, Vec<String>)>;
 
 type Diagnostics = BTreeMap<(String, String, &'static str), BTreeSet<String>>;
 
@@ -24,17 +27,27 @@ pub(super) fn report(
     directives: &[Directive],
     programs: &mut SelectorPrograms,
 ) -> crate::Result<()> {
-    let all_ids: BTreeSet<String> = directives
-        .iter()
-        .filter_map(|directive| {
-            let actions = match directive {
-                Directive::SecRule(rule) => &rule.actions,
-                Directive::SecAction(rule) => &rule.actions,
-                _ => return None,
+    // Emit control warnings before validation, including when a later rule fails to load.
+    let mut all_ids = BTreeSet::new();
+    let mut controls = ControlWarnings::new();
+    let mut chain_id = None;
+    for actions in directives.iter().filter_map(rule_actions) {
+        let id = numeric_id(actions);
+        if let Some(id) = id {
+            all_ids.insert(id.to_string());
+        }
+        let effective = inherit_chain_id(id, actions, &mut chain_id);
+        for (name, value, reason) in super::control::unsupported_controls(actions) {
+            let key = if value.is_empty() {
+                name
+            } else {
+                format!("{name}={value}")
             };
-            id(actions)
-        })
-        .collect();
+            let (_, ids) = controls.entry(key).or_insert_with(|| (reason, Vec::new()));
+            ids.push(display_id(effective));
+        }
+    }
+    emit_unsupported_controls(controls);
     let global_ids = if all_ids.is_empty() {
         "(ruleset)".into()
     } else {
@@ -62,17 +75,11 @@ pub(super) fn report(
             }
             _ => continue,
         };
-        let effective_id = id(actions)
-            .or_else(|| chain_id.clone())
-            .unwrap_or_else(|| "(no id)".into());
-        chain_id = if actions
-            .iter()
-            .any(|a| matches!(a, Action::Flow(FlowAction::Chain)))
-        {
-            Some(effective_id.clone())
-        } else {
-            None
-        };
+        let effective_id = display_id(inherit_chain_id(
+            numeric_id(actions),
+            actions,
+            &mut chain_id,
+        ));
         report_variables(&mut found, variables, &effective_id, programs);
         if let Some(operator) = operator {
             let reason = match operator.name {
@@ -130,11 +137,31 @@ fn emit(found: Diagnostics) {
     }
 }
 
-fn id(actions: &[Action]) -> Option<String> {
-    actions.iter().find_map(|action| match action {
-        Action::Metadata(MetadataAction::Id(id)) => Some(id.to_string()),
-        _ => None,
-    })
+fn inherit_chain_id(
+    id: Option<u64>,
+    actions: &[Action],
+    chain_id: &mut Option<u64>,
+) -> Option<u64> {
+    let effective = id.or(*chain_id);
+    *chain_id = if has_chain(actions) { effective } else { None };
+    effective
+}
+
+fn display_id(id: Option<u64>) -> String {
+    id.map_or_else(|| "(no id)".to_owned(), |id| id.to_string())
+}
+
+fn emit_unsupported_controls(controls: ControlWarnings) {
+    for (spec, (reason, ids)) in controls {
+        tracing::warn!(
+            target: super::ruleset::LOG_TARGET,
+            directive = %spec,
+            rules_affected = ids.len(),
+            rule_ids = %ids.join(","),
+            reason = %reason,
+            "ctl: directive is not implemented and will have no effect"
+        );
+    }
 }
 
 fn report_variables(
