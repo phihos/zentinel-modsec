@@ -20,8 +20,7 @@ pub use xss::detect_xss;
 
 /// Detect SQL injection without replacing invalid UTF-8 input.
 ///
-/// The optional native backend accepts all bytes. The Rust heuristic backend
-/// reports an explicit error for binary input instead of silently changing it.
+/// Both the native and Rust heuristic backends inspect the original bytes.
 pub fn detect_sqli_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
     #[cfg(feature = "libinjection-ffi")]
     {
@@ -29,18 +28,13 @@ pub fn detect_sqli_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
     }
     #[cfg(not(feature = "libinjection-ffi"))]
     {
-        std::str::from_utf8(input).map(detect_sqli).map_err(|_| {
-            crate::Error::UnsupportedBinaryInput {
-                component: "Rust SQLi backend".into(),
-            }
-        })
+        Ok(sqli::detect_sqli_bytes(input))
     }
 }
 
 /// Detect XSS without replacing invalid UTF-8 input.
 ///
-/// The optional native backend accepts all bytes. The Rust heuristic backend
-/// reports an explicit error for binary input instead of silently changing it.
+/// Both the native and Rust heuristic backends inspect the original bytes.
 pub fn detect_xss_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
     #[cfg(feature = "libinjection-ffi")]
     {
@@ -48,11 +42,7 @@ pub fn detect_xss_bytes(input: &[u8]) -> crate::Result<DetectionResult> {
     }
     #[cfg(not(feature = "libinjection-ffi"))]
     {
-        std::str::from_utf8(input).map(detect_xss).map_err(|_| {
-            crate::Error::UnsupportedBinaryInput {
-                component: "Rust XSS backend".into(),
-            }
-        })
+        Ok(xss::detect_xss_bytes(input))
     }
 }
 
