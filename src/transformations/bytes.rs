@@ -269,6 +269,42 @@ fn decoded_output(input: &[u8], output: Vec<u8>) -> Cow<'_, [u8]> {
     }
 }
 
+/// Fold ASCII and malformed byte input without Unicode case conversion.
+pub(super) fn cmd_line(input: &[u8]) -> Cow<'_, [u8]> {
+    let first = input.iter().position(|&b| {
+        b.is_ascii_uppercase() || matches!(b, b'\\' | b'"' | b'\'' | b'^' | b',' | b';') || space(b)
+    });
+    let Some(first) = first else {
+        return Cow::Borrowed(input);
+    };
+    let mut out = Vec::with_capacity(input.len());
+    out.extend_from_slice(&input[..first]);
+    let mut pending = false;
+    for &b in &input[first..] {
+        match b {
+            b'\\' | b'"' | b'\'' | b'^' => {}
+            b if matches!(b, b',' | b';') || space(b) => {
+                if !pending {
+                    out.push(b' ');
+                    pending = true;
+                }
+            }
+            b'/' | b'(' => {
+                if pending {
+                    out.pop();
+                }
+                out.push(b);
+                pending = false;
+            }
+            _ => {
+                out.push(b.to_ascii_lowercase());
+                pending = false;
+            }
+        }
+    }
+    decoded_output(input, out)
+}
+
 pub(super) fn apply<'a>(
     transformation: &dyn Transformation,
     input: &'a [u8],
@@ -360,39 +396,7 @@ pub(super) fn apply<'a>(
                     }
                     input[start..end].to_vec()
                 }
-                "cmdLine" => {
-                    let mut out = Vec::with_capacity(input.len());
-                    let mut pending = false;
-                    for &b in input {
-                        match b {
-                            b'\\' | b'"' | b'\'' | b'^' => {}
-                            b',' | b';' => {
-                                if !pending {
-                                    out.push(b' ');
-                                    pending = true;
-                                }
-                            }
-                            b if space(b) => {
-                                if !pending {
-                                    out.push(b' ');
-                                    pending = true;
-                                }
-                            }
-                            b'/' | b'(' => {
-                                if pending {
-                                    out.pop();
-                                }
-                                out.push(b);
-                                pending = false;
-                            }
-                            _ => {
-                                out.push(b.to_ascii_lowercase());
-                                pending = false;
-                            }
-                        }
-                    }
-                    out
-                }
+                "cmdLine" => return Ok(cmd_line(input)),
                 "removeComments" | "replaceComments" => {
                     let mut out = Vec::new();
                     let mut i = 0;
