@@ -110,3 +110,58 @@ fn encoding_validators_agree_on_text_and_keep_binary_validation() {
             .matched
     );
 }
+
+#[test]
+fn phase_pruning_preserves_validation_matches_after_transformation_and_negation() {
+    let engine = ModSecurity::from_string(
+        r#"SecRuleEngine DetectionOnly
+SecRule ARGS "@validateByteRange 45-58,65-90,95,97-122" "id:1,phase:1,pass,t:none"
+SecRule ARGS "@validateByteRange 48-57,65-90,97-122" "id:2,phase:1,pass,t:none"
+SecRule ARGS "@validateByteRange 48-57,65-89,97-122" "id:3,phase:1,pass,t:none"
+SecRule ARGS "@validateByteRange" "id:4,phase:1,pass,t:none"
+SecRule ARGS "!@validateUrlEncoding" "id:5,phase:1,pass,t:none"
+SecRule ARGS "@validateByteRange 32-126" "id:6,phase:1,pass,t:hexDecode,multiMatch"
+SecRule ARGS "@validateUrlEncoding" "id:7,phase:1,pass,t:hexDecode,multiMatch"
+SecRule ARGS "@validateUtf8Encoding" "id:8,phase:1,pass,t:hexDecode,multiMatch""#,
+    )
+    .unwrap();
+    for (value, expected) in [
+        ("AZ09", &["3", "4", "5"][..]),
+        ("part/sub", &["2", "3", "4", "5"]),
+        ("ff", &["4", "5", "6", "8"]),
+        ("25", &["4", "5", "7"]),
+        ("%25", &["1", "2", "3", "4", "7"]),
+        ("", &["4", "5"]),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri(&format!("/?q={value}"), "GET", "HTTP/1.1")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.matched_rules(), expected, "{value:?}");
+    }
+}
+
+#[test]
+fn range_bounds_require_every_member_of_the_reported_alphabet() {
+    for omitted in 0..=u8::MAX {
+        let spec = match omitted {
+            0 => "1-255".to_owned(),
+            255 => "0-254".to_owned(),
+            byte => format!("0-{},{}-255", byte - 1, byte + 1),
+        };
+        let op = ValidateByteRangeOperator::try_new(&spec).unwrap();
+        let word = omitted.is_ascii_alphanumeric();
+        let path = word || b"_-./:".contains(&omitted);
+        assert_eq!(
+            op.short_token_minimums(),
+            [if word { 0 } else { 65 }, if path { 0 } else { 65 }],
+            "{spec}"
+        );
+    }
+    assert_eq!(
+        ValidateByteRangeOperator::try_new("")
+            .unwrap()
+            .short_token_minimums(),
+        [0, 0]
+    );
+}
