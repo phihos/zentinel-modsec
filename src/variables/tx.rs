@@ -60,8 +60,9 @@ impl TxCollection {
         self.data.is_empty()
     }
 
-    pub(crate) fn reserve(&mut self, size: usize) {
-        self.data.reserve(size)
+    pub(crate) fn apply_defaults(&mut self, values: &[(ByteValue, ByteValue)], capture_limit: u8) {
+        self.data.extend(values.iter().cloned());
+        self.capture_limit = self.capture_limit.max(capture_limit);
     }
 
     fn lookup(&self, key: &[u8]) -> Option<&ByteValue> {
@@ -142,8 +143,13 @@ impl TxCollection {
     }
 
     fn observe_capture_key(&mut self, key: &[u8]) {
-        if let [digit @ b'0'..=b'9'] = key {
-            self.capture_limit = self.capture_limit.max(digit - b'0' + 1);
+        self.capture_limit = self.capture_limit.max(Self::capture_slot_end(key));
+    }
+
+    pub(crate) fn capture_slot_end(key: &[u8]) -> u8 {
+        match key {
+            [digit @ b'0'..=b'9'] => digit - b'0' + 1,
+            _ => 0,
         }
     }
 
