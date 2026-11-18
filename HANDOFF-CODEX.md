@@ -1,5 +1,26 @@
 # Coraza parity handoff — 2026-11-18
 
+## Transaction body policy, rule evaluation and recursive schemas
+
+Engine `d840296` adds transaction-local request and response limits, a request
+spool above `SecRequestBodyInMemoryLimit`, and transaction-scoped multipart
+paths for rules that read uploaded files. It supports action updates across ID
+ranges, scalar and collection macros, named datasets, REST path arguments and
+national identifier checks. Connectors can select Coraza's explicit JSON/XML
+processor policy. Logging and external integrations stay with the connector.
+
+Recursive JSON schemas now evaluate deep object and array inputs on the heap.
+All 48 pinned Coraza recursive cases and eight dynamic-scope cases agreed.
+On a 1 MiB worker stack, the engine accepted 10,000 nested arrays and rejected
+10,001. The README covers unsupported custom vocabularies and other limits.
+
+Both detector builds reproduced Coraza 3.8.1's complete OWASP CRS 4.25.0
+case sets and all 22 blocking traces. All 24 connector audit records retained
+their previous bytes. Against `14eb6a0`, the full 698-rule benchmark measured
+GET at 44.04 → 42.58 µs, form POST at 57.18 → 54.03 µs and JSON POST at
+65.29 → 64.29 µs. These are median wall times from sixteen interleaved pairs.
+[Comparison programs, paired timings and qualification receipts](https://github.com/phihos/zentinel-modsec/tree/0657f387ec40a478774cd8a9c52946f66f1402dd/benches/results/rule-body-parity)
+
 ## URL transformations, keyed macros and response inspection
 
 Engine `902b2db` matches Coraza 3.8.1's URL encoding on all 256 input bytes.
