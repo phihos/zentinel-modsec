@@ -109,6 +109,17 @@ pub trait Operator: Send + Sync {
         Ok(self.execute(text).into())
     }
 
+    /// Evaluate a rule that may discard subgroups. The decision and matched
+    /// portion retain the semantics of `execute_bytes`. Custom operators can
+    /// keep returning their full result without implementing this method.
+    fn execute_rule_bytes(
+        &self,
+        value: &[u8],
+        _capture: bool,
+    ) -> crate::Result<ByteOperatorResult> {
+        self.execute_bytes(value)
+    }
+
     /// Get the operator name.
     fn name(&self) -> &'static str;
 
