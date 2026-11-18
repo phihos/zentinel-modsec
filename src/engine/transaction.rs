@@ -52,6 +52,9 @@ pub struct Transaction {
     allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
     matched_vars: Vec<(ByteValue, ByteValue)>,
+    // In tagged mode the last scalar from the preceding rule remains visible,
+    // while MATCHED_VARS starts at this offset and spans the current chain.
+    matched_collection_start: usize,
     /// Per-transaction `ctl:` overrides.
     controls: TransactionControls,
     /// The first variable matched by each completed rule link, in order.
@@ -275,6 +278,7 @@ impl Transaction {
             pending_marker: None,
             allow_through: None,
             matched_vars: Vec::new(),
+            matched_collection_start: 0,
             controls: TransactionControls::default(),
             matched_data: MatchLog::default(),
             matched_fields: None,
@@ -649,6 +653,19 @@ impl Transaction {
                 rule.id.as_deref().or(starter.id.as_deref())
             };
             let standalone = !rule.is_chain && chain_start.is_none();
+            let link_start = if ruleset.multiphase {
+                if chain_start.is_none() {
+                    if self.matched_vars.len() > 1 {
+                        let last = self.matched_vars.pop().unwrap();
+                        self.matched_vars.clear();
+                        self.matched_vars.push(last);
+                    }
+                    self.matched_collection_start = self.matched_vars.len();
+                }
+                self.matched_vars.len()
+            } else {
+                0
+            };
             let outcome = if !dispatch[idx].inactive && targets.may_match(rule.variables.len()) {
                 self.evaluate_rule(
                     rule,
@@ -674,6 +691,9 @@ impl Transaction {
                     first_message,
                 } = outcome;
                 if let Some(data) = first_data {
+                    if let Some(fields) = &self.matched_fields {
+                        fields.collect(&mut pending_fields, &self.matched_vars[link_start..]);
+                    }
                     let source = RuleLocation::new(
                         phase,
                         if rule.id.is_some() {
@@ -690,9 +710,6 @@ impl Transaction {
                     }
                 }
 
-                if let Some(fields) = &self.matched_fields {
-                    fields.collect(&mut pending_fields, &self.matched_vars);
-                }
                 if rule.is_chain {
                     // A link that expects more links after it. Hold the
                     // starter's remaining actions: nothing else may fire until
@@ -861,15 +878,28 @@ impl Transaction {
             }
         }
         self.matched_vars.clear();
-        self.matched_vars.extend(
-            defaults
-                .last_count
-                .map(|entry| super::initialization::TxDefaults::count_value(dispatch, entry)),
-        );
+        if let Some(entry) = defaults.last_count {
+            self.matched_vars
+                .push(super::initialization::TxDefaults::count_value(
+                    dispatch, entry,
+                ));
+        } else if ruleset.multiphase {
+            self.matched_vars
+                .push((ByteValue::from("UNKNOWN"), ByteValue::default()));
+        }
     }
 
     fn variable_resolver(&self) -> VariableResolver<'_> {
-        VariableResolver::new_bytes(&self.request, &self.response, &self.tx, &self.matched_vars)
+        let mut resolver = VariableResolver::new_bytes(
+            &self.request,
+            &self.response,
+            &self.tx,
+            &self.matched_vars,
+        );
+        if self.ruleset.multiphase {
+            resolver = resolver.with_logical_match_scope(self.matched_collection_start);
+        }
+        resolver
             .with_request_line(&self.request_line)
             .with_connector_metadata(self.connector_metadata)
     }
@@ -1093,7 +1123,9 @@ impl Transaction {
                 }
             }
             let outcome = outcome.get_or_insert_with(|| {
-                tx.matched_vars.clear();
+                if !tx.ruleset.multiphase {
+                    tx.matched_vars.clear();
+                }
                 RuleOutcome {
                     first_data: None,
                     first_message: None,
@@ -1111,6 +1143,9 @@ impl Transaction {
                     });
                 }
                 tx.matched_vars.push((name.clone(), value));
+            } else if tx.ruleset.multiphase {
+                tx.matched_vars
+                    .push((ByteValue::from("UNKNOWN"), ByteValue::default()));
             }
             tx.apply_match_actions(rule, dispatch, logical_id);
             if first && chain_depth == 0 && !rule.is_chain && tx.record_rule_messages {

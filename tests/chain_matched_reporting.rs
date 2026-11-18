@@ -141,3 +141,49 @@ SecRule ARGS:b|ARGS:c|ARGS:d "@streq green" "t:none"
         ["ARGS:a", "ARGS:b"]
     );
 }
+
+#[test]
+fn multiphase_matches_coraza_rule_and_chain_field_lifetimes() {
+    let cases = [
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass"
+SecRule &MATCHED_VARS "@eq 0" "id:2,phase:1,deny""#,
+            "2",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:1,phase:1,pass"
+SecRule REQUEST_URI "@streq /missing" "id:2,phase:1,pass"
+SecRule MATCHED_VAR "@streq GET" "id:3,phase:1,deny""#,
+            "3",
+        ),
+        (
+            r#"SecRule REQUEST_METHOD "@streq GET" "id:3,phase:1,deny,chain"
+SecRule REQUEST_URI "@streq /home" "chain"
+SecRule MATCHED_VARS:REQUEST_METHOD "@streq GET" "t:none""#,
+            "3",
+        ),
+        (
+            r#"SecAction "id:4,phase:1,pass,setvar:'tx.name=%{MATCHED_VAR_NAME}'"
+SecRule TX:name "@streq UNKNOWN" "id:5,phase:1,deny""#,
+            "5",
+        ),
+        (
+            r#"SecRule MATCHED_VAR_NAME "@rx ^$" "id:7,phase:1,deny""#,
+            "7",
+        ),
+    ];
+    for (rules, id) in cases {
+        let mut parser = zentinel_modsec::parser::Parser::new();
+        parser.parse(&format!("SecRuleEngine On\n{rules}")).unwrap();
+        let ruleset =
+            zentinel_modsec::CompiledRuleset::compile_multiphase(parser.into_directives()).unwrap();
+        let mut tx = zentinel_modsec::Transaction::new(ruleset.into(), 403);
+        tx.process_uri("/home", "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(
+            tx.intervention().map(|i| &i.rule_ids[..]),
+            Some([id.to_owned()].as_slice()),
+            "{rules}"
+        );
+    }
+}

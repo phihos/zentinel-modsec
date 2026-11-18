@@ -24,6 +24,7 @@ pub struct VariableResolver<'a> {
     tx: &'a TxCollection,
     matched_var: Option<&'a str>,
     matched_vars: &'a [(String, String)],
+    logical_matches: Option<&'a [(ByteValue, ByteValue)]>,
     matched_bytes: Option<&'a [(ByteValue, ByteValue)]>,
     request_line: Option<&'a OnceLock<Box<[u8]>>>,
     connector_metadata: ConnectorMetadata,
@@ -45,6 +46,7 @@ impl<'a> VariableResolver<'a> {
             tx,
             matched_var,
             matched_vars,
+            logical_matches: None,
             matched_bytes: None,
             request_line: None,
             // Standalone resolver inputs supply their public numeric fields directly.

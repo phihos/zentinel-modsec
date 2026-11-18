@@ -22,6 +22,13 @@ impl<'a> VariableResolver<'a> {
         resolver
     }
 
+    /// A tagged transaction retains the prior scalar even after the logical
+    /// rule's plural collection resets. Both scalar variables start empty.
+    pub(crate) fn with_logical_match_scope(mut self, start: usize) -> Self {
+        self.logical_matches = self.matched_bytes.map(|values| &values[start..]);
+        self
+    }
+
     /// Resolve original value and key bytes, applying exclusions before counts.
     pub fn resolve_bytes(&self, spec: &VariableSpec) -> Vec<(ByteValue, ByteValue)> {
         let mut out = Vec::new();
@@ -113,7 +120,7 @@ impl<'a> VariableResolver<'a> {
                         visit(prefix, Some(key), if names { key } else { value });
                     }
                 };
-                if let Some(values) = self.matched_bytes {
+                if let Some(values) = self.logical_matches.or(self.matched_bytes) {
                     for (key, value) in values {
                         matched(key.as_bytes(), value.as_bytes());
                     }
@@ -230,7 +237,8 @@ impl<'a> VariableResolver<'a> {
             value = match name {
                 Xml => self.request.xml.first_value_bytes(&key),
                 MatchedVars | MatchedVarsNames => self
-                    .matched_bytes
+                    .logical_matches
+                    .or(self.matched_bytes)
                     .and_then(|values| {
                         values
                             .iter()
@@ -322,11 +330,11 @@ impl<'a> VariableResolver<'a> {
                 return Some(Cow::Owned(size.to_string().into_bytes()));
             }
             MatchedVar | MatchedVarName if self.matched_bytes.is_some() => {
-                let (key, value) = self.matched_bytes?.last()?;
-                if name == MatchedVar {
-                    value.as_bytes()
-                } else {
-                    key.as_bytes()
+                match self.matched_bytes?.last() {
+                    Some((_, value)) if name == MatchedVar => value.as_bytes(),
+                    Some((key, _)) => key.as_bytes(),
+                    None if self.logical_matches.is_some() => b"",
+                    None => return None,
                 }
             }
             RequestBodyLength => {
