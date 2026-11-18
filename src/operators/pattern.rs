@@ -519,6 +519,13 @@ impl PmOperator {
 }
 
 impl Operator for PmOperator {
+    fn short_token_minimums(&self) -> [u8; 2] {
+        [
+            self.min_alphanumeric.min(65) as u8,
+            self.min_len.min(65) as u8,
+        ]
+    }
+
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
         self.execute_rule_bytes(value, true)
     }

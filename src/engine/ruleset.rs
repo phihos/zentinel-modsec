@@ -162,20 +162,17 @@ impl RuleDispatch {
             rule.operator_spec.argument.contains("%{") && !rule.operator_spec.name.uses_data_file();
         let minimum = if !dynamic
             && !rule.operator_negated
-            && rule.operator_spec.name == OperatorName::Rx
             && rule.transformations.preserves_alphanumeric_width_bounds()
         {
-            rule.operator.compiled_regex().map_or([0; 2], |rx| {
-                let [word, path] = rx.token_minimums();
-                [
-                    word,
-                    if rule.transformations.preserves_token_width_bounds() {
-                        path
-                    } else {
-                        0
-                    },
-                ]
-            })
+            let [word, path] = rule.operator.short_token_minimums();
+            [
+                word,
+                if rule.transformations.preserves_token_width_bounds() {
+                    path
+                } else {
+                    0
+                },
+            ]
         } else {
             [0; 2]
         };
