@@ -363,6 +363,12 @@ The three parity transformations are placeholders and warn with affected IDs.
 `+`, and uses lowercase percent escapes for other bytes. For example,
 `a *,` becomes `a+*%2c`. `t:urlDecode` reads a literal `+` as a space.
 
+A multipart rule or macro that reads `FILES_TMPNAMES` gets one temporary path
+per file part. The files contain the transfer-decoded bytes and are removed
+when the transaction is dropped. `SecUploadDir` selects an existing writable
+directory. It defaults to the system temporary directory. A ruleset that only
+reads ordinary upload metadata does not create named copies.
+
 Multipart fields, names and filenames retain their original bytes. The parser
 honors quoted parameters and extended filenames, preserves repeated parts, and
 reports malformed framing/header/parameter states through

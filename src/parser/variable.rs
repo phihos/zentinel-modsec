@@ -364,6 +364,7 @@ impl VariableName {
             | VariableName::Files
             | VariableName::FilesNames
             | VariableName::FilesSizes
+            | VariableName::FilesTmpnames
             | VariableName::FilesCombinedSize
             | VariableName::MultipartStrictCheck
             | VariableName::MultipartStrictError
@@ -398,7 +399,6 @@ impl VariableName {
             | VariableName::TimeWday
             | VariableName::TimeMon
             | VariableName::TimeYear
-            | VariableName::FilesTmpnames
             | VariableName::InboundAnomalyScore
             | VariableName::OutboundAnomalyScore
             | VariableName::Duration

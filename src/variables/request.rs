@@ -56,6 +56,7 @@ pub struct RequestData {
     /// Uploaded files (key = part name, value = client-supplied filename),
     /// populated by the multipart body processor. Backs `FILES`/`FILES_NAMES`.
     pub files: HashMapCollection,
+    pub(crate) uploads: Option<std::sync::Arc<super::multipart::UploadedFiles>>,
     /// Uploaded field names (one value per file part).
     pub files_names: HashMapCollection,
     /// Uploaded payload byte sizes, keyed by the original filename bytes.
@@ -131,6 +132,7 @@ impl Default for RequestData {
             xml: HashMapCollection::named(),
             multipart_part_headers: HashMapCollection::named(),
             files: HashMapCollection::named(),
+            uploads: None,
             files_names: HashMapCollection::named(),
             files_sizes: HashMapCollection::named(),
             files_combined_size: Default::default(),
@@ -363,8 +365,24 @@ impl RequestData {
     /// Returns false when the Content-Type carries no usable boundary; parser
     /// failures remain visible through body and strict-error variables.
     pub fn parse_multipart_body_bytes(&mut self, content_type: &[u8]) -> bool {
+        self.parse_multipart(content_type, true, None)
+    }
+
+    pub(crate) fn parse_multipart(
+        &mut self,
+        content_type: &[u8],
+        store_uploads: bool,
+        upload_dir: Option<&std::path::Path>,
+    ) -> bool {
         self.body_processor = "MULTIPART".into();
-        let parsed = super::multipart::parse(&self.body, content_type, self.inbound_data_error);
+        let parsed = super::multipart::parse(
+            &self.body,
+            content_type,
+            self.inbound_data_error,
+            store_uploads,
+            upload_dir,
+        );
+        self.uploads = parsed.uploads.map(std::sync::Arc::new);
         self.args_post = parsed.fields;
         self.files = parsed.files;
         self.files_names = parsed.file_names;

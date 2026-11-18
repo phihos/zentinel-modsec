@@ -39,6 +39,39 @@ pub struct CompiledRule {
     pub chain_next: Option<usize>,
 }
 
+/// Create named files only if a rule can observe them. Run after target and
+/// action updates, once per ruleset rather than on each multipart request.
+fn reads_upload_paths(rule: &CompiledRule) -> bool {
+    fn uses_macro(mut text: &str) -> bool {
+        while let Some((_, name, rest)) = super::split_operator_macro(text) {
+            if name
+                .split('.')
+                .next()
+                .is_some_and(|n| n.eq_ignore_ascii_case("FILES_TMPNAMES"))
+            {
+                return true;
+            }
+            text = rest;
+        }
+        false
+    }
+    rule.variables
+        .iter()
+        .any(|v| v.name == crate::parser::VariableName::FilesTmpnames)
+        || (!rule.operator_spec.name.has_literal_source()
+            && uses_macro(&rule.operator_spec.argument))
+        || rule.actions.iter().any(|action| match action {
+            Action::Metadata(MetadataAction::Msg(value) | MetadataAction::LogData(value)) => {
+                uses_macro(value)
+            }
+            Action::Data(DataAction::SetVar(spec)) => {
+                uses_macro(&spec.key)
+                    || matches!(&spec.value, SetVarValue::Macro(value) if uses_macro(value))
+            }
+            _ => false,
+        })
+}
+
 impl std::fmt::Debug for CompiledRule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CompiledRule")
@@ -367,6 +400,7 @@ pub struct CompiledRuleset {
     pub(super) header_slots: [Vec<Box<[u8]>>; 5],
     pub(super) width_sources: [super::target_indices::WidthSources; 5],
     pub(super) tx_defaults: Option<Box<super::initialization::TxDefaults>>,
+    pub(super) needs_upload_paths: bool,
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
     body_config: super::body::BodyConfig,
@@ -393,6 +427,7 @@ impl CompiledRuleset {
             rules: Rules::new(),
             dispatch: Default::default(),
             tx_defaults: None,
+            needs_upload_paths: false,
             width_sources: Default::default(),
             header_slots: Default::default(),
             selectors: Default::default(),
@@ -571,6 +606,12 @@ impl CompiledRuleset {
                 Directive::SecResponseBodyLimitAction(value) => {
                     ruleset.body_config.response_limit_action = value
                 }
+                Directive::SecUploadDir(dir) => {
+                    tempfile::tempfile_in(&dir).map_err(|e| Error::Config {
+                        message: format!("SecUploadDir {}: {e}", dir.display()),
+                    })?;
+                    ruleset.body_config.upload_dir = Some(dir);
+                }
                 Directive::SecResponseBodyMimeType(value) => {
                     ruleset.body_config.response_mime_types = value
                 }
@@ -681,6 +722,12 @@ impl CompiledRuleset {
             ruleset.rules_for_phase(Phase::RequestHeaders),
             ruleset.dispatch_for_phase(Phase::RequestHeaders),
         );
+        ruleset.needs_upload_paths = ruleset
+            .rules
+            .by_phase
+            .iter()
+            .flatten()
+            .any(reads_upload_paths);
         ruleset.body_config.validate()?;
         if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
             ruleset.body_config.request_limit_action =

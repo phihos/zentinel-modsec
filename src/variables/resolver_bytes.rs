@@ -110,6 +110,11 @@ impl<'a> VariableResolver<'a> {
             ),
             Files => collection(&request.files, "FILES", false, None),
             FilesNames => collection(&request.files_names, "FILES_NAMES", false, None),
+            FilesTmpnames => {
+                if let Some(files) = &request.uploads {
+                    collection(&files.names, "FILES_TMPNAMES", false, None);
+                }
+            }
             FilesSizes => collection(&request.files_sizes, "FILES_SIZES", false, None),
             MultipartName => collection(&request.multipart_names, "MULTIPART_NAME", false, None),
             MultipartFilename => collection(

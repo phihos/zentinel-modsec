@@ -2,7 +2,31 @@
 use super::collection::HashMapCollection;
 use std::collections::{HashMap, HashSet};
 
+/// Named files remain available through logging and are unlinked on the last
+/// request-data drop. Close each file after writing to bound descriptor usage.
+#[derive(Debug, Default)]
+pub(crate) struct UploadedFiles {
+    pub names: HashMapCollection,
+    paths: Vec<tempfile::TempPath>,
+}
+
+impl UploadedFiles {
+    fn store(&mut self, bytes: &[u8], directory: Option<&std::path::Path>) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut file = tempfile::Builder::new()
+            .prefix("crzmp")
+            .tempfile_in(directory.map_or_else(std::env::temp_dir, std::path::Path::to_path_buf))?;
+        file.write_all(bytes)?;
+        let path = file.into_temp_path();
+        self.names
+            .add_bytes(b"".as_slice(), path.as_os_str().as_encoded_bytes());
+        self.paths.push(path);
+        Ok(())
+    }
+}
+
 pub(super) struct Multipart {
+    pub uploads: Option<UploadedFiles>,
     pub fields: HashMapCollection,
     pub files: HashMapCollection,
     pub file_names: HashMapCollection,
@@ -23,6 +47,7 @@ pub(super) struct Multipart {
 impl Default for Multipart {
     fn default() -> Self {
         Self {
+            uploads: None,
             fields: HashMapCollection::named(),
             files: HashMapCollection::named(),
             file_names: HashMapCollection::named(),
@@ -503,7 +528,12 @@ fn quoted_printable(content: &[u8]) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
-fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
+fn process_part(
+    parsed: &mut Multipart,
+    mut headers: Headers,
+    content: &[u8],
+    upload_dir: Option<&std::path::Path>,
+) {
     // mime/multipart.NextPart decodes quoted-printable and removes this
     // header before exposing the part. Other encodings remain opaque.
     let transfer_decoded = headers
@@ -623,6 +653,13 @@ fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
     if filename.is_empty() {
         parsed.fields.add_bytes(name, content);
     } else {
+        if let Some(uploads) = parsed.uploads.as_mut() {
+            if let Err(error) = uploads.store(content, upload_dir) {
+                parsed.strict = true;
+                parsed.error = Some(format!("cannot store multipart file: {error}"));
+                return;
+            }
+        }
         parsed.file_names.add_bytes(b"".as_slice(), name);
         parsed
             .file_sizes
@@ -637,8 +674,17 @@ fn process_part(parsed: &mut Multipart, mut headers: Headers, content: &[u8]) {
     }
 }
 
-pub(super) fn parse(body: &[u8], content_type: &[u8], partial: bool) -> Multipart {
-    let mut parsed = Multipart::default();
+pub(super) fn parse(
+    body: &[u8],
+    content_type: &[u8],
+    partial: bool,
+    store_uploads: bool,
+    upload_dir: Option<&std::path::Path>,
+) -> Multipart {
+    let mut parsed = Multipart {
+        uploads: store_uploads.then(UploadedFiles::default),
+        ..Default::default()
+    };
     let params = parameters(content_type);
     let boundary = params
         .standard_value(b"boundary")
@@ -677,14 +723,14 @@ pub(super) fn parse(body: &[u8], content_type: &[u8], partial: bool) -> Multipar
             Some(next) => {
                 let framing = if style { 2 } else { 1 };
                 let end = next.position.saturating_sub(framing).max(start);
-                process_part(&mut parsed, headers, &body[start..end]);
+                process_part(&mut parsed, headers, &body[start..end], upload_dir);
                 if parsed.error.is_some() {
                     break;
                 }
                 boundary = next;
             }
             None => {
-                process_part(&mut parsed, headers, &body[start..]);
+                process_part(&mut parsed, headers, &body[start..], upload_dir);
                 if !partial {
                     parsed.strict = true;
                 }

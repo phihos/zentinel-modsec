@@ -545,7 +545,11 @@ impl Transaction {
             .first_value_bytes(b"content-type")
             .unwrap_or_default()
             .to_vec();
-        self.request.parse_multipart_body_bytes(&content_type)
+        self.request.parse_multipart(
+            &content_type,
+            self.ruleset.needs_upload_paths,
+            self.ruleset.body_config().upload_dir.as_deref(),
+        )
     }
 
     /// Run the XML body processor, recording any failure.
@@ -1788,6 +1792,10 @@ impl Transaction {
             Files => request.files.first_value_bytes(key),
             FilesNames => request.files_names.first_value_bytes(key),
             FilesSizes => request.files_sizes.first_value_bytes(key),
+            FilesTmpnames => request
+                .uploads
+                .as_ref()
+                .and_then(|files| files.names.first_value_bytes(key)),
             MultipartName => request.multipart_names.first_value_bytes(key),
             MultipartFilename => request.multipart_filenames.first_value_bytes(key),
             MultipartFilenameCharset => request.multipart_filename_charsets.first_value_bytes(key),

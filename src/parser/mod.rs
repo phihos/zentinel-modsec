@@ -236,6 +236,16 @@ impl Parser {
             "secresponsebodylimit" => self.parse_body_limit(lexer, false),
             "secrequestbodylimitaction" => self.parse_body_limit_action(lexer, true),
             "secresponsebodylimitaction" => self.parse_body_limit_action(lexer, false),
+            "secuploaddir" => {
+                let dir = self.expect_argument(lexer, "SecUploadDir")?;
+                if dir.is_empty() || self.peek_more_arguments(lexer) {
+                    return Err(Error::parse(
+                        "SecUploadDir requires one directory",
+                        self.location.to_string(),
+                    ));
+                }
+                Ok(Directive::SecUploadDir(dir.into()))
+            }
             "secresponsebodymimetype" => {
                 let mut types = Vec::new();
                 while self.peek_more_arguments(lexer) {

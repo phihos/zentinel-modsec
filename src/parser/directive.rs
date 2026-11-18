@@ -65,6 +65,8 @@ pub enum Directive {
     SecRequestBodyLimitAction(BodyLimitAction),
     /// SecResponseBodyLimitAction directive.
     SecResponseBodyLimitAction(BodyLimitAction),
+    /// Directory for temporary uploaded files.
+    SecUploadDir(std::path::PathBuf),
     /// SecResponseBodyMimeType directive (replaces the configured list).
     SecResponseBodyMimeType(Vec<String>),
     /// SecResponseBodyMimeTypesClear directive.
