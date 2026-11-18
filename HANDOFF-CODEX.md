@@ -2,6 +2,23 @@
 
 ## Current checkpoint
 
+Engine `93870ea` includes the rule-selection and allocation changes from
+`ece387f` and replaces the 32-field cutoff with a 4 KiB argument scan budget.
+GET and POST share the budget, with a minimum charge of 32 bytes per member.
+Past the limit the engine evaluates the whole collection normally.
+
+Compared directly with the round's starting checkpoint `6f35d92`, the full
+698-rule OWASP CRS 4.25.0 benchmark measured 4.6% lower GET latency, 4.0% lower
+form POST latency and 9.4% lower nested JSON POST latency across eight pairs.
+Forms with 33 and 128 short fields improved by 39.4% and 53.7%. Forms beyond
+the budget measured 7.0% slower for 129 short fields and 1.6% slower for
+65 fields of 64 bytes each. Both detector backends retained the pinned corpus
+outcomes, blocking traces and complete audit records. Checks around the limits
+also retained all last-field matches. The [report and raw samples](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round6-budget/RESULTS.md)
+include boundary workloads, mixed-traffic p99, allocator totals and cold-load timings.
+
+## Rule target selection and TX search checkpoint at `ece387f`
+
 Engine `ece387f` follows `6f35d92`. On the full 698-rule OWASP CRS 4.25.0
 benchmark, 16 paired runs measured 6.1% lower GET latency, 4.9% lower form
 POST latency and 9.7% lower nested JSON POST latency. Rust p99 on mixed traffic
