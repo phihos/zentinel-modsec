@@ -1,0 +1,11 @@
+{
+  "commit": "d8402968e77d58a4e7dc7163e231a24129877d38",
+  "tree": "0fb9efc1c99150aeb80fccb95386b872773a79cd",
+  "binary": "c3512b355858e521b2e72a6f8345d4986028dc476d7f0e80d10791073104f929",
+  "engine_rlib": "e176ce429c6e25a61e29c1059caac0a00aee58742c236c95c5e5380d221751f3",
+  "lock": "cba784ead225fc8a87679a2ada704cd96d74da0251f31ea9ec4d0d8f1155d83e",
+  "benchmark": "5ad1c974ebb2656ef7478d4215a4fffd30ef12c21762bec27919980ea6ab319f",
+  "driver_sha256": "93ee000894d6a2ce78b9218fb7b703274cf345e75ba5043d476a8fa9ab268ff1",
+  "compiler": "rustc 1.96.1 (31fca3adb 2026-06-26)\nbinary: rustc\ncommit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd\ncommit-date: 2026-06-26\nhost: x86_64-unknown-linux-gnu\nrelease: 1.96.1\nLLVM version: 22.1.2\n",
+  "crs": "aabf675fcfc5e489b424b844e6c9f1b39802df69"
+}

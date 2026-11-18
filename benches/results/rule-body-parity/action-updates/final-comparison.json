@@ -1,0 +1,22 @@
+{
+  "engine_commit": "d6630a3f16be4afa0f34a01c4487231ef54a15ac",
+  "engine_library_sha256": "16a7b42e74defb38d91b5b0de271e616f6545acda243514a090957629978198b",
+  "go": "coraza v3.8.1",
+  "cases": 35,
+  "exact_agreements": 34,
+  "differences": [
+    {
+      "case": 32,
+      "reference": "11-12 status:-1 status 0 phase1 [11 12] all [11 12] messages [original original2]",
+      "rust": "11-12 status:-1 LOAD ERROR"
+    }
+  ],
+  "sources_sha256": {
+    "reference.go": "617a5afe5c06d10caace3e92226178bba1b46d9b850ba6061cdb72866869b547",
+    "candidate.rs": "734fa280e5352c11ddf79df8c84d379f11a2d7cbf4ec0e0641d5e8d2833e2fb7",
+    "reference.log": "20acafeafdb82fa00de2b1601e62445f235f7c355c28c7a0e3896661a5957588",
+    "final-candidate.log": "7c80ef97f2ddfb1d9610a359fd3aa85d5f5ea10dc3c40d904fde60efb7b55fa2",
+    "chains.go": "ed9a493fdac4facc3bbbbda412e6878e89fae03d75dea20048a627d05cd9509c",
+    "chains.log": "821e06b5b56aeed96be96ec938eb9dede7a5fa3b73874eb2b9681f1c0aeb83c5"
+  }
+}

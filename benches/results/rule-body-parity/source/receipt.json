@@ -1,0 +1,300 @@
+{
+  "runtime": "d8402968e77d58a4e7dc7163e231a24129877d38",
+  "tree": "0fb9efc1c99150aeb80fccb95386b872773a79cd",
+  "cargo_lock_sha256": "cba784ead225fc8a87679a2ada704cd96d74da0251f31ea9ec4d0d8f1155d83e",
+  "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
+  "cargo": "cargo 1.96.1 (356927216 2026-06-26)",
+  "environment": {
+    "CARGO_BUILD_JOBS": "2",
+    "RUST_TEST_THREADS": "2",
+    "SKIP_CRS_CONFORMANCE": "1"
+  },
+  "separate_native_crs_gate": true,
+  "corpus": {
+    "tag": "v4.0.2",
+    "commit": "7244a1e3c633ea13b3c89d2f670da25789e152fc",
+    "contract_inputs": 167646
+  },
+  "checks": {
+    "fmt": {
+      "command": [
+        "taskset",
+        "-c",
+        "1",
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit": 0,
+      "duration_s": 0.34,
+      "log": "fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "diff": {
+      "command": [
+        "taskset",
+        "-c",
+        "1",
+        "git",
+        "diff",
+        "--check",
+        "e0ab0cb",
+        "d8402968e77d58a4e7dc7163e231a24129877d38"
+      ],
+      "exit": 0,
+      "duration_s": 0.01,
+      "log": "diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "working-diff": {
+      "command": [
+        "taskset",
+        "-c",
+        "1",
+        "git",
+        "diff",
+        "--exit-code",
+        "HEAD"
+      ],
+      "exit": 0,
+      "duration_s": 0.01,
+      "log": "working-diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "backends": {
+    "rust": {
+      "target": "/home/phil/Quellcode/zentinel-build-cache/target-parity-schema",
+      "cores": "1,2,9,10",
+      "checks": {
+        "clippy": {
+          "command": [
+            "taskset",
+            "-c",
+            "1,2,9,10",
+            "cargo",
+            "clippy",
+            "--locked",
+            "--offline",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit": 0,
+          "duration_s": 9.47,
+          "log": "rust-clippy.log",
+          "sha256": "b1532554c4f00e02d2250194a50b00df2bcf8a72676784411e6bad9b9c9ccd39",
+          "environment": {}
+        },
+        "all-targets": {
+          "command": [
+            "taskset",
+            "-c",
+            "1,2,9,10",
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--all-targets"
+          ],
+          "exit": 0,
+          "duration_s": 87.33,
+          "log": "rust-all-targets.log",
+          "sha256": "9d97bfacfe18b3d3bc03a8a6648114f3660d32631063c984aab7cee4c04d3496",
+          "passed": 776,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 0,
+          "test_binaries_with_summaries": 82,
+          "criterion_smoke_checks": 32,
+          "ignored_tests": [],
+          "environment": {}
+        },
+        "doctests": {
+          "command": [
+            "taskset",
+            "-c",
+            "1,2,9,10",
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--doc"
+          ],
+          "exit": 0,
+          "duration_s": 0.78,
+          "log": "rust-doctests.log",
+          "sha256": "a946908870ee98464f815e70b55eb84cee0958222cc2baf4bd5679d76aaf2f37",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 1,
+          "measured": 0,
+          "filtered_out": 0,
+          "test_binaries_with_summaries": 1,
+          "environment": {
+            "RUSTDOCFLAGS": "-D warnings"
+          }
+        },
+        "docs": {
+          "command": [
+            "taskset",
+            "-c",
+            "1,2,9,10",
+            "cargo",
+            "doc",
+            "--locked",
+            "--offline",
+            "--no-deps"
+          ],
+          "exit": 0,
+          "duration_s": 2.25,
+          "log": "rust-docs.log",
+          "sha256": "849dbf771fdcb7300ec860e91d2584aaa768f85f69001d472f1c8b190f4eeef9",
+          "environment": {
+            "RUSTDOCFLAGS": "-D warnings"
+          }
+        }
+      }
+    },
+    "ffi": {
+      "target": "/home/phil/Quellcode/zentinel-build-cache/target-upstream-parity-tx",
+      "cores": "3,4,11,12",
+      "checks": {
+        "clippy": {
+          "command": [
+            "taskset",
+            "-c",
+            "3,4,11,12",
+            "cargo",
+            "clippy",
+            "--locked",
+            "--offline",
+            "--all-targets",
+            "--features",
+            "libinjection-ffi",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit": 0,
+          "duration_s": 10.21,
+          "log": "ffi-clippy.log",
+          "sha256": "893580146b96e0d60dc555bbe09a382638aaa59da09b5df57bb36746371ad20c",
+          "environment": {}
+        },
+        "all-targets": {
+          "command": [
+            "taskset",
+            "-c",
+            "3,4,11,12",
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--all-targets",
+            "--features",
+            "libinjection-ffi"
+          ],
+          "exit": 0,
+          "duration_s": 86.73,
+          "log": "ffi-all-targets.log",
+          "sha256": "930e6541bfd3ad332e35b5d11d5b4b3b4f8f8803feeccf759c183ef4991806cb",
+          "passed": 778,
+          "failed": 0,
+          "ignored": 1,
+          "measured": 0,
+          "filtered_out": 0,
+          "test_binaries_with_summaries": 83,
+          "criterion_smoke_checks": 32,
+          "ignored_tests": [
+            "test differential::upstream_dataset ... ignored, requires the libinjection v4.0.2 data directory"
+          ],
+          "environment": {}
+        },
+        "doctests": {
+          "command": [
+            "taskset",
+            "-c",
+            "3,4,11,12",
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--doc",
+            "--features",
+            "libinjection-ffi"
+          ],
+          "exit": 0,
+          "duration_s": 0.63,
+          "log": "ffi-doctests.log",
+          "sha256": "2940866c87821ce7dbe17f528ae1e8f7356a17386c6211e5592fe4cc2d8e6bfd",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 1,
+          "measured": 0,
+          "filtered_out": 0,
+          "test_binaries_with_summaries": 1,
+          "environment": {
+            "RUSTDOCFLAGS": "-D warnings"
+          }
+        },
+        "docs": {
+          "command": [
+            "taskset",
+            "-c",
+            "3,4,11,12",
+            "cargo",
+            "doc",
+            "--locked",
+            "--offline",
+            "--no-deps",
+            "--features",
+            "libinjection-ffi"
+          ],
+          "exit": 0,
+          "duration_s": 2.27,
+          "log": "ffi-docs.log",
+          "sha256": "2b56c79d502e5901152d2d421406534f3b88fa838ae4fc76922a9ed6a9c8f466",
+          "environment": {
+            "RUSTDOCFLAGS": "-D warnings"
+          }
+        },
+        "ignored-libinjection-data": {
+          "command": [
+            "taskset",
+            "-c",
+            "3,4,11,12",
+            "cargo",
+            "test",
+            "--locked",
+            "--offline",
+            "--features",
+            "libinjection-ffi",
+            "--test",
+            "libinjection_conformance",
+            "upstream_dataset",
+            "--",
+            "--ignored"
+          ],
+          "exit": 0,
+          "duration_s": 10.35,
+          "log": "ffi-ignored-libinjection-data.log",
+          "sha256": "35ee49135576417d25e7d3df53ffea00f0c268ee38d29c12d83c0b7264ec4dfd",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "measured": 0,
+          "filtered_out": 7,
+          "test_binaries_with_summaries": 1,
+          "environment": {
+            "LIBINJECTION_DATA_DIR": "/tmp/zentinel-libinjection-upstream/data"
+          }
+        }
+      }
+    }
+  },
+  "passed": true
+}

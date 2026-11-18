@@ -86,6 +86,13 @@ with tempfile.TemporaryDirectory() as temporary:
     assert all(native[k] == v for k, v in pinned.items())
     checks.update(recursive_reference=len(pinned), recursive_with_rust_boundaries=len(expected))
 
+    cases = fixtures/"scoped/cases.jsonl"
+    go = reference("recursive/reference.go", cases)
+    rust = candidate("recursive/candidate.rs", cases, scratch)
+    save("scoped", go, rust)
+    assert go == rust and len(rust.splitlines()) == 8
+    checks["dynamic_scope"] = 8
+
     cases = fixtures/"extra/fixtures.json"
     go = reference("extra/reference.go", cases)
     rust = candidate("extra/rust/src/main.rs", cases)

@@ -1,6 +1,6 @@
 module qualification
 
-go 1.27.4
+go 1.25.0
 
 require github.com/corazawaf/coraza/v3 v3.8.1
 

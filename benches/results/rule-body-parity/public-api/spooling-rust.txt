@@ -1,0 +1,5 @@
+consumed=3 file=false
+consumed=2 file=true
+consumed=3 file=true
+phase2=1
+closed=true

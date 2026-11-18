@@ -1,0 +1,8 @@
+loose-0-2 false
+loose-1-2 true
+strict-2-2 false
+strict-3-2 true
+loose-0-160 false
+loose-1-160 true
+strict-2-160 false
+strict-3-160 true

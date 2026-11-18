@@ -1,0 +1,18 @@
+{
+  "engine": "759815bf42f0a0a4bd4e8272e5cc82a0eb2a17b7",
+  "test_worker_stack_bytes": 1048576,
+  "depth_domain": [
+    10000,
+    10001
+  ],
+  "last_of_wide_fields": 4097,
+  "compared_graph_native_decisions": 15750,
+  "mismatches": 0,
+  "schema_shapes": 18,
+  "instances_per_shape": 875,
+  "sha256": {
+    "oracle.log": "d01be0be4cab44f95814525b2afdfe6f924ca4e6dbb8efbc3117c8a9210aa7d4",
+    "integration.log": "7a4e95d22844914d72a335184ee50ff354fa72fcad6ab307639e5219ff0c0691",
+    "clippy.log": "3bfb8725b281dcf68d9cee323ca0dff8a5c226037403d647e388b52338173cc1"
+  }
+}
