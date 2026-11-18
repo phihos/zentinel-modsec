@@ -696,8 +696,11 @@ impl Transaction {
             .response_body_access_or(self.ruleset.body_config().response_access)
     }
 
-    /// Whether the response media type is selected for phase-4 body inspection.
+    /// Whether the response is selected for phase-4 inspection by MIME type or ctl.
     pub fn response_body_processable(&self) -> bool {
+        if self.controls.force_response_body_variable() {
+            return true;
+        }
         let media_type = self.response.content_type_bytes();
         self.ruleset
             .body_config()

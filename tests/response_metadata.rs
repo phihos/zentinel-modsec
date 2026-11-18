@@ -152,3 +152,85 @@ SecRule RESPONSE_CONTENT_LENGTH "@rx ^[0-9]*$" "id:5,phase:5,pass,setvar:tx.len5
         assert_eq!(tx.tx().get("len5"), Some(vec![expected.as_str()]));
     }
 }
+
+#[test]
+fn forcing_response_inspection_changes_mime_selection_per_transaction() {
+    for (access, media, actions, selected) in [
+        ("On", "text/csv", "ctl:forceResponseBodyVariable=oN", true),
+        ("On", "", "ctl:forceResponseBodyVariable=On", true),
+        ("Off", "text/csv", "ctl:forceResponseBodyVariable=On", true),
+        (
+            "On",
+            "text/csv",
+            "ctl:forceResponseBodyVariable=On,ctl:forceResponseBodyVariable=OFF",
+            false,
+        ),
+        (
+            "On",
+            "text/plain",
+            "ctl:forceResponseBodyVariable=Off",
+            true,
+        ),
+    ] {
+        let engine = ModSecurity::from_string(&format!(
+            r#"SecResponseBodyAccess {access}
+SecResponseBodyMimeType text/plain
+SecRule RESPONSE_STATUS "@streq 200" "id:1,phase:3,pass,{actions}"
+SecRule RESPONSE_BODY "@streq hello" "id:2,phase:4,pass"
+SecRule RESPONSE_CONTENT_LENGTH "@eq 5" "id:3,phase:4,pass""#
+        ))
+        .unwrap();
+        for early in [true, false] {
+            let mut tx = engine.new_transaction();
+            if !media.is_empty() {
+                tx.add_response_header("Content-Type", media).unwrap();
+            }
+            if early {
+                assert_eq!(
+                    tx.write_response_body(b"he").unwrap().consumed,
+                    if access == "On" { 2 } else { 0 }
+                );
+            }
+            tx.process_response_headers_with_status(200, "HTTP/1.1")
+                .unwrap();
+            assert_eq!(tx.response_body_processable(), selected);
+            assert_eq!(tx.response_body_accessible(), access == "On");
+            tx.append_response_body(if early { b"llo" } else { b"hello" })
+                .unwrap();
+            tx.process_response_body().unwrap();
+            let expected: &[_] = if selected && access == "On" {
+                &["1", "2", "3"]
+            } else {
+                &["1"]
+            };
+            assert_eq!(tx.matched_rules(), expected);
+        }
+        let mut next = engine.new_transaction();
+        next.add_response_header("Content-Type", "text/csv")
+            .unwrap();
+        next.process_response_headers_with_status(204, "HTTP/1.1")
+            .unwrap();
+        assert!(!next.response_body_processable());
+    }
+}
+
+#[test]
+fn phase_four_force_updates_connector_query_without_reprocessing_the_body() {
+    let engine = ModSecurity::from_string(
+        r#"SecResponseBodyAccess On
+SecResponseBodyMimeType text/plain
+SecAction "id:1,phase:4,pass,ctl:forceResponseBodyVariable=On"
+SecRule RESPONSE_BODY "@streq hello" "id:2,phase:4,pass""#,
+    )
+    .unwrap();
+    let mut tx = engine.new_transaction();
+    tx.add_response_header("Content-Type", "text/csv").unwrap();
+    tx.process_response_headers_with_status(200, "HTTP/1.1")
+        .unwrap();
+    assert!(!tx.response_body_processable());
+    tx.append_response_body(b"hello").unwrap();
+    tx.process_response_body().unwrap();
+    assert!(tx.response_body_processable());
+    tx.process_response_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["1"]);
+}

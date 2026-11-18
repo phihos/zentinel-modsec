@@ -71,6 +71,8 @@ pub enum CtlDirective {
     ResponseBodyProcessorJson,
     /// Expose an otherwise unprocessed body (Coraza 3.8.1 uses URLENCODED).
     ForceRequestBodyVariable(bool),
+    /// Bypass the response MIME allowlist; body access and size limits still apply.
+    ForceResponseBodyVariable(bool),
     /// A directive this engine does not implement.
     ///
     /// Kept as a distinct variant so it can be reported rather than discarded.
@@ -239,6 +241,15 @@ impl CtlDirective {
                     "forceRequestBodyVariable accepts only On or Off",
                 ),
             },
+            "forceresponsebodyvariable" => match value.to_ascii_lowercase().as_str() {
+                "on" => Self::ForceResponseBodyVariable(true),
+                "off" => Self::ForceResponseBodyVariable(false),
+                _ => Self::unsupported(
+                    directive,
+                    value,
+                    "forceResponseBodyVariable accepts only On or Off",
+                ),
+            },
             "responsebodyaccess" => match value.to_ascii_lowercase().as_str() {
                 "on" => CtlDirective::ResponseBodyAccess(true),
                 "off" => CtlDirective::ResponseBodyAccess(false),
@@ -348,6 +359,7 @@ pub struct TransactionControls {
     request_body_processor: Option<String>,
     response_json: bool,
     force_request_body_variable: bool,
+    force_response_body_variable: bool,
     /// Unsupported directives already reported, so a rule that fires on every
     /// request does not produce a warning per request.
     reported: HashSet<String>,
@@ -423,6 +435,7 @@ impl TransactionControls {
             CtlDirective::ResponseBodyAccess(on) => self.response_body_access = Some(on),
             CtlDirective::ResponseBodyProcessorJson => self.response_json = true,
             CtlDirective::RequestBodyProcessor(p) => self.request_body_processor = Some(p),
+            CtlDirective::ForceResponseBodyVariable(on) => self.force_response_body_variable = on,
             CtlDirective::ForceRequestBodyVariable(on) => self.force_request_body_variable = on,
             CtlDirective::Unsupported {
                 directive,
@@ -612,6 +625,11 @@ impl TransactionControls {
     /// Whether a rule selected JSON response processing.
     pub fn response_json_selected(&self) -> bool {
         self.response_json
+    }
+
+    /// Whether the response bypasses the configured MIME filter.
+    pub fn force_response_body_variable(&self) -> bool {
+        self.force_response_body_variable
     }
 
     /// Whether the request body should be parsed at all.

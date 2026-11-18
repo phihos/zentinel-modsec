@@ -336,7 +336,10 @@ excluding MIME framing, matching Coraza. Intentional `ProcessPartial` prefixes
 suppress only the EOF strict error, while other malformed states remain visible.
 
 Selecting `ctl:responseBodyProcessor=JSON` by phase 3 parses the inspected response
-in phase 4. Enable response body access and allow the response MIME type.
+in phase 4. Enable response body access and allow the response MIME type, or select
+`ctl:forceResponseBodyVariable=On` to bypass the MIME allowlist for a transaction.
+Setting this control to `Off` restores MIME filtering. The configured access and
+size limits still apply.
 `RESPONSE_ARGS` contains the flattened fields, including repeated names.
 The JSON processor writes the successful raw input to `TX:json_response_body`
 and leaves `RESPONSE_BODY` and `RESPONSE_CONTENT_LENGTH` empty.
