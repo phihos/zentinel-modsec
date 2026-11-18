@@ -14,6 +14,8 @@ struct Resource<'a> {
 pub(super) struct LocalRefs<'a> {
     resources: Vec<Resource<'a>>,
     names: HashMap<String, usize>,
+    dynamic_counts: HashMap<&'a str, usize>,
+    recursive_roots: usize,
     // The borrowed documents stay immutable and live as long as this index.
     scopes: HashMap<usize, usize>,
 }
@@ -89,6 +91,19 @@ impl<'a> LocalRefs<'a> {
                     return None;
                 }
             }
+            if draft == Draft::Draft202012 {
+                if let Some(name) = node.get("$dynamicAnchor").and_then(Value::as_str) {
+                    if self.resources[scope].anchors.insert(name, node).is_some() {
+                        return None;
+                    }
+                    *self.dynamic_counts.entry(name).or_default() += 1;
+                }
+            }
+            if std::ptr::eq(node, self.resources[scope].root)
+                && node.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true)
+            {
+                self.recursive_roots += 1;
+            }
             // The validator supplies the schema-bearing keywords for each dialect.
             pending.extend(
                 draft
@@ -121,7 +136,37 @@ impl<'a> LocalRefs<'a> {
                 .contains_key(&std::ptr::from_ref(target).addr())
                 .then_some(target);
         }
-        resource.anchors.get(fragment).copied()
+        let node = *resource.anchors.get(fragment)?;
+        if node.get("$dynamicAnchor").and_then(Value::as_str) == Some(fragment)
+            && self
+                .dynamic_counts
+                .get(fragment)
+                .copied()
+                .unwrap_or_default()
+                > 1
+        {
+            return None;
+        }
+        Some(node)
+    }
+
+    /// Without competing dynamic anchors, the static destination is invariant
+    /// across evaluation scopes. Otherwise resolve() leaves evaluation to the caller.
+    pub(super) fn resolve_dynamic(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
+        self.resolve(from, reference)
+    }
+
+    pub(super) fn resolve_recursive(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
+        if reference != "#" {
+            return None;
+        }
+        let target = self.resolve(from, reference)?;
+        if self.recursive_roots > 1
+            && target.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true)
+        {
+            return None;
+        }
+        Some(target)
     }
 }
 
@@ -175,6 +220,24 @@ mod tests {
             .unwrap();
         assert_eq!(refs.resolve(&root, "retrieved.json#child"), Some(&other));
         assert_eq!(refs.resolve(&other, "../root.json"), Some(&root));
+    }
+
+    #[test]
+    fn dynamic_and_recursive_references_require_scope_invariant_targets() {
+        let base = Url::parse("file:///root.json").unwrap();
+        let root = json!({"$dynamicAnchor":"node","$recursiveAnchor":true});
+        let mut refs = LocalRefs::new(&root, &base).unwrap();
+        assert_eq!(refs.resolve_dynamic(&root, "#node"), Some(&root));
+        assert_eq!(refs.resolve_recursive(&root, "#"), Some(&root));
+        let other = json!({"$dynamicAnchor":"node","$recursiveAnchor":true,"$anchor":"other"});
+        refs.add_document(&other, &base.join("other.json").unwrap())
+            .unwrap();
+        assert!(refs.resolve_dynamic(&root, "#node").is_none());
+        assert!(refs.resolve_recursive(&root, "#").is_none());
+        assert_eq!(
+            refs.resolve_dynamic(&root, "other.json#other"),
+            Some(&other)
+        );
     }
 
     #[test]
