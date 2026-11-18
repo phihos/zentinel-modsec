@@ -110,7 +110,7 @@ impl RequestCollections {
 #[derive(Default, PartialEq, Eq)]
 pub(super) struct TargetIndices {
     present: [u16; 16],
-    fixed_prefix: Option<u16>,
+    has_fixed_prefix: bool,
     bounded_targets: [u16; 3],
     optional_targets: u16,
     optional_keys: u64,
@@ -168,13 +168,10 @@ impl TargetIndices {
     /// Literal TX, scalar and count targets frequently have no phase-dependent
     /// filters. Cache their prefix after indexed header slots have been assigned.
     pub fn finalize(&mut self) {
-        if self.present[0] == self.present[15]
+        self.has_fixed_prefix = self.present[0] == self.present[15]
             && self.bounded_targets == [0; 3]
             && self.header_targets == [0; HEADER_SLOTS]
-            && self.optional_targets == 0
-        {
-            self.fixed_prefix = Some(self.present[0]);
-        }
+            && self.optional_targets == 0;
     }
 
     pub fn add_width_sources(&self, sources: &mut WidthSources, specs: &[VariableSpec]) {
@@ -183,7 +180,7 @@ impl TargetIndices {
         let arguments = self.bounded_targets[0] | self.bounded_targets[1];
         sources.arguments |= specs.iter().take(PREFIX).enumerate().any(|(i, spec)| {
             arguments & (1 << i) != 0
-                && !matches!(spec.selection, Some(crate::parser::Selection::Key(_)))
+                && !matches!(&spec.selection, Some(crate::parser::Selection::Key(key)) if !key.is_empty())
         });
         sources.filename |= self.bounded_targets[2] != 0;
         sources.optional_targets |= self.optional_targets != 0;
@@ -215,9 +212,11 @@ impl TargetIndices {
     #[inline]
     pub fn select(&self, available: RequestCollections) -> ActiveTargets {
         ActiveTargets {
-            bits: self
-                .fixed_prefix
-                .unwrap_or_else(|| self.selected(available)),
+            bits: if self.has_fixed_prefix {
+                self.present[0]
+            } else {
+                self.selected(available)
+            },
             collections: available.present,
         }
     }
@@ -364,7 +363,8 @@ mod tests {
         specs.push(crate::parser::parse_single_variable("ARGS").unwrap());
         let mut plan = TargetIndices::compile(&specs, [0; 3]);
         plan.finalize();
-        assert_eq!(plan.fixed_prefix, Some(u16::MAX));
+        assert!(plan.has_fixed_prefix);
+        assert_eq!(plan.present[0], u16::MAX);
         assert_eq!(
             plan.select(empty_snapshot(0)).indices(&specs).count(),
             PREFIX
@@ -380,7 +380,7 @@ mod tests {
         header.finalize();
         let mut absent = empty_snapshot(0);
         absent.headers[0] = None;
-        assert_eq!(header.fixed_prefix, None);
+        assert!(!header.has_fixed_prefix);
         assert!(!header.select(absent).may_match(1));
     }
 
