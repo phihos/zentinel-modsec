@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use super::body::{BodyState, BodyWriteResult};
-use super::chain::ChainState;
 use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
 use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
@@ -963,7 +962,7 @@ impl Transaction {
 
         let dispatch = ruleset.dispatch_for_phase(phase);
         let available = RequestCollections::new(&self.request);
-        let mut chain_state = ChainState::new();
+        let mut chain_start = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data = Vec::new();
@@ -993,7 +992,7 @@ impl Transaction {
             // to a logical rule. A child tag cannot select its starter.
             // Likewise a removal fired by the starter cannot cancel its own
             // chain while it is still executing.
-            if !chain_state.in_chain {
+            if chain_start.is_none() {
                 let removed = self.controls.is_rule_removed(rule.id.as_deref())
                     || (dispatch[idx].removable_by_tag
                         && self.controls.is_tag_removed(&rule.actions));
@@ -1009,20 +1008,10 @@ impl Transaction {
                 }
             }
 
-            // Handle chain continuation
-            if chain_state.in_chain && !rule.is_chain && rule.chain_next.is_none() {
-                // End of chain, check if previous rules in chain matched
-                if !chain_state.chain_matched {
-                    chain_state.reset();
-                    idx += 1;
-                    continue;
-                }
-            }
-
             // Evaluate rule
             // Runtime tag exclusions apply to every link of the logical rule,
             // including children that carry no tag of their own.
-            let starter_index = chain_state.chain_start.unwrap_or(idx);
+            let starter_index = chain_start.unwrap_or(idx);
             let starter = &rules[starter_index];
             let starter_dispatch = &dispatch[starter_index];
             let tag_actions = if starter_dispatch.target_removable_by_tag {
@@ -1031,7 +1020,7 @@ impl Transaction {
                 &[]
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
-            let standalone = !rule.is_chain && !chain_state.in_chain;
+            let standalone = !rule.is_chain && chain_start.is_none();
             let outcome = if dispatch[idx]
                 .targets
                 .may_match(available, rule.variables.len())
@@ -1075,10 +1064,7 @@ impl Transaction {
                     // the whole chain has matched. The starter's id is held
                     // back too, so a chain that later fails does not count as
                     // a match.
-                    if !chain_state.in_chain {
-                        chain_state.start_chain(idx);
-                    }
-                    chain_state.continue_chain(true, &[]);
+                    chain_start.get_or_insert(idx);
                     idx += 1;
                     continue;
                 }
@@ -1086,8 +1072,7 @@ impl Transaction {
                 // Either a standalone rule, or the final link of a chain that
                 // has now matched in full. A completed chain keeps the
                 // starter's disruptive action, flow and metadata.
-                if chain_state.in_chain {
-                    chain_state.reset();
+                if chain_start.take().is_some() {
                     self.matched_data
                         .extend(&ruleset, pending_chain_data.drain(..));
                 }
@@ -1110,15 +1095,10 @@ impl Transaction {
                 }
 
                 match starter_dispatch.flow {
-                    CompiledFlow::Chain => {
-                        if !chain_state.in_chain {
-                            chain_state.start_chain(idx);
-                        }
-                        chain_state.continue_chain(true, &[]);
-                    }
                     CompiledFlow::Skip(n) => skip_count = n,
                     CompiledFlow::SkipAfter(next) => skip_after = Some(next),
-                    CompiledFlow::Next => {}
+                    // Chain links have already been visited by this point.
+                    CompiledFlow::Chain | CompiledFlow::Next => {}
                 }
                 match starter_dispatch.disruptive(starter) {
                     None | Some(DisruptiveAction::Pass) => {}
@@ -1177,8 +1157,7 @@ impl Transaction {
                 // whole cannot match: drop the starter's held actions and skip
                 // past the remaining links so they are never evaluated on
                 // their own.
-                if chain_state.in_chain || rule.is_chain {
-                    chain_state.reset();
+                if chain_start.take().is_some() || rule.is_chain {
                     pending_chain_data.clear();
                     while idx < rules.len() && rules[idx].is_chain {
                         idx += 1;
@@ -1186,11 +1165,6 @@ impl Transaction {
                     idx += 1;
                     continue;
                 }
-            }
-
-            // End chain if this is the last rule in chain
-            if chain_state.in_chain && !rule.is_chain {
-                chain_state.end_chain();
             }
 
             idx += 1;
