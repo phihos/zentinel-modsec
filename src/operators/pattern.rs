@@ -6,7 +6,7 @@ use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 use crate::error::{Error, Result};
 use aho_corasick::{AhoCorasick, MatchKind};
 use once_cell::sync::Lazy;
-use regex::bytes::{Regex, RegexBuilder};
+use regex_automata::{meta::Regex, PatternID};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -18,7 +18,7 @@ struct RegexCache {
     entries: Mutex<HashMap<String, Weak<RegexProgram>>>,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 struct MatchLengths {
     any: usize,
     word: usize,
@@ -109,30 +109,38 @@ impl RegexCache {
         }
         entries.retain(|_, regex| regex.strong_count() > 0);
         let expression = normalize_binary_braced_escapes(pattern, binary);
-        let regex = RegexBuilder::new(&expression)
-            .unicode(!binary)
-            .dot_matches_new_line(!binary)
-            .multi_line(!binary)
-            .build()
-            .map_err(|source| Error::RegexCompile {
-                pattern: pattern.to_string(),
-                source,
-            })?;
-        // Use the same byte syntax and inline flags as RegexBuilder. A parse
-        // disagreement only disables the early rejection.
-        let lengths = regex_syntax::ParserBuilder::new()
+        let config_error = |source| Error::RegexCompile {
+            pattern: pattern.to_owned(),
+            source,
+        };
+        let hir = regex_syntax::ParserBuilder::new()
             .utf8(false)
             .unicode(!binary)
             .dot_matches_new_line(!binary)
             .multi_line(!binary)
             .build()
             .parse(&expression)
-            .ok()
-            .map(|hir| MatchLengths {
-                any: hir.properties().minimum_len().unwrap_or(0),
-                word: word_width(&hir, 32),
-            })
-            .unwrap_or_default();
+            .map_err(|err| config_error(regex::Error::Syntax(err.to_string())))?;
+        // Use regex::bytes::RegexBuilder's byte matching and resource limits.
+        // Building directly from HIR lets width analysis share the parse.
+        let regex = Regex::builder()
+            .configure(
+                Regex::config()
+                    .utf8_empty(false)
+                    .nfa_size_limit(Some(10 * (1 << 20)))
+                    .hybrid_cache_capacity(2 * (1 << 20)),
+            )
+            .build_from_hir(&hir)
+            .map_err(|err| {
+                config_error(match err.size_limit() {
+                    Some(limit) => regex::Error::CompiledTooBig(limit),
+                    None => regex::Error::Syntax(err.to_string()),
+                })
+            })?;
+        let lengths = MatchLengths {
+            any: hir.properties().minimum_len().unwrap_or(0),
+            word: word_width(&hir, 32),
+        };
         let regex = Arc::new(RegexProgram { regex, lengths });
         entries.insert(key, Arc::downgrade(&regex));
         Ok(regex)
@@ -253,7 +261,7 @@ impl RxOperator {
         let compiled = REGEX_CACHE.get(pattern)?;
         Ok(Self {
             lengths: compiled.lengths,
-            has_subgroups: compiled.regex.captures_len() > 1,
+            has_subgroups: compiled.regex.group_info().group_len(PatternID::ZERO) > 1,
             compiled,
         })
     }
@@ -285,20 +293,20 @@ impl RxOperator {
                 .compiled
                 .regex
                 .find(value)
-                .map(|m| ByteOperatorResult::matched(m.as_bytes()));
+                .map(|m| ByteOperatorResult::matched(&value[m.range()]));
         }
-        self.compiled
-            .regex
-            .captures(value)
-            .map(|captures| ByteOperatorResult {
-                matched: true,
-                captures: captures
-                    .iter()
-                    .skip(1)
-                    .map(|capture| capture.map(|m| m.as_bytes().to_vec()).unwrap_or_default())
-                    .collect(),
-                matched_value: captures.get(0).map(|m| m.as_bytes().to_vec()),
-            })
+        let mut captures = self.compiled.regex.create_captures();
+        self.compiled.regex.captures(value, &mut captures);
+        let span = captures.get_group(0)?;
+        Some(ByteOperatorResult {
+            matched: true,
+            captures: captures
+                .iter()
+                .skip(1)
+                .map(|capture| capture.map(|s| value[s].to_vec()).unwrap_or_default())
+                .collect(),
+            matched_value: Some(value[span].to_vec()),
+        })
     }
 }
 
@@ -484,6 +492,28 @@ mod tests {
         let result = op.execute("user=john");
         assert!(result.matched);
         assert_eq!(result.captures, vec!["john"]);
+    }
+
+    #[test]
+    fn syntax_and_size_errors_match_the_byte_regex_builder() {
+        for pattern in [r"(", r"\p{Missing}", r"\x{FF}(", r"\w{100000}"] {
+            let binary = matches_arbitrary_bytes(pattern);
+            let source =
+                regex::bytes::RegexBuilder::new(&normalize_binary_braced_escapes(pattern, binary))
+                    .unicode(!binary)
+                    .dot_matches_new_line(!binary)
+                    .multi_line(!binary)
+                    .build()
+                    .unwrap_err();
+            let expected = Error::RegexCompile {
+                pattern: pattern.to_owned(),
+                source,
+            };
+            assert_eq!(
+                RxOperator::new(pattern).err().unwrap().to_string(),
+                expected.to_string()
+            );
+        }
     }
 
     #[test]
