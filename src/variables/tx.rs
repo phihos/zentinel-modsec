@@ -25,8 +25,8 @@ impl TxCollection {
     pub(crate) fn visit(&self, selector: &MemberSelector, mut emit: impl FnMut(&[u8], &[u8])) {
         match selector {
             MemberSelector::Key(key) => {
-                if let Some(value) = self.data.get(key.as_ref()) {
-                    emit(key, value.as_bytes());
+                if let Some(value) = self.canonical_value(key) {
+                    emit(key, value);
                 }
             }
             MemberSelector::All => {
@@ -47,6 +47,11 @@ impl TxCollection {
 
     fn lookup(&self, key: &[u8]) -> Option<&ByteValue> {
         self.data.get(folded_key(key).as_ref())
+    }
+
+    /// Look up a literal key already canonicalized by the rule compiler.
+    pub(crate) fn canonical_value(&self, key: &[u8]) -> Option<&[u8]> {
+        self.data.get(key).map(ByteValue::as_bytes)
     }
 
     pub(crate) fn first_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {

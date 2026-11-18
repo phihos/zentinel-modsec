@@ -224,3 +224,22 @@ SecRule ARGS_POST:name "@streq alex" "id:6,phase:2,pass,tag:fields"
         assert_eq!(tx.matched_rules(), expected);
     }
 }
+
+#[test]
+fn absent_targets_observe_logical_skip_order_and_fail_their_chain() {
+    assert_eq!(
+        matches(
+            r#"
+SecAction "id:1,phase:1,pass,ctl:ruleRemoveById=2,skip:1"
+SecRule ARGS_POST:n "!@eq 0" "id:2,phase:1,pass"
+SecRule REQUEST_COOKIES:n "!@eq 0" "id:3,phase:1,pass,chain"
+SecRule REQUEST_METHOD "@streq GET" "setvar:tx.child=1"
+SecAction "id:4,phase:1,pass"
+SecRule XML "!@eq 0" "id:5,phase:1,pass,chain"
+SecRule REQUEST_METHOD "@streq GET" "setvar:tx.child=1"
+SecRule &TX:child "@eq 0" "id:6,phase:1,pass"
+"#
+        ),
+        ["1", "4", "6"]
+    );
+}

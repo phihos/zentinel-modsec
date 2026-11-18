@@ -122,6 +122,8 @@ pub(super) struct RuleDispatch {
     pub selections: Box<[crate::variables::TargetSelection]>,
     /// Immutable numeric predicates match the full input without capture groups.
     pub numeric: Option<crate::operators::NumericComparison>,
+    /// A static comparison of one literal TX member or its count, without transforms or exclusions.
+    pub single_tx_numeric: bool,
     pub dynamic: bool,
     pub capture: bool,
     pub multi_match: bool,
@@ -171,6 +173,13 @@ impl RuleDispatch {
             dynamic,
             ..Self::default()
         };
+        dispatch.single_tx_numeric = dispatch.numeric.is_some()
+            && rule.transformations.is_empty()
+            && matches!(rule.variables.as_slice(), [spec] if spec.name == crate::parser::VariableName::Tx && spec.exclusions.is_empty())
+            && matches!(
+                dispatch.selections[0].member,
+                crate::variables::MemberSelector::Key(_)
+            );
         let mut setvars = Vec::new();
         for (index, action) in rule.actions.iter().enumerate() {
             match action {
