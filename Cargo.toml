@@ -44,7 +44,7 @@ base64 = "0.22"
 
 # JSON request body processor
 serde = "1.0"
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["raw_value"] }
 
 # XML request body processor. Pull-based, and it does not resolve or expand
 # entities on its own — external entity references arrive as raw tokens, so

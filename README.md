@@ -295,6 +295,13 @@ URLENCODED fallback used by Coraza 3.8.1. RAW exposes the body without form
 argument extraction. Only RAW and URLENCODED populate `REQUEST_BODY` and its
 length; structured processors leave these scalar values empty and zero.
 
+The JSON processor preserves numeric token spelling and duplicate member values.
+It exposes each nonempty array's length at the array path alongside its indexed
+elements. Completed fields remain available when the processor reports an error.
+Flattened keys and values share a byte budget of eight times the acquired JSON
+size, with a 4 KiB minimum. The processor allows 64 container levels, 4,096
+scalar values and 4,096 array lengths. Exceeding a limit sets `REQBODY_ERROR`.
+
 XML values are stored separately from HTTP arguments. `XML:/*` selects text
 tokens and `XML://@*` selects attribute values, including namespace values.
 Element and attribute names do not become argument names. Streaming extraction
