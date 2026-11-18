@@ -96,7 +96,6 @@ fn ignored_actions_on_chain_children_name_the_chain_starter() {
         "noauditlog",
         "log",
         "nolog",
-        "setvar:ip.score=+1",
     ] {
         let (_, log) = load_logs(&format!(
             r#"

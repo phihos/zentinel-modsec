@@ -20,7 +20,10 @@ fn record(found: &mut Diagnostics, kind: &str, name: &str, reason: &'static str,
 }
 
 /// Report recognized no-ops and approximations, grouped by capability and IDs.
-pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) {
+pub(super) fn report(
+    directives: &[Directive],
+    programs: &mut SelectorPrograms,
+) -> crate::Result<()> {
     let all_ids: BTreeSet<String> = directives
         .iter()
         .filter_map(|directive| {
@@ -95,10 +98,14 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
             }
         }
         for action in actions {
+            if let Action::Data(DataAction::SetVar(spec)) = action {
+                crate::parser::validate_setvar_target(&spec.collection, &spec.key)?;
+            }
             report_action(&mut found, action, &effective_id);
         }
     }
     emit(found);
+    Ok(())
 }
 
 pub(super) fn report_added_targets(
@@ -236,9 +243,6 @@ fn report_action(found: &mut Diagnostics, action: &Action, id: &str) {
             return;
         }
         Action::Data(DataAction::SetVar(spec)) => {
-            if !spec.collection.eq_ignore_ascii_case("tx") {
-                record(found, "action", "setvar", "only TX writes are implemented; this collection name is ignored and the write is applied to TX", id);
-            }
             report_macros(found, &spec.key, id);
             if let SetVarValue::Macro(value) = &spec.value {
                 report_macros(found, value, id);

@@ -377,8 +377,7 @@ stable generated ID when none is supplied. CRS uses it for fractional sampling.
 Unsupported variables are
 reported at load even when a rule also selects implemented variables. Invalid
 selector/exclusion regexes and unsupported macro sources also warn with IDs.
-Only TX writes are implemented; non-TX `setvar` collection names are ignored
-and their writes reach TX, which is reported at load.
+`setvar` requires a nonempty member of TX. The engine expands the value before interpreting signed integer addition or subtraction, and preserves the original bytes of plain assignments.
 
 `multiMatch` evaluates the original value and each changed transformation stage.
 The byte APIs preserve binary input, captures and macro expansions; string APIs

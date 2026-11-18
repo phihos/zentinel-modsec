@@ -423,7 +423,7 @@ impl CompiledRuleset {
         // startup, because the alternative -- finding out from a rule that
         // never fired -- is the failure this reporting exists to prevent.
         report_unsupported_controls(&directives);
-        super::diagnostics::report(&directives, &mut ruleset.selectors);
+        super::diagnostics::report(&directives, &mut ruleset.selectors)?;
 
         let mut target_updates: Vec<(Option<String>, UpdateTargetById)> = Vec::new();
 

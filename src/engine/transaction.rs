@@ -1638,10 +1638,14 @@ impl Transaction {
     /// Expand against current transaction state. Literal text and standalone
     /// macro values can be borrowed until the caller needs to store a snapshot.
     fn expand_operator_macros_bytes<'a>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
+        self.expand_macros_bytes::<false>(arg)
+    }
+
+    fn expand_macros_bytes<'a, const KEEP_MISSING: bool>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
         let mut output = Vec::new();
         let mut rest = arg;
         while let Some((prefix, name, suffix)) = super::split_operator_macro(rest) {
-            let value = self.macro_value_bytes(name);
+            let value = self.macro_value_bytes::<KEEP_MISSING>(name);
             if prefix.is_empty() && output.is_empty() && suffix.is_empty() {
                 return Cow::Borrowed(value);
             }
@@ -1658,7 +1662,7 @@ impl Transaction {
         }
     }
 
-    fn macro_value_bytes<'a>(&'a self, name: &'a str) -> &'a [u8] {
+    fn macro_value_bytes<'a, const KEEP_MISSING: bool>(&'a self, name: &'a str) -> &'a [u8] {
         let Some((collection, key)) = name.split_once('.') else {
             if name.eq_ignore_ascii_case("unique_id") {
                 return self.id().as_bytes();
@@ -1687,14 +1691,18 @@ impl Transaction {
         };
         let key = key.as_bytes();
         if collection.eq_ignore_ascii_case("tx") {
-            return self.tx.first_value_bytes(key).unwrap_or_default();
+            return self.tx.first_value_bytes(key).unwrap_or(if KEEP_MISSING {
+                name.as_bytes()
+            } else {
+                &[]
+            });
         }
         if collection.eq_ignore_ascii_case("request_headers") {
             return self
                 .request
                 .headers
                 .first_value_bytes(key)
-                .unwrap_or_default();
+                .unwrap_or(if KEEP_MISSING { name.as_bytes() } else { &[] });
         }
         let value = if collection.eq_ignore_ascii_case("args") {
             self.request
@@ -1747,7 +1755,7 @@ impl Transaction {
         let (key, audit_key) = match &prepared.key {
             Some(key) => (key.clone(), record.map(|_| op.key.clone())),
             None => {
-                let expanded = self.expand_operator_macros_bytes(&op.key);
+                let expanded = self.expand_macros_bytes::<true>(&op.key);
                 let key = ByteValue::from(crate::variables::folded_key(&expanded));
                 (
                     key,
@@ -1755,59 +1763,56 @@ impl Transaction {
                 )
             }
         };
+        use crate::parser::SetVarOperand;
         let change = match &op.value {
-            SetVarValue::String(_) | SetVarValue::Int(_) => {
-                let value = prepared
-                    .value
-                    .as_ref()
-                    .expect("compiled literal assignment");
-                let change = record.map(|_| SetVarChange::Set(value.display_text().to_owned()));
-                self.tx.set_canonical(key, value.clone());
-                change
-            }
-            SetVarValue::Macro(raw) => {
-                let (kind, operand) = split_setvar_rhs(raw);
-                let operand = self.expand_operator_macros_bytes(operand);
-                match kind {
-                    SetVarKind::Set => {
-                        let operand = ByteValue::from(operand);
-                        let change = record.map(|_| match operand.as_utf8() {
-                            Ok(text) => SetVarChange::Set(text.to_owned()),
-                            Err(_) => SetVarChange::SetBytes(operand.as_bytes().to_vec()),
-                        });
-                        self.tx.set_canonical(key, operand);
-                        change
-                    }
-                    SetVarKind::Add | SetVarKind::Subtract => {
-                        let n = std::str::from_utf8(&operand).map(leading_int).unwrap_or(0);
-                        // Coraza's signed native-int arithmetic wraps at the
-                        // boundary. Keep the original operand for audit effects:
-                        // negating MIN is also a wrapping operation.
-                        let delta = if matches!(kind, SetVarKind::Subtract) {
-                            n.wrapping_neg()
-                        } else {
-                            n
-                        };
-                        self.tx.increment_canonical(key, delta);
-                        if matches!(kind, SetVarKind::Subtract) {
-                            Some(SetVarChange::Decrement(n))
-                        } else {
-                            Some(SetVarChange::Increment(n))
-                        }
-                    }
-                }
-            }
-            SetVarValue::Increment(n) => {
-                self.tx.increment_canonical(key, *n);
-                Some(SetVarChange::Increment(*n))
-            }
-            SetVarValue::Decrement(n) => {
-                self.tx.increment_canonical(key, n.wrapping_neg());
-                Some(SetVarChange::Decrement(*n))
-            }
             SetVarValue::Delete => {
                 self.tx.delete_canonical(key.as_bytes());
                 Some(SetVarChange::Delete)
+            }
+            SetVarValue::Unresolved => return,
+            value => {
+                let expanded = match value {
+                    SetVarValue::Macro(raw) => Some(self.expand_macros_bytes::<true>(raw)),
+                    _ => None,
+                };
+                let operation = match (value, expanded.as_deref()) {
+                    (_, Some(bytes)) => SetVarOperand::parse(bytes),
+                    (SetVarValue::Increment(n), _) => SetVarOperand::Add(*n),
+                    (SetVarValue::Decrement(n), _) => SetVarOperand::Subtract(*n),
+                    _ => SetVarOperand::Text,
+                };
+                match operation {
+                    SetVarOperand::Unresolved => return,
+                    SetVarOperand::Text => {
+                        let value = if let Some(bytes) = expanded {
+                            ByteValue::from(bytes)
+                        } else {
+                            prepared
+                                .value
+                                .as_ref()
+                                .expect("compiled literal assignment")
+                                .clone()
+                        };
+                        let change = record.map(|_| match value.as_utf8() {
+                            Ok(text) => SetVarChange::Set(text.to_owned()),
+                            Err(_) => SetVarChange::SetBytes(value.as_bytes().to_vec()),
+                        });
+                        self.tx.set_canonical(key, value);
+                        change
+                    }
+                    SetVarOperand::Add(n) | SetVarOperand::Subtract(n) => {
+                        let subtract = matches!(operation, SetVarOperand::Subtract(_));
+                        let delta = if subtract { n.wrapping_neg() } else { n };
+                        if !self.tx.increment_canonical(key, delta, false) {
+                            return;
+                        }
+                        Some(if subtract {
+                            SetVarChange::Decrement(n)
+                        } else {
+                            SetVarChange::Increment(n)
+                        })
+                    }
+                }
             }
         };
         if let (Some(rule_id), Some(key), Some(op_change)) = (record, audit_key, change) {
@@ -1819,55 +1824,6 @@ impl Transaction {
             });
         }
     }
-}
-
-/// How a `setvar` right-hand side changes its variable.
-enum SetVarKind {
-    /// `setvar:tx.x=value`
-    Set,
-    /// `setvar:tx.x=+n`
-    Add,
-    /// `setvar:tx.x=-n`
-    Subtract,
-}
-
-/// Split a `setvar` right-hand side, as written in the rule, into the
-/// operation and the text of its operand.
-///
-/// libmodsecurity fixes the operation when it parses the rule: `=+` and `=-`
-/// are tokens of their own (`seclang-scanner.ll:489-490`, `726-728`, mapped
-/// to `sumAndSetOperation` and `substractAndSetOperation` at
-/// `seclang-parser.yy:3145-3152`), and only the operand after them is a
-/// run-time string. So `setvar:tx.x=%{tx.0}` is an assignment even when
-/// `TX:0` expands to `-7`; reading the sign after expansion would turn it into
-/// a decrement.
-fn split_setvar_rhs(raw: &str) -> (SetVarKind, &str) {
-    if let Some(rest) = raw.strip_prefix('+') {
-        (SetVarKind::Add, rest)
-    } else if let Some(rest) = raw.strip_prefix('-') {
-        (SetVarKind::Subtract, rest)
-    } else {
-        (SetVarKind::Set, raw)
-    }
-}
-
-/// The integer at the start of an expanded operand, or 0 when there is none.
-///
-/// libmodsecurity reads the operand with `stoi` and takes 0 if that throws
-/// (`set_var.cc:93-100`), so `5abc` is 5, `abc` and the empty string are 0,
-/// and a sign belongs to the number: `=+%{tx.0}` with `TX:0` = `-7` adds -7.
-/// (Not identical to `stoi`: that is 32-bit, this is 64-bit, and `trim_start`
-/// skips Unicode whitespace where `stoi` skips the C locale's `isspace`.)
-fn leading_int(s: &str) -> i64 {
-    let s = s.trim_start();
-    let digits = s
-        .strip_prefix(['+', '-'])
-        .unwrap_or(s)
-        .bytes()
-        .take_while(u8::is_ascii_digit)
-        .count();
-    let sign = s.len() - s.strip_prefix(['+', '-']).unwrap_or(s).len();
-    s[..sign + digits].parse().unwrap_or(0)
 }
 
 impl std::fmt::Debug for Transaction {
@@ -2392,11 +2348,7 @@ SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
             .tx()
             .get("anomaly_score")
             .and_then(|v| v.first().map(|s| s.to_string()));
-        assert_eq!(
-            score,
-            Some("0".to_string()),
-            "unresolved macro increment should be a no-op"
-        );
+        assert_eq!(score, None, "an unresolved increment leaves the key absent");
     }
 
     #[test]
