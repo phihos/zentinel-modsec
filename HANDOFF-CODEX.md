@@ -2,6 +2,20 @@
 
 ## Current checkpoint
 
+Engine `41e047f` follows `e7cd1d3`. It summarizes short argument names and values
+once per eligible phase, skips regex and phrase targets that cannot match, and
+reuses request lines up to 4 KiB when several rules read them. On the 698-rule
+OWASP CRS 4.25.0 benchmark, median paired request latency fell 18.5% for GET,
+17.2% for form POST and 16.0% for nested JSON POST. All eight pairs improved
+for each workload. On 24 mixed fixtures, Rust p99 fell from 177.7 to 152.6 µs
+and optional C detector p99 from 170.2 to 151.0 µs. The 65-byte value,
+33-field form and non-ASCII JSON checks improved by 4.1–9.3%.
+Both detector backends retained corpus outcomes, blocking traces and full audit
+records. The [benchmark report and samples](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round4/RESULTS.md)
+include fresh-load timings, allocation counts and differential comparisons.
+
+## Audit allocation and transformation checkpoint at `9762969`
+
 Engine commits `32f40b6`, `7c1cf5b` and `9762969` defer fixed phase-one audit
 records, skip transformations proven to preserve a field, and reject short
 alphanumeric values that cannot match a regex. Against the previous fork
