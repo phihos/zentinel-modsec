@@ -2,6 +2,25 @@
 
 ## Current local checkpoint
 
+Engine commit `b8bc7e56c13d1a19e8e02818b6e4ee30272bd64f` on
+`spike/crs-parity` renders binary audit values in blocks and shares large
+text buffers across transaction snapshots. Collection exclusions run once
+per canonical key. Negated static regex rules use a single existence check.
+
+Compared with `20ee858` in the same warmed benchmark, full-CRS GET p50 fell
+from 62.31 to 59.75 µs and form POST from 145.80 to 134.14 µs, both faster in
+all eight pairs. Mixed GET, form and nested JSON p50 moved from
+205.97 to 190.56 µs and p99 from 318.84 to 317.60 µs.
+Reading a matched 65,530-byte binary header into the audit record fell
+from 255.42 to 138.01 µs at p50 and from 282.26 to 157.50 µs at p99.
+An unmatched valid-text header of that size cost one extra 72-byte allocation.
+All 13 checks passed. Both detector backends reproduced the pinned corpus
+outcomes, the 22 ordered blocking traces and all 24 mixed-request audit fixtures.
+The [local benchmark report](../zentinel-eval/results/latency-1c46c6e/RESULTS.md)
+includes sample counts, audit-read results, allocation and ruleset memory costs.
+
+## TX and matched rule checkpoint at `20ee858`
+
 Engine commit `20ee8581ff172f6d359223d5373afe581b272b63` on
 `spike/crs-parity` uses ordered scalar storage for TX, prepares eligible
 rule targets per phase and reuses the inspected bytes for successful static
