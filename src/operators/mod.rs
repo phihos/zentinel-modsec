@@ -15,6 +15,7 @@ pub use comparison::{
 };
 pub use detection::{DetectSqliOperator, DetectXssOperator};
 pub use network::IpMatchOperator;
+pub(crate) use pattern::token_byte;
 pub use pattern::{PmOperator, RxOperator};
 pub use traits::{ByteOperatorResult, Operator, OperatorResult};
 pub use validation::{

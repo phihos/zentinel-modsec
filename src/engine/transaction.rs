@@ -105,7 +105,7 @@ struct StaticSearch<'a> {
 impl StaticSearch<'_> {
     fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
         if !self.rule.operator_negated
-            && self.rule.transformations.leaves_path_tokens_unchanged()
+            && self.rule.transformations.preserves_token_width_bounds()
             && self
                 .regex
                 .is_some_and(|regex| regex.rejects_short_token(raw))
@@ -975,7 +975,8 @@ impl Transaction {
         }
 
         let dispatch = ruleset.dispatch_for_phase(phase);
-        let available = RequestCollections::new(&self.request);
+        let available =
+            RequestCollections::new(&self.request, ruleset.summarize_arguments[phase.index()]);
         let mut chain_start = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
@@ -1809,6 +1810,80 @@ mod tests {
     }
 
     #[test]
+    fn argument_width_pruning_matches_unpruned_evaluation() {
+        let config = r#"SecRuleEngine On
+SecRequestBodyAccess On
+SecRule ARGS_NAMES "@rx (//)" "id:51,phase:1,pass,t:none,t:normalizePath,capture"
+SecRule ARGS|XML:/*|TX:late "@rx (item[.]ok)" "id:52,phase:2,pass,capture,multiMatch,t:lowercase,setvar:tx.hits=+1,msg:'%{MATCHED_VAR}'"
+SecRule &ARGS:empty "@rx ^0$" "id:53,phase:2,pass"
+SecRule ARGS "!@rx zzzz" "id:54,phase:2,pass"
+SecRule ARGS "@rx (?:.{0})" "id:55,phase:2,pass"
+SecRule ARGS "@rx [!]" "id:56,phase:2,pass,t:hexDecode"
+SecRule ARGS "@rx (?-u:\xFF)" "id:57,phase:2,pass,capture"
+SecRule ARGS "@rx %{tx.needle}" "id:58,phase:2,pass"
+SecRule ARGS "@rx ^.{65}$" "id:59,phase:2,deny,status:406""#;
+        let fast = make_ruleset(config);
+        assert!(fast.summarize_arguments[Phase::RequestBody.index()]);
+        let mut slow = CompiledRuleset::from_string(config).unwrap();
+        slow.summarize_arguments.fill(false);
+        let slow = Arc::new(slow);
+        let unrelated = make_ruleset(r#"SecRule TX:test "@rx word" "id:1,phase:2,pass""#);
+        assert_eq!(unrelated.summarize_arguments, [false; 5]);
+        for (uri, content_type, body) in [
+            ("/?q=abc", "text/plain", ""),
+            (
+                "/?%2f=z&q=21&q=ITEM.ok",
+                "application/x-www-form-urlencoded",
+                "k=item.ok",
+            ),
+            ("/?name=%FF", "application/xml", "<root>item.ok</root>"),
+            ("/?q=123", "application/json", r#"{"item":{"ok":123}}"#),
+            (
+                "/?q=x",
+                "application/x-www-form-urlencoded",
+                "q=01234567890123456789012345678901234567890123456789012345678901234",
+            ),
+        ] {
+            let run = |rules| {
+                let mut tx = Transaction::new(rules, 403);
+                tx.set_record_rule_messages(true);
+                tx.set_record_setvar_effects(true);
+                tx.process_uri(uri, "POST", "HTTP/1.1").unwrap();
+                tx.add_request_header("Content-Type", content_type).unwrap();
+                tx.process_request_headers().unwrap();
+                tx.tx_mut().set_bytes("late", "item.ok");
+                tx.tx_mut().set_bytes("needle", "123");
+                tx.append_request_body(body.as_bytes()).unwrap();
+                tx.process_request_body().unwrap();
+                tx
+            };
+            let (a, b) = (run(fast.clone()), run(slow.clone()));
+            assert_eq!(a.matched_rules(), b.matched_rules());
+            assert_eq!(a.matched_data(), b.matched_data());
+            assert_eq!(a.rule_messages(), b.rule_messages());
+            assert_eq!(a.setvar_effects(), b.setvar_effects());
+            assert_eq!(a.tx.all_bytes(), b.tx.all_bytes());
+            assert_eq!(
+                a.intervention().map(|i| i.status),
+                b.intervention().map(|i| i.status)
+            );
+            assert!(a.matched_rules().iter().any(|id| id == "52"));
+            if content_type == "application/xml" {
+                let first = a
+                    .matched_data()
+                    .iter()
+                    .find(|m| m.rule_id.as_deref() == Some("52"))
+                    .unwrap();
+                assert!(first.variable.starts_with("XML"), "{first:?}");
+                assert!(a.matched_rules().iter().any(|id| id == "57"));
+            }
+            if body.len() > 64 {
+                assert_eq!(a.intervention().map(|i| i.status), Some(406));
+            }
+        }
+    }
+
+    #[test]
     fn first_static_hit_resumes_once_and_preserves_effects_before_a_callback_error() {
         use crate::operators::OperatorResult;
         use std::sync::Mutex;
@@ -1869,7 +1944,7 @@ mod tests {
                     Some("77"),
                     &rule.actions,
                     true,
-                    RequestCollections::new(&tx.request),
+                    RequestCollections::new(&tx.request, false),
                 )
                 .err()
                 .unwrap();

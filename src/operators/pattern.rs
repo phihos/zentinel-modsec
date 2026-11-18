@@ -35,7 +35,7 @@ fn overlaps_token(lo: u32, hi: u32) -> bool {
         .any(|&(start, end)| lo <= u32::from(end) && u32::from(start) <= hi)
 }
 
-fn token_byte(byte: u8) -> bool {
+pub(crate) fn token_byte(byte: u8) -> bool {
     overlaps_token(byte.into(), byte.into())
 }
 
@@ -323,6 +323,13 @@ impl RxOperator {
             has_subgroups: compiled.regex.group_info().group_len(PatternID::ZERO) > 1,
             compiled,
         })
+    }
+
+    pub(crate) fn token_minimums(&self) -> [u8; 2] {
+        [
+            self.requirements.alphanumeric,
+            self.requirements.token.min(65) as u8,
+        ]
     }
 
     #[inline]
