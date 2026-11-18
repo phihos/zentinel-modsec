@@ -289,7 +289,7 @@ impl Parser {
     /// against the directory of the file currently being parsed, matching how
     /// ModSecurity/CRS reference their `.data` files.
     fn resolve_operator_file_path(&self, operator: &mut OperatorSpec) {
-        if !operator.name.uses_data_file() {
+        if !operator.name.uses_data_file() || operator.name == OperatorName::ValidateSchema {
             return;
         }
         if std::path::Path::new(&operator.argument).is_absolute() {

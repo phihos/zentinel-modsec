@@ -38,7 +38,6 @@ fn placeholder_operators_report_the_affected_rule_at_load() {
         "verifyCPF",
         "validateHash",
         "validateDTD",
-        "validateSchema",
         "rbl",
         "geoLookup",
         "gsbLookup",

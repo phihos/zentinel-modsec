@@ -6,6 +6,7 @@ mod comparison;
 mod detection;
 mod network;
 mod pattern;
+pub(crate) mod schema;
 mod traits;
 mod validation;
 
@@ -79,9 +80,11 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
         OperatorName::VerifyCc | OperatorName::VerifySsn | OperatorName::VerifyCpf => {
             Ok(Arc::new(NoMatchOperator))
         }
-        OperatorName::ValidateHash | OperatorName::ValidateDtd | OperatorName::ValidateSchema => {
-            Ok(Arc::new(NoMatchOperator))
-        }
+        OperatorName::ValidateSchema => Ok(Arc::new(schema::SchemaOperator::load(
+            argument,
+            std::path::Path::new("."),
+        )?)),
+        OperatorName::ValidateHash | OperatorName::ValidateDtd => Ok(Arc::new(NoMatchOperator)),
         OperatorName::Rbl | OperatorName::GeoLookup | OperatorName::GsbLookup => {
             Ok(Arc::new(NoMatchOperator))
         }

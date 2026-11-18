@@ -559,11 +559,14 @@ impl Transaction {
     /// how CRS rule 200002 blocks bodies it could not parse. Dropping the
     /// request here instead would take that decision away from the ruleset.
     fn process_json_body(&mut self) {
-        if let Err(e) = self.request.parse_json_body() {
-            tracing::debug!(
+        match self.request.parse_json_body() {
+            Ok(()) => self
+                .tx
+                .set_bytes("json_request_body", self.request.body.as_slice()),
+            Err(e) => tracing::debug!(
                 error = %e,
                 "request body could not be processed as JSON; REQBODY_ERROR is set"
-            );
+            ),
         }
     }
 
@@ -1327,6 +1330,18 @@ impl Transaction {
         Ok(())
     }
 
+    fn schema_body(&self) -> Option<&[u8]> {
+        let get = |key: &[u8]| self.tx.canonical_value(key).filter(|data| !data.is_empty());
+        if self.phase >= Phase::ResponseBody {
+            if let Some(response) = get(b"json_response_body") {
+                return Some(response);
+            }
+        }
+        (self.phase >= Phase::RequestBody)
+            .then(|| get(b"json_request_body"))
+            .flatten()
+    }
+
     fn evaluate_rule(
         &mut self,
         rule: &CompiledRule,
@@ -1339,6 +1354,7 @@ impl Transaction {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
         let dynamic = dispatch.dynamic;
+        let schema = rule.operator_spec.name == crate::parser::OperatorName::ValidateSchema;
         let capture = dispatch.capture;
         let multi_match = dispatch.multi_match;
 
@@ -1379,7 +1395,17 @@ impl Transaction {
                 } else {
                     rule.operator.as_ref()
                 };
-                operator.execute_rule_bytes(value, capture)?
+                if schema {
+                    let body = tx.schema_body().unwrap_or(value);
+                    // Schema violations refer to the target and transformation stage that ran.
+                    let mut result = operator.execute_rule_bytes(body, capture)?;
+                    if result.matched && !std::ptr::eq(body, value) {
+                        result.matched_value = Some(value.to_vec());
+                    }
+                    result
+                } else {
+                    operator.execute_rule_bytes(value, capture)?
+                }
             };
             if result.matched == rule.operator_negated {
                 return Ok(());
@@ -1522,8 +1548,8 @@ impl Transaction {
                 .within_tx_key
                 .as_deref()
                 .map(|key| self.tx.canonical_value(key).unwrap_or_default());
-            let search =
-                (!dynamic || within.is_some()).then_some(StaticSearch { within, ..search });
+            let search = (!schema && (!dynamic || within.is_some()))
+                .then_some(StaticSearch { within, ..search });
             self.resolve_rule_target(
                 spec,
                 selection,

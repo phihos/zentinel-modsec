@@ -478,8 +478,11 @@ impl CompiledRuleset {
                     let transformations = extract_transformations(&rule.actions)?;
 
                     let operator_spec = rule.operator.clone();
-                    let (operator, operator_negated) =
-                        compile_operator_reporting(&rule.operator, &id)?;
+                    let (operator, operator_negated) = compile_operator_reporting(
+                        &rule.operator,
+                        &id,
+                        rule.location.file.as_deref(),
+                    )?;
 
                     let compiled = CompiledRule {
                         id,
@@ -979,7 +982,16 @@ fn variable_matches_target(var: &VariableSpec, target: &str) -> bool {
 fn compile_operator_reporting(
     spec: &OperatorSpec,
     rule_id: &Option<String>,
+    rule_file: Option<&std::path::Path>,
 ) -> Result<(Arc<dyn Operator>, bool)> {
+    if spec.name == OperatorName::ValidateSchema {
+        let root = rule_file
+            .and_then(std::path::Path::parent)
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let schema = crate::operators::schema::SchemaOperator::load(&spec.argument, root)?;
+        return Ok((Arc::new(schema), spec.negated));
+    }
     // A byte range supplied by a transaction macro is validated after expansion.
     if spec.name == OperatorName::ValidateByteRange
         && super::split_operator_macro(&spec.argument).is_some()

@@ -186,7 +186,11 @@ impl OperatorName {
     pub(crate) fn uses_data_file(self) -> bool {
         matches!(
             self,
-            Self::PmFromFile | Self::Pmf | Self::IpMatchFromFile | Self::IpMatchF
+            Self::PmFromFile
+                | Self::Pmf
+                | Self::IpMatchFromFile
+                | Self::IpMatchF
+                | Self::ValidateSchema
         )
     }
 

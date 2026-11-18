@@ -297,8 +297,17 @@ substring matching and emits a load-time compatibility warning.
 list is checked after expansion. An omitted range matches every input, including
 an empty value. A descending range contributes no permitted bytes.
 
+`@validateSchema schema.json` loads a JSON Schema once. The schema path is
+relative to the rule's directory, or the working directory for inline rules.
+References can address the same document or another file under that directory.
+External network retrieval is disabled. Invalid schemas or unresolved references
+fail rule loading. A schema violation or malformed nonempty JSON matches the
+operator. From phase 2 it prefers `TX:json_request_body`; from phase 4 it first
+checks `TX:json_response_body`. It falls back to the transformed rule target
+when neither applicable body is available. An empty fallback has no violation.
+
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
-`@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,
+`@validateHash`, `@validateDTD`, `@rbl`, `@geoLookup`,
 `@gsbLookup`, `@inspectFile`, `@fuzzyHash`, `@rsub`. A rule that depends on one
 of them cannot perform the requested check; negating a placeholder can make
 it match. These operators produce load-time warnings with rule IDs.
