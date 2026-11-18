@@ -7,6 +7,7 @@ use super::body::{BodyState, BodyWriteResult};
 use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
 use super::intervention::Intervention;
+use super::match_log::{MatchLog, RawMatch};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
 use crate::actions::rule_metadata;
@@ -70,7 +71,7 @@ pub struct Transaction {
     /// rule so that `MATCHED_VARS` reads correctly. This accumulates for the
     /// whole transaction, because audit logging wants to answer "what did
     /// rule 942100 actually see" after the fact.
-    matched_data: Vec<MatchedData>,
+    matched_data: MatchLog,
     /// What each `setvar` that ran did, in order. See [`SetVarEffect`].
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
@@ -84,7 +85,7 @@ pub struct Transaction {
 
 /// Audit snapshots from a matched link.
 struct RuleOutcome {
-    first_data: Option<MatchedData>,
+    first_data: Option<RawMatch>,
     first_message: Option<RuleMessage>,
 }
 
@@ -231,7 +232,7 @@ impl Transaction {
             allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
-            matched_data: Vec::new(),
+            matched_data: MatchLog::default(),
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
             rule_messages: Vec::new(),
@@ -296,7 +297,7 @@ impl Transaction {
     /// Pairs with [`matched_rules`](Self::matched_rules): that says which
     /// rules fired, this says what they saw.
     pub fn matched_data(&self) -> &[MatchedData] {
-        &self.matched_data
+        self.matched_data.as_slice()
     }
 
     /// Record what every `setvar` does, for [`setvar_effects`](Self::setvar_effects).
@@ -960,7 +961,7 @@ impl Transaction {
         let mut chain_state = ChainState::new();
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
-        let mut pending_chain_data: Vec<MatchedData> = Vec::new();
+        let mut pending_chain_data = Vec::new();
         let mut skip_count: u32 = 0;
         let mut skip_after: Option<usize> = None;
 
@@ -1035,7 +1036,7 @@ impl Transaction {
                 } = outcome;
                 if let Some(data) = first_data {
                     if standalone {
-                        self.matched_data.push(data);
+                        self.matched_data.extend(std::iter::once(data));
                     } else {
                         pending_chain_data.push(data);
                     }
@@ -1060,7 +1061,7 @@ impl Transaction {
                 // starter's disruptive action, flow and metadata.
                 if chain_state.in_chain {
                     chain_state.reset();
-                    self.matched_data.append(&mut pending_chain_data);
+                    self.matched_data.extend(pending_chain_data.drain(..));
                 }
                 if let Some(id) = &starter.id {
                     self.matched_rules.push(id.clone());
@@ -1321,16 +1322,11 @@ impl Transaction {
                     } else {
                         portion.take()
                     };
-                    let (matched_portion, matched_portion_bytes) =
-                        audit_portion.map(ByteValue::into_display_and_bytes).unzip();
-                    outcome.first_data = Some(MatchedData {
+                    outcome.first_data = Some(RawMatch {
                         rule_id: logical_id.map(str::to_owned),
-                        variable: name.to_string(),
-                        value: value.to_string(),
-                        matched_portion,
-                        variable_bytes: name.as_bytes().to_vec(),
-                        value_bytes: value.as_bytes().to_vec(),
-                        matched_portion_bytes,
+                        variable: name.clone(),
+                        value: value.clone(),
+                        portion: audit_portion,
                     });
                 }
                 tx.matched_vars.push((name.clone(), value));
