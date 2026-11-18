@@ -1013,7 +1013,8 @@ impl Transaction {
                 idx = defaults.end;
             }
         }
-        while idx < rules.len() {
+        let mut phase_end = rules.len();
+        while idx < phase_end {
             // Handle skipAfter
             if let Some(next) = skip_after.take() {
                 if next < idx {
@@ -1021,12 +1022,6 @@ impl Transaction {
                 }
                 idx = next;
                 continue;
-            }
-
-            // A ctl:ruleEngine=Off from an earlier rule stops this phase where
-            // it stands, rather than only taking effect from the next phase.
-            if self.engine_mode() == RuleEngineMode::Off {
-                return Ok(());
             }
 
             let rule = &rules[idx];
@@ -1084,6 +1079,13 @@ impl Transaction {
                 None
             };
             if let Some(outcome) = outcome {
+                // Controls can change the mode only on a match. Finish recording
+                // this link, then stop before evaluating another logical rule.
+                if dispatch[idx].controls_from < rule.actions.len()
+                    && self.engine_mode() == RuleEngineMode::Off
+                {
+                    phase_end = 0;
+                }
                 let RuleOutcome {
                     first_data,
                     first_message,
