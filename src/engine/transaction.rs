@@ -410,6 +410,17 @@ impl Transaction {
         Ok(())
     }
 
+    /// Append a connector-supplied path argument. Duplicates count separately
+    /// toward this source's SecArgumentsLimit.
+    pub fn add_path_argument(&mut self, name: &str, value: &str) {
+        self.add_path_argument_bytes(name.as_bytes(), value.as_bytes());
+    }
+
+    /// Append the original name and value bytes without UTF-8 conversion.
+    pub fn add_path_argument_bytes(&mut self, name: &[u8], value: &[u8]) {
+        self.request.add_path_argument(name, value);
+    }
+
     /// Add original request header bytes without UTF-8 replacement.
     pub fn add_request_header_bytes(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
         self.request.add_header_bytes(name, value);
@@ -1512,12 +1523,7 @@ impl Transaction {
                 };
                 if restpath {
                     operator.execute_with_path_arguments(value, &mut |name, value| {
-                        tx.request
-                            .args_path
-                            .get_or_insert_with(|| {
-                                Box::new(crate::variables::HashMapCollection::named())
-                            })
-                            .set_bytes(name, value);
+                        tx.request.set_route_parameter(name, value);
                     })?
                 } else if schema {
                     let body = tx.schema_body().unwrap_or(value);
@@ -1786,10 +1792,9 @@ impl Transaction {
                 .args_get
                 .first_value_bytes(key)
                 .or_else(|| request.args_post.first_value_bytes(key))
-                .or_else(|| request.args_path.as_ref()?.first_value_bytes(key)),
+                .or_else(|| request.path_arguments()?.first_value_bytes(key)),
             ArgsPath => request
-                .args_path
-                .as_ref()
+                .path_arguments()
                 .and_then(|path| path.first_value_bytes(key)),
             ArgsGet | ArgsGetNames => request.args_get.first_value_bytes(key),
             ArgsPost | ArgsPostNames => request.args_post.first_value_bytes(key),

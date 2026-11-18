@@ -7,6 +7,12 @@ use rand::distr::{Alphabetic, SampleString};
 use super::collection::{Collection, HashMapCollection};
 use super::ByteValue;
 
+#[derive(Debug, Clone)]
+struct PathArguments {
+    members: HashMapCollection,
+    count: usize,
+}
+
 /// Request data container.
 #[derive(Debug, Clone)]
 pub struct RequestData {
@@ -43,7 +49,7 @@ pub struct RequestData {
     /// GET arguments.
     pub args_get: HashMapCollection,
     /// Named parameters extracted by REST path rules, allocated on first match.
-    pub(crate) args_path: Option<Box<HashMapCollection>>,
+    args_path: Option<Box<PathArguments>>,
     /// POST arguments.
     pub args_post: HashMapCollection,
     /// Cookies.
@@ -164,6 +170,40 @@ impl RequestData {
     /// Create new request data.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn path_arguments(&self) -> Option<&HashMapCollection> {
+        self.args_path.as_deref().map(|path| &path.members)
+    }
+
+    fn path_arguments_mut(&mut self) -> &mut PathArguments {
+        self.args_path.get_or_insert_with(|| {
+            Box::new(PathArguments {
+                members: HashMapCollection::named(),
+                count: 0,
+            })
+        })
+    }
+
+    pub(crate) fn add_path_argument(&mut self, name: &[u8], value: &[u8]) {
+        if self
+            .args_path
+            .as_ref()
+            .is_some_and(|path| path.count >= self.argument_limit)
+        {
+            self.arguments_limit_reached = true;
+            return;
+        }
+        let path = self.path_arguments_mut();
+        path.members.add_bytes(name, value);
+        path.count += 1;
+    }
+
+    pub(crate) fn set_route_parameter(&mut self, name: &str, value: &[u8]) {
+        let path = self.path_arguments_mut();
+        if path.members.replace_first_or_add(name.as_bytes(), value) {
+            path.count += 1;
+        }
     }
 
     /// The stable transaction identifier exposed to rules as `UNIQUE_ID`.
@@ -472,7 +512,7 @@ impl RequestData {
     pub fn all_args(&self) -> Vec<(&str, &str)> {
         let mut all = self.args_get.all();
         all.extend(self.args_post.all());
-        if let Some(path) = &self.args_path {
+        if let Some(path) = self.path_arguments() {
             all.extend(path.all());
         }
         all

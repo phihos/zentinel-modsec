@@ -330,6 +330,29 @@ impl HashMapCollection {
         }
     }
 
+    /// Replace slot zero, retaining later values and their original names.
+    /// Returns true when this creates a new bucket.
+    pub(super) fn replace_first_or_add(&mut self, original: &[u8], value: &[u8]) -> bool {
+        self.argument_widths.take();
+        let key = self.lookup_key(original);
+        if let Some(members) = self.data.get_mut(key.as_ref()) {
+            if original != key.as_ref() && members.original_names.is_none() {
+                members.original_names = Some(vec![ByteValue::from(key.as_ref()); members.len()]);
+            }
+            if let Some(names) = &mut members.original_names {
+                names[0] = original.into();
+            }
+            match &mut members.values {
+                MemberValues::Single(first) => *first = value.into(),
+                MemberValues::Multiple(values) => values[0] = value.into(),
+            }
+            false
+        } else {
+            self.add_bytes(original, value);
+            true
+        }
+    }
+
     /// Replace values under an original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
         self.argument_widths.take();

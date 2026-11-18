@@ -313,6 +313,8 @@ position, including across configuration reloads.
 stores the matched parameter in `ARGS_PATH:id`. A parameter ends at the next
 slash or question mark. `ARGS` and `ARGS_NAMES` include path parameters after
 query and body parameters. `ARGS_COMBINED_SIZE` counts the query and body.
+Connectors can call `add_path_argument` or `add_path_argument_bytes` before
+inspection. Each value counts toward the path collection’s `SecArgumentsLimit`.
 
 With `capture`, phrase matches populate `TX:0` through `TX:9` in input order
 using the original bytes. If phrases overlap, each capture takes the longest phrase at

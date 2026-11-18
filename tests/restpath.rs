@@ -66,3 +66,32 @@ fn repeated_numeric_and_binary_parameters_keep_their_original_values() {
     )
     .is_err());
 }
+
+#[test]
+fn connector_path_arguments_count_duplicates_and_keep_later_values_after_route_matches() {
+    let engine = ModSecurity::from_string(r#"SecArgumentsLimit 2
+SecRule REQUEST_URI "@restpath /{Item}" "id:1,phase:1,pass"
+SecRule &ARGS_PATH:item "@eq 2" "id:2,phase:1,pass"
+SecRule ARGS_PATH:item "@streq route" "id:3,phase:1,pass,msg:'%{MATCHED_VAR_NAME}'"
+SecRule ARGS_PATH:item "@rx ^\xff$" "id:4,phase:1,pass,msg:'%{MATCHED_VAR_NAME}',logdata:'%{MATCHED_VAR}'"
+SecRule ARGUMENTS_LIMIT_REACHED "@streq 1" "id:5,phase:1,pass"
+SecRule &ARGS_PATH:extra "@eq 0" "id:6,phase:1,pass""#).unwrap();
+    let mut tx = engine.new_transaction();
+    tx.set_record_rule_messages(true);
+    tx.add_path_argument("ITEM", "first");
+    tx.add_path_argument_bytes(b"iTem", b"\xff");
+    tx.add_path_argument("extra", "over limit");
+    tx.process_uri("/route", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "3", "4", "5", "6"]);
+    let messages = tx.rule_messages();
+    assert_eq!(
+        messages[2].message.as_deref(),
+        Some(b"ARGS_PATH:Item".as_slice())
+    );
+    assert_eq!(
+        messages[3].message.as_deref(),
+        Some(b"ARGS_PATH:iTem".as_slice())
+    );
+    assert_eq!(messages[3].logdata.as_deref(), Some(b"\xff".as_slice()));
+}

@@ -48,7 +48,7 @@ impl RequestCollections {
             widths[2] = Widths::default();
             widths[2].include(request.path_bytes());
         }
-        if sources.restpath || request.args_path.is_some() {
+        if sources.restpath || request.path_arguments().is_some() {
             // Merged ARGS can gain values in the middle of a phase. Keep the
             // ordinary lookups active and their widths unbounded.
             present |= GET;
