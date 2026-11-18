@@ -1,7 +1,7 @@
 //! Resolve ordinary references using only the schema documents supplied at load time.
 use jsonschema::{uri, Draft, Uri};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use url::Url;
 
 struct Resource<'a> {
@@ -10,11 +10,20 @@ struct Resource<'a> {
     anchors: HashMap<&'a str, &'a Value>,
 }
 
+/// Outermost bindings are the only part of the evaluation path that can affect
+/// a dynamic reference. Canonicalizing them keeps recursion on a finite graph.
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub(super) struct DynamicScope {
+    dynamic: BTreeMap<usize, usize>,
+    recursive: Option<usize>,
+}
+
 #[derive(Default)]
 pub(super) struct LocalRefs<'a> {
     resources: Vec<Resource<'a>>,
     names: HashMap<String, usize>,
-    dynamic_counts: HashMap<&'a str, usize>,
+    // Each name has a stable slot and a count of distinct declarations.
+    dynamic_names: HashMap<&'a str, (usize, usize)>,
     recursive_roots: usize,
     // The borrowed documents stay immutable and live as long as this index.
     scopes: HashMap<usize, (usize, Draft)>,
@@ -97,7 +106,8 @@ impl<'a> LocalRefs<'a> {
                     if self.resources[scope].anchors.insert(name, node).is_some() {
                         return None;
                     }
-                    *self.dynamic_counts.entry(name).or_default() += 1;
+                    let slot = self.dynamic_names.len();
+                    self.dynamic_names.entry(name).or_insert((slot, 0)).1 += 1;
                 }
             }
             if std::ptr::eq(node, self.resources[scope].root)
@@ -144,24 +154,100 @@ impl<'a> LocalRefs<'a> {
                 .contains_key(&std::ptr::from_ref(target).addr())
                 .then_some(target);
         }
-        let node = *resource.anchors.get(fragment)?;
-        if node.get("$dynamicAnchor").and_then(Value::as_str) == Some(fragment)
-            && self
-                .dynamic_counts
-                .get(fragment)
-                .copied()
-                .unwrap_or_default()
-                > 1
-        {
-            return None;
-        }
-        Some(node)
+        resource.anchors.get(fragment).copied()
     }
 
-    /// Without competing dynamic anchors, the static destination is invariant
-    /// across evaluation scopes. Otherwise resolve() leaves evaluation to the caller.
+    pub(super) fn enter_scope(
+        &self,
+        parent: &DynamicScope,
+        schema: &Value,
+    ) -> Option<DynamicScope> {
+        let &(idx, _) = self.scopes.get(&std::ptr::from_ref(schema).addr())?;
+        let resource = &self.resources[idx];
+        let mut scope = parent.clone();
+        for (name, target) in &resource.anchors {
+            if target.get("$dynamicAnchor").and_then(Value::as_str) != Some(name) {
+                continue;
+            }
+            if let Some(&(slot, count)) = self.dynamic_names.get(name) {
+                if count > 1 {
+                    scope.dynamic.entry(slot).or_insert(idx);
+                }
+            }
+        }
+        // A 2019-09 recursive reference walks consecutive anchored resources,
+        // stopping at a resource whose root does not declare the recursive anchor.
+        if self.recursive_roots > 1 {
+            if resource
+                .root
+                .get("$recursiveAnchor")
+                .and_then(Value::as_bool)
+                == Some(true)
+            {
+                scope.recursive.get_or_insert(idx);
+            } else {
+                scope.recursive = None;
+            }
+        }
+        Some(scope)
+    }
+
+    pub(super) fn resolve_dynamic_in(
+        &self,
+        from: &'a Value,
+        reference: &str,
+        scope: &DynamicScope,
+    ) -> Option<&'a Value> {
+        let target = self.resolve(from, reference)?;
+        let Some((_, name)) = reference.rsplit_once('#') else {
+            return Some(target);
+        };
+        if name.is_empty()
+            || name.starts_with('/')
+            || target.get("$dynamicAnchor").and_then(Value::as_str) != Some(name)
+        {
+            return Some(target);
+        }
+        let Some(&(slot, _)) = self.dynamic_names.get(name) else {
+            return Some(target);
+        };
+        match scope.dynamic.get(&slot) {
+            Some(&i) => self.resources[i].anchors.get(name).copied(),
+            None => Some(target),
+        }
+    }
+
+    pub(super) fn resolve_recursive_in(
+        &self,
+        from: &'a Value,
+        reference: &str,
+        scope: &DynamicScope,
+    ) -> Option<&'a Value> {
+        if reference != "#" {
+            return None;
+        }
+        let target = self.resolve(from, reference)?;
+        if target.get("$recursiveAnchor").and_then(Value::as_bool) == Some(true) {
+            if let Some(idx) = scope.recursive {
+                return Some(self.resources[idx].root);
+            }
+        }
+        Some(target)
+    }
+
     pub(super) fn resolve_dynamic(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
-        self.resolve(from, reference)
+        let target = self.resolve(from, reference)?;
+        if let Some((_, name)) = reference.rsplit_once('#') {
+            if target.get("$dynamicAnchor").and_then(Value::as_str) == Some(name)
+                && self
+                    .dynamic_names
+                    .get(name)
+                    .is_some_and(|&(_, count)| count > 1)
+            {
+                return None;
+            }
+        }
+        Some(target)
     }
 
     pub(super) fn resolve_recursive(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
@@ -259,6 +345,30 @@ mod tests {
             Some(Draft::Draft7)
         );
         assert_eq!(refs.draft_for(&root["$defs"]), None);
+    }
+
+    #[test]
+    fn dynamic_paths_keep_the_outer_binding_and_coalesce_on_reentry() {
+        let base = Url::parse("file:///root.json").unwrap();
+        let root = json!({"$dynamicAnchor":"node","$recursiveAnchor":true,"$defs":{
+            "tree":{"$id":"tree.json","$recursiveAnchor":true,"$dynamicAnchor":"node","properties":{"next":{"$dynamicRef":"#node"}}}
+        }});
+        let refs = LocalRefs::new(&root, &base).unwrap();
+        let tree = &root["$defs"]["tree"];
+        let child = &tree["properties"]["next"];
+        let outer = refs.enter_scope(&DynamicScope::default(), &root).unwrap();
+        let strict_tree = refs.enter_scope(&outer, tree).unwrap();
+        let basic_tree = refs.enter_scope(&DynamicScope::default(), tree).unwrap();
+        assert_eq!(strict_tree, outer);
+        assert_ne!(basic_tree, outer);
+        assert_eq!(refs.enter_scope(&strict_tree, child), Some(outer.clone()));
+        assert_eq!(refs.resolve_dynamic_in(child, "#node", &outer), Some(&root));
+        assert_eq!(
+            refs.resolve_dynamic_in(child, "#node", &basic_tree),
+            Some(tree)
+        );
+        assert_eq!(refs.resolve_recursive_in(child, "#", &outer), Some(&root));
+        assert_eq!(refs.resolve(child, "#node"), Some(tree));
     }
 
     #[test]
