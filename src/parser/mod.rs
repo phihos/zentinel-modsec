@@ -40,14 +40,35 @@ pub use variable::{Selection, VariableName, VariableSpec, XmlTarget};
 
 use crate::error::{Error, Result, SourceLocation};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // Coraza counts Include directives cumulatively, including directives in
 // previously loaded files. One glob is one directive regardless of its size.
 const MAX_INCLUDES: usize = 100;
 
+/// Connector policy for loading rules from an alternate filesystem and handling
+/// directives owned by the connector. Called only when compiling a ruleset.
+pub trait ParserHost: Send + Sync {
+    /// Resolve one Include operand to readable files in evaluation order.
+    /// The declaring file is absent for inline directives.
+    fn includes(&self, declaring_file: Option<&Path>, operand: &Path) -> Result<Vec<PathBuf>>;
+
+    /// Resolve a phrase or IP list relative to its declaring rule.
+    fn data_file(&self, declaring_file: Option<&Path>, operand: &Path) -> PathBuf;
+
+    /// Accept a connector directive or report a configuration error at its source.
+    fn unknown_directive(
+        &self,
+        name: &str,
+        argument: &str,
+        location: &SourceLocation,
+    ) -> Result<()>;
+}
+
 /// Parser for ModSecurity configuration files.
 pub struct Parser {
+    host: Option<Arc<dyn ParserHost>>,
     /// Parsed directives.
     directives: Vec<Directive>,
     /// Number of Include directives expanded into this configuration.
@@ -69,12 +90,19 @@ impl Parser {
     /// Create a new parser.
     pub fn new() -> Self {
         Self {
+            host: None,
             directives: Vec::new(),
             include_count: 0,
             location: SourceLocation::default(),
             default_actions: HashMap::new(),
             defer_defaults: false,
         }
+    }
+
+    /// Delegate resource lookup and unknown-directive handling to a connector.
+    pub fn with_host(mut self, host: Arc<dyn ParserHost>) -> Self {
+        self.host = Some(host);
+        self
     }
 
     /// Append one caller-supplied source atomically. Included files participate
@@ -283,6 +311,10 @@ impl Parser {
                 Ok(Directive::Unknown(name.to_string()))
             }
             _ => {
+                if let Some(host) = &self.host {
+                    host.unknown_directive(name, &lexer.remaining_argument(), &self.location)?;
+                    return Ok(Directive::Unknown(name.to_string()));
+                }
                 // Skip unknown directives with a warning
                 tracing::warn!(
                     directive = name,
@@ -332,6 +364,13 @@ impl Parser {
     /// ModSecurity/CRS reference their `.data` files.
     fn resolve_operator_file_path(&self, operator: &mut OperatorSpec) {
         if !operator.name.uses_data_file() || operator.name == OperatorName::ValidateSchema {
+            return;
+        }
+        if let Some(host) = &self.host {
+            operator.argument = host
+                .data_file(self.location.file.as_deref(), Path::new(&operator.argument))
+                .to_string_lossy()
+                .into_owned();
             return;
         }
         if std::path::Path::new(&operator.argument).is_absolute() {
@@ -694,7 +733,10 @@ impl Parser {
             .filter(|_| path.is_relative())
             .unwrap_or(Path::new(""));
         let resolved_path = parent.join(path);
-        let parsed = if is_glob {
+        let parsed = if let Some(host) = &self.host {
+            let paths = host.includes(including_location.file.as_deref(), path)?;
+            paths.iter().try_for_each(|path| self.read_file(path))
+        } else if is_glob {
             // Only the directive's operand is a pattern. The declaring
             // directory may itself have brackets or other glob characters.
             let parent = parent.to_str().ok_or_else(|| {
