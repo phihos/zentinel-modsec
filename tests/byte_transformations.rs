@@ -107,3 +107,21 @@ fn compress_whitespace_preserves_unicode_boundaries_and_latin1_separators() {
         ));
     }
 }
+
+#[test]
+fn url_decoders_preserve_the_prefix_before_the_first_escape() {
+    let mut prefix = vec![b'q'; 4096];
+    prefix[100] = 0xff;
+    for (name, suffix, decoded) in [
+        ("urlDecode", &b"%2B+%41%"[..], &b"+ A%"[..]),
+        ("urlDecodeUni", &b"%u0041+%u0042%2B"[..], &b"A B+"[..]),
+        ("urlDecode", &b"%"[..], &b"%"[..]),
+    ] {
+        let transform = create_transformation(name).unwrap();
+        let input = [prefix.as_slice(), suffix].concat();
+        let expected = [prefix.as_slice(), decoded].concat();
+        let output = transform.transform_bytes(&input).unwrap();
+        assert_eq!(output.as_ref(), expected);
+        assert_eq!(matches!(output, Cow::Borrowed(_)), input == expected);
+    }
+}
