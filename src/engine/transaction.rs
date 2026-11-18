@@ -633,7 +633,11 @@ impl Transaction {
             } else {
                 &[]
             };
-            let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
+            let link_rule_id = if ruleset.multiphase {
+                starter.id.as_deref()
+            } else {
+                rule.id.as_deref().or(starter.id.as_deref())
+            };
             let standalone = !rule.is_chain && chain_start.is_none();
             let outcome = if !dispatch[idx].inactive && targets.may_match(rule.variables.len()) {
                 self.evaluate_rule(
@@ -1041,7 +1045,11 @@ impl Transaction {
                         }
                     }
                 } else {
-                    let captured = if first { portion.clone() } else { portion.take() };
+                    let captured = if first {
+                        portion.clone()
+                    } else {
+                        portion.take()
+                    };
                     tx.tx.replace_captures(captured, result.captures);
                 }
             }

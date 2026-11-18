@@ -34,7 +34,10 @@ impl CompiledRuleset {
         mut order: Option<SourceOrder>,
     ) -> Result<Self> {
         apply_rule_edits(&mut directives)?;
-        let mut ruleset = Self::new();
+        let mut ruleset = Self {
+            multiphase: order.is_some(),
+            ..Self::default()
+        };
         let mut pending_chain: Option<(Phase, usize)> = None;
 
         diagnostics::report(&directives, &mut ruleset.selectors)?;

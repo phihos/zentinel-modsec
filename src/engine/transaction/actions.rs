@@ -50,8 +50,11 @@ impl Transaction {
             }
             _ => {}
         }
-        self.controls
-            .apply_compiled(directive, Some(&self.ruleset.selectors));
+        self.controls.apply_compiled(
+            directive,
+            Some(&self.ruleset.selectors),
+            self.ruleset.multiphase,
+        );
     }
 
     /// Apply a setvar operation.

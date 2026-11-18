@@ -396,13 +396,14 @@ impl TransactionControls {
     /// removals accumulate, since `ctl:ruleRemoveById` is additive in
     /// ModSecurity.
     pub fn apply(&mut self, directive: CtlDirective) {
-        self.apply_compiled(directive, None);
+        self.apply_compiled(directive, None, false);
     }
 
     pub(crate) fn apply_compiled(
         &mut self,
         directive: CtlDirective,
         programs: Option<&SelectorPrograms>,
+        multiphase: bool,
     ) {
         match directive {
             CtlDirective::RuleEngine(mode) => self.engine_mode = Some(mode),
@@ -417,7 +418,10 @@ impl TransactionControls {
                 // collection names round-trip: SecLang writes REQUEST_HEADERS
                 // where the enum variant renders as RequestHeaders.
                 match crate::parser::parse_single_variable(&target) {
-                    Ok(spec) => self.removed_targets.push((rule_id, spec)),
+                    Ok(spec) => self.removed_targets.extend(
+                        super::ruleset::split_target(spec, multiphase)
+                            .map(|target| (rule_id.clone(), target)),
+                    ),
                     Err(_) => {
                         let key = format!("ruleRemoveTargetById={rule_id};{target}");
                         if self.reported.insert(key) {
@@ -450,7 +454,10 @@ impl TransactionControls {
                             }
                             _ => None,
                         };
-                        self.removed_tag_targets.push((tag, spec, regex));
+                        self.removed_tag_targets.extend(
+                            super::ruleset::split_target(spec, multiphase)
+                                .map(|target| (tag.clone(), target, regex.clone())),
+                        );
                     }
                     _ => tracing::warn!(%tag, %target, "invalid ctl:ruleRemoveTargetByTag target"),
                 }

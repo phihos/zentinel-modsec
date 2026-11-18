@@ -73,7 +73,7 @@ impl SourceOrder {
         for rule in declared.by_phase.iter_mut().flatten() {
             rule.variables = std::mem::take(&mut rule.variables)
                 .into_iter()
-                .flat_map(split_target)
+                .flat_map(|target| split_target(target, true))
                 .collect();
         }
         let mut metadata = Schedule::default();
@@ -161,14 +161,17 @@ fn child_min_phase(rule: &CompiledRule, siblings: &[CompiledRule]) -> Option<Pha
     min
 }
 
-fn split_target(mut target: VariableSpec) -> impl Iterator<Item = VariableSpec> {
+pub(in crate::engine) fn split_target(
+    mut target: VariableSpec,
+    multiphase: bool,
+) -> impl Iterator<Item = VariableSpec> {
     use VariableName::*;
     let post = match target.name {
-        Args => {
+        Args if multiphase => {
             target.name = ArgsGet;
             Some(ArgsPost)
         }
-        ArgsNames => {
+        ArgsNames if multiphase => {
             target.name = ArgsGetNames;
             Some(ArgsPostNames)
         }

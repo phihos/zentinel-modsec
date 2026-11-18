@@ -4,6 +4,7 @@ mod compile;
 mod dispatch;
 mod edits;
 mod multiphase;
+pub(super) use multiphase::split_target;
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -110,6 +111,7 @@ pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
     rule_count: usize,
+    pub(super) multiphase: bool,
     dispatch: [Vec<RuleDispatch>; Phase::ALL.len()],
     pub(super) header_slots: [Vec<Box<[u8]>>; Phase::ALL.len()],
     pub(super) width_sources: [super::target_indices::WidthSources; Phase::ALL.len()],
