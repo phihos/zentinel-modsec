@@ -31,8 +31,13 @@ fn word_byte(b: u8) -> bool {
 // Minimum match width when the entire value consists of ASCII word bytes
 // and hyphens. An impossible branch has infinite width. Ignoring anchors
 // and boundary assertions gives a conservative lower bound.
-fn word_width(hir: &regex_syntax::hir::Hir) -> usize {
+fn word_width(hir: &regex_syntax::hir::Hir, depth: usize) -> usize {
     use regex_syntax::hir::{Class, HirKind};
+    // Bound our own stack usage independently of the parser's nesting limit.
+    if depth == 0 {
+        return hir.properties().minimum_len().unwrap_or(0);
+    }
+    let width = |part: &regex_syntax::hir::Hir| word_width(part, depth - 1);
     let overlaps_word = |lo: u32, hi: u32| {
         [
             (b'-', b'-'),
@@ -68,10 +73,10 @@ fn word_width(hir: &regex_syntax::hir::Hir) -> usize {
                 usize::MAX
             }
         }
-        HirKind::Capture(cap) => word_width(&cap.sub),
-        HirKind::Repetition(rep) => word_width(&rep.sub).saturating_mul(rep.min as usize),
-        HirKind::Concat(parts) => parts.iter().map(word_width).fold(0, usize::saturating_add),
-        HirKind::Alternation(parts) => parts.iter().map(word_width).min().unwrap_or(usize::MAX),
+        HirKind::Capture(cap) => width(&cap.sub),
+        HirKind::Repetition(rep) => width(&rep.sub).saturating_mul(rep.min as usize),
+        HirKind::Concat(parts) => parts.iter().map(width).fold(0, usize::saturating_add),
+        HirKind::Alternation(parts) => parts.iter().map(width).min().unwrap_or(usize::MAX),
     }
 }
 
@@ -125,7 +130,7 @@ impl RegexCache {
             .ok()
             .map(|hir| MatchLengths {
                 any: hir.properties().minimum_len().unwrap_or(0),
-                word: word_width(&hir),
+                word: word_width(&hir, 32),
             })
             .unwrap_or_default();
         let regex = Arc::new(RegexProgram { regex, lengths });
@@ -492,8 +497,32 @@ mod tests {
             r"(?-u:[\x80-\xff]|a-)",
             r"\b",
             r"[^a-zA-Z0-9_-]",
+            r"^a.b$",
+            r"(?-sm:^a.b$)",
+            r"(ab|c:d){2,3}",
+            r"(?-u:\x{FF}{2})",
+            r"(?i:k)\p{Greek}",
+            r"^$",
         ] {
             let rx = RxOperator::new(pattern).unwrap();
+            for value in [
+                &b""[..],
+                b"-",
+                b"FOO",
+                b"foo12",
+                b"x:xa",
+                b"a\nb",
+                b"x\na:b\ny",
+                b"abab",
+                b"c:dc:d",
+                b"\xff\xff",
+                "KΣ".as_bytes(),
+                "KΩ".as_bytes(),
+            ] {
+                if rx.compiled.regex.is_match(value) {
+                    assert!(!rx.lengths.too_short(value), "{pattern} on {value:?}");
+                }
+            }
             for first in 0..=255 {
                 for second in [0, b'a', b'0', b'x', b'-', b'_', b':', 0xff] {
                     let value = [first, second];
