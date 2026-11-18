@@ -2,6 +2,18 @@
 
 ## Current checkpoint
 
+Engine `ece387f` follows `6f35d92`. On the full 698-rule OWASP CRS 4.25.0
+benchmark, 16 paired runs measured 6.1% lower GET latency, 4.9% lower form
+POST latency and 9.7% lower nested JSON POST latency. Rust p99 on mixed traffic
+fell from 156.1 to 150.3 µs and optional C p99 from 154.3 to 142.7 µs.
+The 33-field form regressed 2.6%. The compiled ruleset retained 22,808 extra
+bytes. Per-request allocation calls fell by 17 for GET and 27 for both POSTs.
+Both backends preserved corpus outcomes, blocking traces and full audit records.
+The [report and samples](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round6/RESULTS.md)
+include multipart, denied-method and high-header-count measurements.
+
+## Filename and header checkpoint at `c14c323`
+
 Engine `c14c323` follows `e0579b6`. It reuses the decoded filename and frequently
 selected headers across rules, prepares literal TX defaults in replay order, and
 reduces allocation for audit records and macro expansion. On OWASP CRS 4.25.0
