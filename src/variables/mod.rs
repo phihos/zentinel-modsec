@@ -17,7 +17,6 @@ mod xml_entities;
 pub(crate) use collection::folded_key;
 pub use collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
 pub use request::RequestData;
-pub(crate) use resolver::qualified_name;
 pub use resolver::VariableResolver;
 pub use response::ResponseData;
 pub(crate) use selectors::{
@@ -25,4 +24,5 @@ pub(crate) use selectors::{
     TargetSelection,
 };
 pub use tx::TxCollection;
+pub(crate) use value::qualified_name;
 pub use value::ByteValue;

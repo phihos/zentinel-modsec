@@ -1,19 +1,9 @@
 //! Lossless resolution used by transaction evaluation.
 use super::*;
 use crate::variables::{
-    folded_key, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms, TargetSelection,
+    folded_key, qualified_name, ByteValue, HashMapCollection, MemberSelector, SelectorPrograms,
+    TargetSelection,
 };
-
-pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
-    let Some(key) = member.filter(|k| !k.is_empty()) else {
-        return prefix.into();
-    };
-    let mut name = Vec::with_capacity(prefix.len() + 1 + key.len());
-    name.extend_from_slice(prefix.as_bytes());
-    name.push(b':');
-    name.extend_from_slice(key);
-    name.into()
-}
 
 impl<'a> VariableResolver<'a> {
     /// Construct a resolver over original matched-value bytes.
