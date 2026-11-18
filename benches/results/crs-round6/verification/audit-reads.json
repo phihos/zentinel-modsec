@@ -1,0 +1,18 @@
+{
+  "commit": "bf51bbc925c9c5344fa33dad095b6b8344b2fe74",
+  "baseline": "2d323921fc2ca1f571eaeb9fb2d16ca32885dae2",
+  "fixture": "8ec1a907013549f7ed5c89cb37c792a1e3c0407e4a423e94efacbade634d62a1",
+  "cases": 144,
+  "backends": {
+    "default": {
+      "output": "775dd0926d98bda96e549682c144f54da45cd384f6d18ba052b1ac3d9dbc8738",
+      "binary": "5f108f831c748e31b1e72b8256c1143eaf1d9ade1bdb1693ebeb9ffad7bf250d",
+      "rlib": "641192e9737f4c498401cbb8f194b7d7a8b708a6eda38eaf6c92d4f587fc46ad"
+    },
+    "ffi": {
+      "output": "775dd0926d98bda96e549682c144f54da45cd384f6d18ba052b1ac3d9dbc8738",
+      "binary": "1d8256990e08d3d3b1c4e3842e7f86815395033977477c4dfedf3cf043ff8b4e",
+      "rlib": "17b7909af9f745b9e9b363fb4d1dfbd7abff6b7a2e0692df5192defcfce28274"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "workloads": {
+    "get": {
+      "before_us": 45.130775772181806,
+      "after_us": 41.01030692159361,
+      "paired_percent": -6.138206276639613,
+      "wins": 13
+    },
+    "form": {
+      "before_us": 53.434225392405395,
+      "after_us": 50.84278171457232,
+      "paired_percent": -4.867537398645299,
+      "wins": 14
+    },
+    "json": {
+      "before_us": 69.28644536212627,
+      "after_us": 60.37275588496966,
+      "paired_percent": -9.69270081735382,
+      "wins": 14
+    }
+  },
+  "series": [
+    "criterion/receipt.json",
+    "criterion-repeat/receipt.json"
+  ],
+  "pairs": 16
+}
