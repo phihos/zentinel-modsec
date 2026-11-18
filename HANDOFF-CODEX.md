@@ -2,6 +2,23 @@
 
 ## Current checkpoint
 
+Engine `c14c323` follows `e0579b6`. It reuses the decoded filename and frequently
+selected headers across rules, prepares literal TX defaults in replay order, and
+reduces allocation for audit records and macro expansion. On OWASP CRS 4.25.0
+(698 rules), eight Criterion pairs measured 7.8% lower GET latency, 6.1% lower
+form POST latency and 2.8% lower nested JSON POST latency. A second, interleaved
+measurement improved all three in every pair. Across 18 mixed-traffic pairs,
+Rust p99 moved from 156.0 to 152.8 µs. Optional C p99 was effectively flat.
+
+Each request allocated 2,101–2,155 fewer bytes with audit getters unread. Loading
+the full ruleset took 1.8% longer and retained an additional 10,023 bytes.
+JSON POST to a percent-encoded UTF-8 path measured 0.9% slower. Both detector
+backends retained corpus outcomes, blocking traces and ordered audit data.
+The [benchmark report and raw samples](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round5/RESULTS.md)
+include the dependency lockfile, workload definitions, verification and timing details.
+
+## Short argument and phrase checkpoint at `41e047f`
+
 Engine `41e047f` follows `e7cd1d3`. It summarizes short argument names and values
 once per eligible phase, skips regex and phrase targets that cannot match, and
 reuses request lines up to 4 KiB when several rules read them. On the 698-rule
