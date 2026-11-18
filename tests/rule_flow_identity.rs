@@ -243,3 +243,30 @@ SecRule &TX:child "@eq 0" "id:6,phase:1,pass"
         ["1", "4", "6"]
     );
 }
+
+#[test]
+fn static_exclusions_apply_to_earlier_logical_rules_by_exact_metadata() {
+    for (filter, metadata) in [("SecRuleRemoveByTag", "tag"), ("SecRuleRemoveByMsg", "msg")] {
+        let rules = format!(
+            r#"
+{filter} "literal  text"
+SecRule REQUEST_METHOD "@streq GET" "id:10,phase:1,pass,chain,{metadata}:'literal  text'"
+SecRule REQUEST_METHOD "@streq GET" "pass,setvar:tx.orphan=1"
+SecRule REQUEST_METHOD "@streq GET" "id:20,phase:1,pass,chain"
+SecRule REQUEST_METHOD "@streq GET" "pass,{metadata}:'literal  text'"
+SecAction "id:30,phase:1,pass,{metadata}:'Literal  text'"
+SecAction "id:31,phase:1,pass,{metadata}:'literal text'"
+SecAction "id:32,phase:1,pass,{metadata}:'literal  text'"
+{filter} literal  text
+SecAction "id:10,phase:1,pass,{metadata}:'literal  text'"
+SecRule TX:orphan "@eq 1" "id:40,phase:1,pass"
+"#
+        );
+        assert_eq!(matches(&rules), ["20", "30", "31", "10"]);
+        assert!(ModSecurity::from_string(filter).is_err());
+        assert!(ModSecurity::from_string(&format!(
+            "{rules}\n{filter} literal  text\nSecRuleUpdateActionById 10 pass"
+        ))
+        .is_err());
+    }
+}

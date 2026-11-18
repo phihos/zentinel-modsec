@@ -241,7 +241,8 @@ async fn waf(
 ## What is supported
 
 **Directives:** `SecRule`, `SecAction`, `SecMarker`, `SecRuleEngine`,
-`SecDefaultAction`, `SecRuleRemoveById`, `SecRuleUpdateTargetById`,
+`SecDefaultAction`, `SecRuleRemoveById`, `SecRuleRemoveByTag`,
+`SecRuleRemoveByMsg`, `SecRuleUpdateTargetById`,
 `SecRuleUpdateTargetByTag`, `Include`.
 Relative includes resolve beside their declaring file. A glob applies only to
 the written operand. An unmatched glob is allowed, and an unreadable matched
