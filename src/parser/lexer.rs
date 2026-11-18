@@ -80,6 +80,51 @@ impl<'a> Lexer<'a> {
             .to_owned()
     }
 
+    /// A trailing backtick opens a line-oriented block. Blank and comment
+    /// lines are skipped; spaces within a record are part of the record.
+    pub(super) fn dataset(&mut self) -> Result<(String, Vec<String>), &'static str> {
+        let mut text = self.input_line().trim().to_owned();
+        if text.ends_with('`') {
+            loop {
+                if self.peek().is_none() {
+                    return Err("SecDataset backticks left open");
+                }
+                let line = self.input_line();
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                text.push('\n');
+                text.push_str(line);
+                if line.starts_with('`') {
+                    break;
+                }
+            }
+        }
+        let (name, records) = text
+            .split_once(' ')
+            .ok_or("SecDataset requires a name and records")?;
+        let records = records
+            .trim_matches('`')
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(str::to_owned)
+            .collect();
+        Ok((name.to_owned(), records))
+    }
+
+    fn input_line(&mut self) -> String {
+        let mut line = String::new();
+        while let Some(c) = self.advance() {
+            if c == '\n' {
+                break;
+            }
+            line.push(c);
+        }
+        line
+    }
+
     /// Peek at the next character without consuming it.
     pub fn peek(&mut self) -> Option<char> {
         self.input.peek().copied()

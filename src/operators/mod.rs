@@ -44,9 +44,28 @@ pub fn create_operator(name: OperatorName, argument: &str) -> Result<Arc<dyn Ope
 
 /// Create a compiled operator from a specification.
 pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
+    compile_with_dataset(spec, None)
+}
+
+pub(crate) fn compile_with_dataset(
+    spec: &OperatorSpec,
+    dataset: Option<&[String]>,
+) -> Result<Arc<dyn Operator>> {
     let name = &spec.name;
     let argument = &spec.argument;
     match name {
+        OperatorName::PmFromDataset | OperatorName::IpMatchFromDataset => {
+            let records = dataset
+                .filter(|rows| *name == OperatorName::PmFromDataset || !rows.is_empty())
+                .ok_or_else(|| crate::Error::Config {
+                    message: format!("dataset {argument:?} not found"),
+                })?;
+            if *name == OperatorName::PmFromDataset {
+                Ok(Arc::new(PmOperator::from_dataset(records)?))
+            } else {
+                Ok(Arc::new(IpMatchOperator::from_dataset(records)))
+            }
+        }
         OperatorName::Rx => Ok(Arc::new(RxOperator::new(argument)?)),
         OperatorName::Pm => Ok(Arc::new(PmOperator::new(argument)?)),
         OperatorName::PmFromFile | OperatorName::Pmf => {

@@ -24,6 +24,8 @@ pub enum Directive {
     SecMarker(SecMarker),
     /// SecRuleEngine directive - enable/disable rules.
     SecRuleEngine(RuleEngineMode),
+    /// Named records available to subsequent dataset operators.
+    SecDataset(String, Vec<String>),
     /// SecDefaultAction directive - default actions for rules.
     SecDefaultAction(Vec<Action>),
     /// SecRuleRemoveById directive - remove rules by ID or ID range.

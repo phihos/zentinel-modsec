@@ -36,23 +36,44 @@ impl IpMatchOperator {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(|s| {
-                s.parse::<IpNetwork>()
-                    .and_then(|net| match (net, net.network().to_canonical()) {
-                        // Go net.IPNet.Contains tests the masked network number. For
-                        // example ::ffff:192.0.2.8/95 has an IPv6 network number,
-                        // while /96 and longer retain the full mapped prefix.
-                        (IpNetwork::V6(v6), IpAddr::V4(ip)) => {
-                            IpNetwork::new(IpAddr::V4(ip), v6.prefix() - 96)
-                        }
-                        _ => Ok(net),
-                    })
-                    .map_err(|err| Error::InvalidIp {
-                        value: source.to_owned(),
-                        message: format!("{s}: {err}"),
-                    })
+                Self::parse_network(s).map_err(|err| Error::InvalidIp {
+                    value: source.to_owned(),
+                    message: format!("{s}: {err}"),
+                })
             })
             .collect::<Result<_>>()?;
         Ok(Self { networks })
+    }
+
+    fn parse_network(s: &str) -> std::result::Result<IpNetwork, ipnetwork::IpNetworkError> {
+        s.parse::<IpNetwork>()
+            .and_then(|net| match (net, net.network().to_canonical()) {
+                // Go net.IPNet.Contains tests the masked network number. For
+                // example ::ffff:192.0.2.8/95 has an IPv6 network number,
+                // while /96 and longer retain the full mapped prefix.
+                (IpNetwork::V6(v6), IpAddr::V4(ip)) => {
+                    IpNetwork::new(IpAddr::V4(ip), v6.prefix() - 96)
+                }
+                _ => Ok(net),
+            })
+    }
+
+    pub(super) fn from_dataset(records: &[String]) -> Self {
+        // Coraza splits IP records only at commas and skips malformed entries.
+        let networks = records
+            .iter()
+            .flat_map(|s| s.split(','))
+            .filter_map(|s| {
+                let s = s.trim();
+                if let Some((_, prefix)) = s.split_once('/') {
+                    if prefix.is_empty() || !prefix.bytes().all(|b| b.is_ascii_digit()) {
+                        return None;
+                    }
+                }
+                Self::parse_network(s).ok()
+            })
+            .collect();
+        Self { networks }
     }
 
     /// Check if an IP is in any of the networks.

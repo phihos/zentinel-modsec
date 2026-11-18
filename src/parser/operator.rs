@@ -26,6 +26,8 @@ pub enum OperatorName {
     Pm,
     /// Phrase match from file.
     PmFromFile,
+    /// Match phrases from a named inline dataset.
+    PmFromDataset,
     /// Phrase match (alias).
     Pmf,
 
@@ -94,6 +96,8 @@ pub enum OperatorName {
     IpMatch,
     /// IP address match from file.
     IpMatchFromFile,
+    /// Match addresses from a named inline dataset.
+    IpMatchFromDataset,
     /// IP address match (alias).
     IpMatchF,
     /// RBL lookup.
@@ -124,6 +128,7 @@ pub enum OperatorName {
 static OPERATOR_MAP: phf::Map<&'static str, OperatorName> = phf_map! {
     "rx" => OperatorName::Rx,
     "pm" => OperatorName::Pm,
+    "pmfromdataset" => OperatorName::PmFromDataset,
     "pmfromfile" => OperatorName::PmFromFile,
     "pmf" => OperatorName::Pmf,
     "streq" => OperatorName::StreQ,
@@ -152,6 +157,7 @@ static OPERATOR_MAP: phf::Map<&'static str, OperatorName> = phf_map! {
     "verifyssn" => OperatorName::VerifySsn,
     "verifycpf" => OperatorName::VerifyCpf,
     "ipmatch" => OperatorName::IpMatch,
+    "ipmatchfromdataset" => OperatorName::IpMatchFromDataset,
     "ipmatchfromfile" => OperatorName::IpMatchFromFile,
     "ipmatchf" => OperatorName::IpMatchF,
     "rbl" => OperatorName::Rbl,
@@ -195,6 +201,14 @@ impl OperatorName {
                 | Self::IpMatchF
                 | Self::ValidateSchema
         )
+    }
+
+    pub(crate) fn uses_dataset(self) -> bool {
+        matches!(self, Self::PmFromDataset | Self::IpMatchFromDataset)
+    }
+
+    pub(crate) fn has_literal_source(self) -> bool {
+        self.uses_data_file() || self.uses_dataset() || self == Self::ValidateNid
     }
 
     /// Check if this operator requires an argument.

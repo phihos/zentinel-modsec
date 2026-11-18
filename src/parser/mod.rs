@@ -187,6 +187,12 @@ impl Parser {
             "secaction" => self.parse_secaction(lexer),
             "secmarker" => self.parse_secmarker(lexer),
             "secruleengine" => self.parse_secruleengine(lexer),
+            "secdataset" => {
+                let (name, records) = lexer
+                    .dataset()
+                    .map_err(|message| Error::parse(message, self.location.to_string()))?;
+                Ok(Directive::SecDataset(name, records))
+            }
             "secdefaultaction" => self.parse_secdefaultaction(lexer),
             "secruleremovebyid" => self.parse_secruleremovebyid(lexer),
             "secruleremovebytag" | "secruleremovebymsg" => {

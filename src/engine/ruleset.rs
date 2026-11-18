@@ -162,8 +162,7 @@ impl RuleDispatch {
         target_tags: &HashSet<&str>,
     ) -> Self {
         let dynamic = rule.operator_spec.argument.contains("%{")
-            && !rule.operator_spec.name.uses_data_file()
-            && rule.operator_spec.name != OperatorName::ValidateNid;
+            && !rule.operator_spec.name.has_literal_source();
         let minimum = if !dynamic
             && !rule.operator_negated
             && rule.transformations.preserves_alphanumeric_width_bounds()
@@ -224,7 +223,9 @@ impl RuleDispatch {
                 Action::Data(DataAction::Capture) => {
                     dispatch.capture = !matches!(
                         rule.operator_spec.name,
-                        OperatorName::GeoLookup | OperatorName::StrMatch
+                        OperatorName::IpMatchFromDataset
+                            | OperatorName::GeoLookup
+                            | OperatorName::StrMatch
                     );
                 }
                 Action::Data(DataAction::SetVar(op)) => {
@@ -433,8 +434,14 @@ impl CompiledRuleset {
 
         let mut target_updates: Vec<(Option<String>, UpdateTargetById)> = Vec::new();
 
+        let mut datasets = HashMap::new();
         for directive in directives {
             match directive {
+                Directive::SecDataset(name, records) => {
+                    if datasets.insert(name.clone(), records).is_some() {
+                        tracing::warn!(dataset = name, "overwriting named dataset");
+                    }
+                }
                 Directive::SecRuleEngine(mode) => {
                     ruleset.engine_mode = match mode {
                         ParserRuleEngineMode::On => RuleEngineMode::On,
@@ -462,6 +469,7 @@ impl CompiledRuleset {
                         &rule.operator,
                         &id,
                         rule.location.file.as_deref(),
+                        &datasets,
                     )?;
 
                     let compiled = CompiledRule {
@@ -994,6 +1002,7 @@ fn compile_operator_reporting(
     spec: &OperatorSpec,
     rule_id: &Option<String>,
     rule_file: Option<&std::path::Path>,
+    datasets: &HashMap<String, Vec<String>>,
 ) -> Result<(Arc<dyn Operator>, bool)> {
     if spec.name == OperatorName::ValidateSchema {
         let root = rule_file
@@ -1014,7 +1023,12 @@ fn compile_operator_reporting(
             spec.negated,
         ));
     }
-    match compile_operator(spec) {
+    let dataset = if spec.name.uses_dataset() {
+        datasets.get(&spec.argument).map(Vec::as_slice)
+    } else {
+        None
+    };
+    match crate::operators::compile_with_dataset(spec, dataset) {
         Ok(operator) => Ok((operator, spec.negated)),
         Err(e) if spec.name == OperatorName::Rx => {
             tracing::error!(

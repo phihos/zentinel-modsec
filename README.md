@@ -303,6 +303,12 @@ chain starter selects its entire chain. Untagged rules continue to execute.
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
 `@unconditionalMatch`, `@noMatch`. The file-backed aliases `@pmf` and
 `@ipMatchF` read the same files as `@pmFromFile` and `@ipMatchFromFile`.
+`SecDataset` defines a case-sensitive name and a backtick-delimited list of
+records, one per line. `@pmFromDataset` treats each record as one phrase.
+`@ipMatchFromDataset` accepts comma-separated addresses or CIDRs per record
+and skips invalid entries. Rules bind to the definition in effect at their
+position, including across configuration reloads.
+
 With `capture`, phrase matches populate `TX:0` through `TX:9` in input order
 using the original bytes. If phrases overlap, each capture takes the longest phrase at
 the next matching start, including starts inside an earlier match.

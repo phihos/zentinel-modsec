@@ -93,7 +93,7 @@ pub(super) fn report(
                     &effective_id,
                 );
             }
-            if !operator.name.uses_data_file() && operator.name != OperatorName::ValidateNid {
+            if !operator.name.has_literal_source() {
                 report_macros(&mut found, &operator.argument, &effective_id);
             }
         }

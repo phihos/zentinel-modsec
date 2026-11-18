@@ -492,6 +492,15 @@ impl PmOperator {
         })
     }
 
+    pub(super) fn from_dataset(records: &[String]) -> Result<Self> {
+        Self::compile(
+            records
+                .iter()
+                .map(|record| record.as_bytes().to_vec())
+                .collect(),
+        )
+    }
+
     /// Create a phrase match operator from a file.
     pub fn from_file(path: &str) -> Result<Self> {
         let path = std::path::Path::new(path);
