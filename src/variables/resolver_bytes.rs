@@ -240,11 +240,90 @@ impl<'a> VariableResolver<'a> {
                     }
                 }
             }
-            _ => {
-                for (key, value) in self.resolve_variable(name) {
-                    scalar(&key, value.as_bytes());
+            RequestBodyLength => scalar(
+                "REQUEST_BODY_LENGTH",
+                request.request_body_length_variable().as_bytes(),
+            ),
+            InboundDataError => scalar(
+                "INBOUND_DATA_ERROR",
+                if request.inbound_data_error {
+                    b"1"
+                } else {
+                    b""
+                },
+            ),
+            OutboundDataError => scalar(
+                "OUTBOUND_DATA_ERROR",
+                if self.response.outbound_data_error {
+                    b"1"
+                } else {
+                    b""
+                },
+            ),
+            FilesCombinedSize => scalar(
+                "FILES_COMBINED_SIZE",
+                request.files_combined_size.to_string().as_bytes(),
+            ),
+            MultipartStrictCheck | MultipartStrictError => scalar(
+                "MULTIPART_STRICT_ERROR",
+                if request.multipart_strict_error {
+                    b"1"
+                } else {
+                    b""
+                },
+            ),
+            MultipartDuplicatePartHeader => scalar(
+                "MULTIPART_DUPLICATE_PART_HEADER",
+                if request.multipart_duplicate_part_header {
+                    b"1"
+                } else {
+                    b"0"
+                },
+            ),
+            MultipartInvalidQuoting => scalar(
+                "MULTIPART_INVALID_QUOTING",
+                if request.multipart_invalid_quoting {
+                    b"1"
+                } else {
+                    b"0"
+                },
+            ),
+            ReqBodyProcessor => scalar("REQBODY_PROCESSOR", request.body_processor.as_bytes()),
+            // The error flag is always present. The message exists only after a processor error.
+            ReqBodyError | ReqBodyProcessorError => scalar(
+                "REQBODY_ERROR",
+                if request.body_error.is_some() {
+                    b"1"
+                } else {
+                    b"0"
+                },
+            ),
+            ReqBodyErrorMsg | ReqBodyProcessorErrorMsg => {
+                if let Some(message) = &request.body_error {
+                    scalar("REQBODY_ERROR_MSG", message.as_bytes());
                 }
             }
+            ResponseProtocol => scalar("RESPONSE_PROTOCOL", self.response.protocol.as_bytes()),
+            ResponseStatus => scalar(
+                "RESPONSE_STATUS",
+                self.response.status.to_string().as_bytes(),
+            ),
+            RemoteAddr => scalar("REMOTE_ADDR", request.client_ip.as_bytes()),
+            RemotePort => scalar("REMOTE_PORT", request.client_port.to_string().as_bytes()),
+            ServerName => scalar("SERVER_NAME", request.server_name.as_bytes()),
+            ServerAddr => scalar("SERVER_ADDR", request.server_addr.as_bytes()),
+            ServerPort => scalar("SERVER_PORT", request.server_port.to_string().as_bytes()),
+            MatchedVar => {
+                if let Some(value) = self.matched_var {
+                    scalar("MATCHED_VAR", value.as_bytes());
+                }
+            }
+            MatchedVarName => {
+                if let Some((key, _)) = self.matched_vars.last() {
+                    scalar("MATCHED_VAR_NAME", key.as_bytes());
+                }
+            }
+            _ => (),
         }
     }
 }
