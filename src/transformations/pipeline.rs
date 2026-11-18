@@ -87,7 +87,7 @@ impl TransformationPipeline {
         }
 
         Ok(Self {
-            byte_triggers: triggers.filter(|_| transformations.len() > 1),
+            byte_triggers: triggers.filter(|_| !transformations.is_empty()),
             transformations,
         })
     }
@@ -130,8 +130,11 @@ impl TransformationPipeline {
 
     /// Apply each transformation without converting binary values into text.
     pub fn apply_bytes<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-        if self.input_is_unchanged(input) {
+        if self.transformations.is_empty() || self.input_is_unchanged(input) {
             return Ok(Cow::Borrowed(input));
+        }
+        if let [only] = self.transformations.as_slice() {
+            return only.transform_bytes(input);
         }
         let mut current = Cow::Borrowed(input);
         for transformation in &self.transformations {
@@ -297,6 +300,12 @@ mod tests {
             vec![b'a'; 65],
         ]);
         for names in [
+            "urlDecodeUni",
+            "cmdLine",
+            "lowercase",
+            "normalizePath",
+            "replaceComments",
+            "compressWhitespace",
             "utf8ToUnicode urlDecodeUni htmlEntityDecode jsDecode cssDecode removeNulls",
             "urlDecode removeWhitespace",
             "urlDecodeUni lowercase",

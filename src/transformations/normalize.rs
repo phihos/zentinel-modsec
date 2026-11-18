@@ -541,6 +541,9 @@ pub struct CmdLine;
 
 impl Transformation for CmdLine {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
+        if input.is_ascii() {
+            return Ok(super::bytes::cmd_line(input));
+        }
         super::bytes::apply(self, input)
     }
 
@@ -709,6 +712,32 @@ impl Transformation for Sha256 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cmdline_byte_fast_path_matches_text_on_ascii_and_unicode() {
+        for a in 0..128 {
+            for b in 0..128 {
+                let bytes = [b'a', a, b, b'/', b'z'];
+                let text = std::str::from_utf8(&bytes).unwrap();
+                let expected = CmdLine.transform(text);
+                let actual = CmdLine.transform_bytes(&bytes).unwrap();
+                assert_eq!(actual.as_ref(), expected.as_bytes());
+                assert_eq!(matches!(actual, Cow::Borrowed(_)), expected == text);
+            }
+        }
+        let text = "ÀİΛ,\u{2003}/ Catalog";
+        assert_eq!(
+            CmdLine.transform_bytes(text.as_bytes()).unwrap().as_ref(),
+            CmdLine.transform(text).as_bytes()
+        );
+        assert_eq!(
+            CmdLine
+                .transform_bytes(b"\xff one ; /CAT")
+                .unwrap()
+                .as_ref(),
+            b"\xff one/cat"
+        );
+    }
 
     #[test]
     fn test_lowercase() {
