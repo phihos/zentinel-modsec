@@ -248,3 +248,29 @@ fn capture_publication_moves_the_subgroup_buffer_into_tx() {
     // One additional result buffer, plus fixed regex/collection metadata.
     assert!(group <= whole + data.len() + 2048, "{whole} -> {group}");
 }
+
+#[test]
+fn a_macro_first_value_lookup_does_not_copy_the_duplicate_bucket() {
+    let engine = ModSecurity::from_string(
+        r#"SecRule REQUEST_METHOD "@streq %{ArGs.label}" "id:1,phase:1,pass""#,
+    )
+    .unwrap();
+    let measure = |duplicates| {
+        let mut tx = engine.new_transaction();
+        let uri = format!("/?label=GET{}", "&label=more".repeat(duplicates));
+        tx.process_uri(&uri, "GET", "HTTP/1.1").unwrap();
+        REQUESTED_BYTES.set(0);
+        TRACKING.set(true);
+        tx.process_request_headers().unwrap();
+        TRACKING.set(false);
+        assert_eq!(tx.matched_rules(), ["1"]);
+        REQUESTED_BYTES.get()
+    };
+    measure(0);
+    let one = measure(0);
+    let many = measure(256);
+    assert!(
+        many <= one + 128,
+        "macro allocated by duplicate count: {one} -> {many}"
+    );
+}
