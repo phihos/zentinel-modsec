@@ -123,6 +123,10 @@ static ASCII_ESCAPES: LazyLock<[AsciiEscape; 256]> = LazyLock::new(|| {
     })
 });
 
+fn needs_ascii_escape(byte: u8) -> bool {
+    !matches!(byte, b' '..=b'~') || matches!(byte, b'\'' | b'"' | b'\\')
+}
+
 impl BinaryValue {
     fn escaped(bytes: &[u8]) -> String {
         const BLOCK: usize = 256;
@@ -130,9 +134,13 @@ impl BinaryValue {
         let mut output = Vec::with_capacity(bytes.len());
         let mut buffer = [0; BLOCK * 4];
         for block in bytes.chunks(BLOCK) {
-            if block
-                .iter()
-                .all(|byte| matches!(byte, b' '..=b'~') && !matches!(byte, b'\'' | b'"' | b'\\'))
+            // Reject a non-ASCII block cheaply. For printable text a bitwise
+            // reduction lets the compiler check multiple bytes at a time.
+            if !needs_ascii_escape(block[0])
+                && block.is_ascii()
+                && !block
+                    .iter()
+                    .fold(false, |any, &byte| any | needs_ascii_escape(byte))
             {
                 output.extend_from_slice(block);
                 continue;
@@ -211,7 +219,20 @@ impl ByteValue {
                         .unwrap_or_else(|| BinaryValue::escaped(&value.bytes));
                     (display, value.bytes)
                 }
-                Err(value) => (value.display_text().to_owned(), value.as_bytes().to_vec()),
+                Err(value) => {
+                    // A single remaining owner often holds MATCHED_VAR until
+                    // the transaction ends. Produce the audit string directly
+                    // unless other readers already use the cached presentation.
+                    let display = match value.as_ref() {
+                        SharedValue::Binary(binary)
+                            if Arc::strong_count(&value) == 2 && binary.display.get().is_none() =>
+                        {
+                            BinaryValue::escaped(&binary.bytes)
+                        }
+                        _ => value.display_text().to_owned(),
+                    };
+                    (display, value.as_bytes().to_vec())
+                }
             },
         }
     }
@@ -390,17 +411,53 @@ mod tests {
     }
 
     #[test]
+    fn binary_audit_populates_the_shared_display_only_with_multiple_remaining_owners() {
+        let bytes = b"x\xff";
+        let value = ByteValue::from(bytes.as_slice());
+        let Storage::Shared(shared) = &value.storage else {
+            panic!("binary storage expected");
+        };
+        let SharedValue::Binary(binary) = shared.as_ref() else {
+            panic!("binary storage expected");
+        };
+        let expected = (r"x\xff".to_owned(), bytes.to_vec());
+        assert_eq!(value.clone().into_display_and_bytes(), expected);
+        assert!(binary.display.get().is_none());
+
+        let reader = value.clone();
+        assert_eq!(value.clone().into_display_and_bytes(), expected);
+        assert_eq!(binary.display.get(), Some(&expected.0));
+        assert_eq!(reader.into_display_and_bytes(), expected);
+        assert_eq!(value.display_text(), expected.0);
+    }
+
+    #[test]
     fn binary_display_matches_standard_escaping_across_blocks() {
         let mut bytes: Vec<u8> = (0..=255).collect();
         bytes.extend([b'a'; 512]);
         bytes.extend([b'\\', b'"', b'\'', b'\t', b'\r', b'\n', 0x7f, 0xff]);
         bytes.extend([0xff; 257]);
-        for len in [0, 1, 255, 256, 257, 511, 512, 769, bytes.len()] {
+        for len in [0, 1, 15, 16, 17, 255, 256, 257, 511, 512, 769, bytes.len()] {
             let input = &bytes[..len];
             assert_eq!(
                 BinaryValue::escaped(input),
                 input.escape_ascii().to_string()
             );
+        }
+    }
+
+    #[test]
+    fn printable_block_keeps_standard_escaping_for_each_byte() {
+        let mut bytes = [b'a'; 256];
+        for index in [0, 1, 15, 16, 127, 255] {
+            for byte in 0..=255 {
+                bytes[index] = byte;
+                assert_eq!(
+                    BinaryValue::escaped(&bytes),
+                    bytes.escape_ascii().to_string()
+                );
+            }
+            bytes[index] = b'a';
         }
     }
 

@@ -25,8 +25,8 @@ impl TxCollection {
     pub(crate) fn visit(&self, selector: &MemberSelector, mut emit: impl FnMut(&[u8], &[u8])) {
         match selector {
             MemberSelector::Key(key) => {
-                if let Some(value) = self.data.get(key.as_ref()) {
-                    emit(key, value.as_bytes());
+                if let Some(value) = self.canonical_value(key) {
+                    emit(key, value);
                 }
             }
             MemberSelector::All => {
@@ -49,6 +49,24 @@ impl TxCollection {
         self.data.get(folded_key(key).as_ref())
     }
 
+    /// Look up a literal key already canonicalized by the rule compiler.
+    pub(crate) fn canonical_value(&self, key: &[u8]) -> Option<&[u8]> {
+        self.data.get(key).map(ByteValue::as_bytes)
+    }
+
+    /// A position from an earlier lookup is usable only while it still names
+    /// this key. Deletes can shift entries and callers can replace the collection.
+    pub(crate) fn indexed_value(&self, key: &[u8], index: &mut usize) -> Option<&[u8]> {
+        if let Some((stored, value)) = self.data.get_index(*index) {
+            if stored.as_bytes() == key {
+                return Some(value.as_bytes());
+            }
+        }
+        let (found, _, value) = self.data.get_full(key)?;
+        *index = found;
+        Some(value.as_bytes())
+    }
+
     pub(crate) fn first_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {
         self.lookup(key).map(ByteValue::as_bytes)
     }
@@ -61,24 +79,36 @@ impl TxCollection {
     /// Store original value bytes under a case-insensitive original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
         let key = key.into();
-        self.observe_capture_key(key.as_bytes());
+
         let key = match folded_key(key.as_bytes()) {
             Cow::Borrowed(_) => key,
             Cow::Owned(folded) => folded.into(),
         };
-        self.data.insert(key, value.into());
+        self.set_canonical(key, value.into());
+    }
+
+    pub(crate) fn set_canonical(&mut self, key: ByteValue, value: ByteValue) {
+        self.observe_capture_key(key.as_bytes());
+        self.data.insert(key, value);
     }
 
     /// Delete a case-insensitive original byte key.
     pub fn delete_bytes(&mut self, key: &[u8]) {
-        self.data.shift_remove(folded_key(key).as_ref());
+        self.delete_canonical(&folded_key(key));
+    }
+
+    pub(crate) fn delete_canonical(&mut self, key: &[u8]) {
+        self.data.shift_remove(key);
     }
 
     /// Increment a numeric byte value with signed 64-bit wrapping, matching
     /// Coraza on 64-bit targets. A nonnumeric value starts at zero.
     pub fn increment_bytes(&mut self, key: &[u8], amount: i64) {
-        self.observe_capture_key(key);
-        let key = ByteValue::from(folded_key(key));
+        self.increment_canonical(ByteValue::from(folded_key(key)), amount);
+    }
+
+    pub(crate) fn increment_canonical(&mut self, key: ByteValue, amount: i64) {
+        self.observe_capture_key(key.as_bytes());
         self.data
             .entry(key)
             .and_modify(|value| {

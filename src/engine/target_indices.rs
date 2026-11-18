@@ -53,6 +53,12 @@ impl TargetIndices {
         masks
     }
 
+    /// At least one target may resolve, or the rule has no target (SecAction).
+    /// Only the first PREFIX targets have precompiled masks.
+    pub fn may_match(&self, available: RequestCollections, count: usize) -> bool {
+        count == 0 || count > PREFIX || self.0[usize::from(available.0)] != 0
+    }
+
     pub fn active<'a>(
         &self,
         available: RequestCollections,
@@ -77,6 +83,31 @@ impl TargetIndices {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn can_skip_only_when_every_target_is_known_absent() {
+        for (names, state, may_match) in [
+            (vec![], 0, true),
+            (vec!["ARGS", "XML"], 0, false),
+            (vec!["ARGS", "XML"], GET, true),
+            (vec!["ARGS", "XML"], POST, true),
+            (vec!["&ARGS"], 0, true),
+            (vec!["TX:late"], 0, true),
+        ] {
+            let targets: Vec<_> = names
+                .iter()
+                .map(|name| crate::parser::parse_single_variable(name).unwrap())
+                .collect();
+            assert_eq!(
+                TargetIndices::compile(&targets)
+                    .may_match(RequestCollections(state), targets.len()),
+                may_match
+            );
+        }
+        let mut targets = vec![crate::parser::parse_single_variable("ARGS").unwrap(); PREFIX];
+        targets.push(crate::parser::parse_single_variable("REQUEST_URI").unwrap());
+        assert!(TargetIndices::compile(&targets).may_match(RequestCollections(0), targets.len()));
+    }
 
     #[test]
     fn long_lists_keep_order_counts_and_mutable_targets_for_all_collection_states() {

@@ -156,10 +156,14 @@ impl RequestData {
         self.uri = display;
         self.binary_uri = binary;
 
-        let target = uri.split(|&b| b == b'#').next().unwrap_or_default();
-        let mut parts = target.splitn(2, |&b| b == b'?');
-        let raw_path = parts.next().unwrap_or_default();
-        let query = parts.next().unwrap_or_default();
+        let end = memchr::memchr2(b'?', b'#', uri).unwrap_or(uri.len());
+        let raw_path = &uri[..end];
+        let query = if uri.get(end) == Some(&b'?') {
+            let tail = &uri[end + 1..];
+            &tail[..memchr::memchr(b'#', tail).unwrap_or(tail.len())]
+        } else {
+            &[]
+        };
         (self.query_string, self.binary_query) = component_strings(query);
         self.args_get.clear();
         parse_form_bytes(query, &mut self.args_get);
@@ -210,15 +214,11 @@ impl RequestData {
     }
     /// Set method bytes; textual presentation is never used for matching.
     pub fn set_method_bytes(&mut self, value: &[u8]) {
-        let value = ByteValue::from(value);
-        self.method = value.to_string();
-        self.binary_method = value.as_utf8().is_err().then_some(value);
+        (self.method, self.binary_method) = component_strings(value);
     }
     /// Set protocol bytes; textual presentation is never used for matching.
     pub fn set_protocol_bytes(&mut self, value: &[u8]) {
-        let value = ByteValue::from(value);
-        self.protocol = value.to_string();
-        self.binary_protocol = value.as_utf8().is_err().then_some(value);
+        (self.protocol, self.binary_protocol) = component_strings(value);
     }
 
     /// Set the HTTP method.
@@ -427,35 +427,42 @@ fn component_strings(bytes: &[u8]) -> (String, Option<ByteValue>) {
 
 /// Decode the path after query and fragment splitting. Plus is literal here.
 fn decoded_request_path_bytes(input: &[u8]) -> Vec<u8> {
-    let without_fragment = input.split(|&b| b == b'#').next().unwrap_or(input);
-    let path = if let Some(scheme_end) = without_fragment.windows(3).position(|part| part == b"://")
-    {
-        let scheme = &without_fragment[..scheme_end];
-        let rest = &without_fragment[scheme_end + 3..];
-        if !scheme.is_empty()
-            && scheme.iter().enumerate().all(|(i, b)| {
-                b.is_ascii_alphabetic() || i > 0 && (b.is_ascii_digit() || b"+-.".contains(b))
-            })
-        {
-            rest.iter()
-                .position(|&b| b == b'/')
-                .map_or(&b""[..], |offset| &rest[offset..])
-        } else {
-            without_fragment
-        }
-    } else {
-        without_fragment
-    };
-    for (i, &byte) in path.iter().enumerate() {
-        if byte == b'%'
-            && !path
-                .get(i + 1..i + 3)
-                .is_some_and(|pair| pair.iter().all(u8::is_ascii_hexdigit))
-        {
-            return input.to_vec();
+    let mut path = input;
+    if input.first().is_some_and(u8::is_ascii_alphabetic) {
+        if let Some(colon) = memchr::memchr(b':', input) {
+            if let Some(authority) = input[colon + 1..].strip_prefix(b"//") {
+                if input[..colon]
+                    .iter()
+                    .all(|b| b.is_ascii_alphanumeric() || b"+-.".contains(b))
+                {
+                    path = &authority[memchr::memchr(b'/', authority).unwrap_or(authority.len())..];
+                }
+            }
         }
     }
-    percent_encoding::percent_decode(path).collect()
+
+    let mut escapes = memchr::memchr_iter(b'%', path);
+    let Some(first) = escapes.next() else {
+        return path.to_vec();
+    };
+    let mut decoded = Vec::with_capacity(path.len());
+    let mut start = 0;
+    for pos in std::iter::once(first).chain(escapes) {
+        let Some(hex) = path.get(pos + 1..pos + 3).and_then(|pair| {
+            let high = char::from(pair[0]).to_digit(16)?;
+            let low = char::from(pair[1]).to_digit(16)?;
+            Some(((high << 4) | low) as u8)
+        }) else {
+            // A malformed escape preserves the complete original target path,
+            // including the authority of an absolute URI.
+            return input.to_vec();
+        };
+        decoded.extend_from_slice(&path[start..pos]);
+        decoded.push(hex);
+        start = pos + 3;
+    }
+    decoded.extend_from_slice(&path[start..]);
+    decoded
 }
 
 // Go strings.TrimSpace recognizes Unicode whitespace even when later header

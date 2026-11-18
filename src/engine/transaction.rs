@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use super::body::{BodyState, BodyWriteResult};
-use super::chain::ChainState;
 use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
 use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
@@ -22,24 +21,13 @@ use crate::variables::{
     ByteCollection, ByteValue, RequestData, ResponseData, TxCollection, VariableResolver,
 };
 
-/// Whether a lowercased Content-Type denotes a JSON body.
-///
-/// Covers the `+json` structured suffix (RFC 6839) as well as `application/json`,
-/// so `application/vnd.api+json`, `application/problem+json` and friends are
-/// inspected rather than silently falling through to the urlencoded parser.
-fn is_json_content_type(ct_lower: &str) -> bool {
-    let media_type = ct_lower.split(';').next().unwrap_or("").trim();
-    media_type == "application/json" || media_type == "text/json" || media_type.ends_with("+json")
-}
-
-/// Whether a lowercased Content-Type denotes an XML body.
-///
-/// Covers the `+xml` structured suffix (RFC 6839), so SOAP
-/// (`application/soap+xml`), Atom and friends are inspected rather than
-/// falling through to a parser that finds nothing in them.
-fn is_xml_content_type(ct_lower: &str) -> bool {
-    let media_type = ct_lower.split(';').next().unwrap_or("").trim();
-    media_type == "application/xml" || media_type == "text/xml" || media_type.ends_with("+xml")
+/// Recognize the two media types for this processor and its structured suffix.
+fn structured_media_type(media: &str, application: &str, text: &str, suffix: &str) -> bool {
+    media.eq_ignore_ascii_case(application)
+        || media.eq_ignore_ascii_case(text)
+        || media
+            .rsplit_once('+')
+            .is_some_and(|(_, subtype)| subtype.eq_ignore_ascii_case(suffix))
 }
 
 /// A ModSecurity transaction for processing a single request.
@@ -52,6 +40,7 @@ pub struct Transaction {
     response: ResponseData,
     /// TX collection (mutable variables).
     tx: TxCollection,
+    numeric_tx_indices: [usize; super::ruleset::NUMERIC_TX_SLOTS],
     /// Current phase.
     phase: Phase,
     /// Intervention (if any).
@@ -245,6 +234,7 @@ impl Transaction {
             request: RequestData::new(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
+            numeric_tx_indices: [usize::MAX; super::ruleset::NUMERIC_TX_SLOTS],
             phase: Phase::RequestHeaders,
             intervention: None,
             default_status,
@@ -427,23 +417,6 @@ impl Transaction {
             return Ok(());
         }
 
-        let content_type = self
-            .request
-            .headers
-            .get_bytes(b"content-type")
-            .and_then(|v| {
-                v.first().and_then(|value| {
-                    // Only the media type controls processor selection. Opaque
-                    // boundary parameter bytes must not require UTF-8.
-                    let media = value.split(|&byte| byte == b';').next().unwrap_or_default();
-                    std::str::from_utf8(media).ok().map(str::to_owned)
-                })
-            });
-        let ct_lower = content_type
-            .as_deref()
-            .map(|ct| ct.trim_start().to_ascii_lowercase())
-            .unwrap_or_default();
-
         // ctl:requestBodyAccess=Off, typically set in phase 1, suppresses body
         // parsing entirely. Phase 2 rules still run; they just find no ARGS_POST
         // or FILES, which is what disabling body access means.
@@ -478,6 +451,18 @@ impl Transaction {
             return Ok(());
         }
 
+        // Parameters may contain opaque bytes. Only the trimmed media type
+        // participates in JSON and XML selection.
+        let media = self
+            .request
+            .headers
+            .first_value_bytes(b"content-type")
+            .and_then(|header| {
+                let end = memchr::memchr(b';', header).unwrap_or(header.len());
+                std::str::from_utf8(&header[..end]).ok()
+            })
+            .unwrap_or_default()
+            .trim();
         if self.request.body_processor == "MULTIPART" {
             // Multipart body processor: populates ARGS_POST, FILES and
             // MULTIPART_PART_HEADERS. Never fall back to the urlencoded
@@ -488,9 +473,9 @@ impl Transaction {
                      body arguments were not extracted"
                 );
             }
-        } else if is_xml_content_type(&ct_lower) {
+        } else if structured_media_type(media, "application/xml", "text/xml", "xml") {
             self.process_xml_body();
-        } else if is_json_content_type(&ct_lower) {
+        } else if structured_media_type(media, "application/json", "text/json", "json") {
             // JSON bodies previously fell through to the urlencoded parser,
             // which extracts nothing usable from them -- so ARGS was empty and
             // rules like CRS 942100 (`SecRule ARGS "@detectSQLi"`) had nothing
@@ -516,9 +501,9 @@ impl Transaction {
         let content_type = self
             .request
             .headers
-            .get_bytes(b"content-type")
-            .and_then(|values| values.first().map(|value| value.to_vec()))
-            .unwrap_or_default();
+            .first_value_bytes(b"content-type")
+            .unwrap_or_default()
+            .to_vec();
         self.request.parse_multipart_body_bytes(&content_type)
     }
 
@@ -979,7 +964,7 @@ impl Transaction {
 
         let dispatch = ruleset.dispatch_for_phase(phase);
         let available = RequestCollections::new(&self.request);
-        let mut chain_state = ChainState::new();
+        let mut chain_start = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data = Vec::new();
@@ -1009,7 +994,7 @@ impl Transaction {
             // to a logical rule. A child tag cannot select its starter.
             // Likewise a removal fired by the starter cannot cancel its own
             // chain while it is still executing.
-            if !chain_state.in_chain {
+            if chain_start.is_none() {
                 let removed = self.controls.is_rule_removed(rule.id.as_deref())
                     || (dispatch[idx].removable_by_tag
                         && self.controls.is_tag_removed(&rule.actions));
@@ -1025,20 +1010,10 @@ impl Transaction {
                 }
             }
 
-            // Handle chain continuation
-            if chain_state.in_chain && !rule.is_chain && rule.chain_next.is_none() {
-                // End of chain, check if previous rules in chain matched
-                if !chain_state.chain_matched {
-                    chain_state.reset();
-                    idx += 1;
-                    continue;
-                }
-            }
-
             // Evaluate rule
             // Runtime tag exclusions apply to every link of the logical rule,
             // including children that carry no tag of their own.
-            let starter_index = chain_state.chain_start.unwrap_or(idx);
+            let starter_index = chain_start.unwrap_or(idx);
             let starter = &rules[starter_index];
             let starter_dispatch = &dispatch[starter_index];
             let tag_actions = if starter_dispatch.target_removable_by_tag {
@@ -1047,15 +1022,23 @@ impl Transaction {
                 &[]
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
-            let standalone = !rule.is_chain && !chain_state.in_chain;
-            if let Some(outcome) = self.evaluate_rule(
-                rule,
-                &dispatch[idx],
-                link_rule_id,
-                tag_actions,
-                standalone,
-                available,
-            )? {
+            let standalone = !rule.is_chain && chain_start.is_none();
+            let outcome = if dispatch[idx]
+                .targets
+                .may_match(available, rule.variables.len())
+            {
+                self.evaluate_rule(
+                    rule,
+                    &dispatch[idx],
+                    link_rule_id,
+                    tag_actions,
+                    standalone,
+                    available,
+                )?
+            } else {
+                None
+            };
+            if let Some(outcome) = outcome {
                 let RuleOutcome {
                     first_data,
                     first_message,
@@ -1083,10 +1066,7 @@ impl Transaction {
                     // the whole chain has matched. The starter's id is held
                     // back too, so a chain that later fails does not count as
                     // a match.
-                    if !chain_state.in_chain {
-                        chain_state.start_chain(idx);
-                    }
-                    chain_state.continue_chain(true, &[]);
+                    chain_start.get_or_insert(idx);
                     idx += 1;
                     continue;
                 }
@@ -1094,8 +1074,7 @@ impl Transaction {
                 // Either a standalone rule, or the final link of a chain that
                 // has now matched in full. A completed chain keeps the
                 // starter's disruptive action, flow and metadata.
-                if chain_state.in_chain {
-                    chain_state.reset();
+                if chain_start.take().is_some() {
                     self.matched_data
                         .extend(&ruleset, pending_chain_data.drain(..));
                 }
@@ -1118,15 +1097,10 @@ impl Transaction {
                 }
 
                 match starter_dispatch.flow {
-                    CompiledFlow::Chain => {
-                        if !chain_state.in_chain {
-                            chain_state.start_chain(idx);
-                        }
-                        chain_state.continue_chain(true, &[]);
-                    }
                     CompiledFlow::Skip(n) => skip_count = n,
                     CompiledFlow::SkipAfter(next) => skip_after = Some(next),
-                    CompiledFlow::Next => {}
+                    // Chain links have already been visited by this point.
+                    CompiledFlow::Chain | CompiledFlow::Next => {}
                 }
                 match starter_dispatch.disruptive(starter) {
                     None | Some(DisruptiveAction::Pass) => {}
@@ -1185,8 +1159,7 @@ impl Transaction {
                 // whole cannot match: drop the starter's held actions and skip
                 // past the remaining links so they are never evaluated on
                 // their own.
-                if chain_state.in_chain || rule.is_chain {
-                    chain_state.reset();
+                if chain_start.take().is_some() || rule.is_chain {
                     pending_chain_data.clear();
                     while idx < rules.len() && rules[idx].is_chain {
                         idx += 1;
@@ -1194,11 +1167,6 @@ impl Transaction {
                     idx += 1;
                     continue;
                 }
-            }
-
-            // End chain if this is the last rule in chain
-            if chain_state.in_chain && !rule.is_chain {
-                chain_state.end_chain();
             }
 
             idx += 1;
@@ -1396,13 +1364,14 @@ impl Transaction {
             }
             // SecLang runs all setvars before the controls for each
             // matching value. The parsed operations belong to the ruleset.
-            let effects = &rule.actions[dispatch.effects_from..];
-            for action in effects {
-                if let Action::Data(DataAction::SetVar(op)) = action {
-                    tx.apply_setvar(op, logical_id);
-                }
+            for prepared in &dispatch.setvars {
+                let Action::Data(DataAction::SetVar(op)) = &rule.actions[prepared.action_index]
+                else {
+                    unreachable!("compiled setvar action index");
+                };
+                tx.apply_setvar(op, prepared, logical_id);
             }
-            for action in effects {
+            for action in &rule.actions[dispatch.controls_from..] {
                 let Action::Control(ctl) = action else {
                     continue;
                 };
@@ -1429,6 +1398,45 @@ impl Transaction {
             Ok(())
         };
 
+        if dispatch.single_tx_numeric
+            && tag_actions.is_empty()
+            && !self.controls.has_target_removals(logical_id)
+        {
+            let selection = &dispatch.selections[0];
+            let crate::variables::MemberSelector::Key(key) = &selection.member else {
+                unreachable!("compiled literal TX key")
+            };
+            let live = match dispatch.numeric_tx_slot {
+                Some(slot) => self
+                    .tx
+                    .indexed_value(key, &mut self.numeric_tx_indices[usize::from(slot)]),
+                None => self.tx.canonical_value(key),
+            };
+            let value = match (rule.variables[0].count_mode, live) {
+                (true, Some(_)) => b"1".as_slice(),
+                (true, None) => b"0".as_slice(),
+                (false, Some(value)) => value,
+                (false, None) => return Ok(outcome),
+            };
+            let matched = dispatch
+                .numeric
+                .expect("compiled numeric TX predicate")
+                .matches(value);
+            if matched != rule.operator_negated {
+                let value = ByteValue::from(value);
+                let result = ByteOperatorResult {
+                    matched,
+                    ..Default::default()
+                };
+                evaluate(
+                    self,
+                    selection.match_name.as_deref(),
+                    value.as_bytes(),
+                    Some((&value, result)),
+                )?;
+            }
+            return Ok(outcome);
+        }
         if rule.variables.is_empty() {
             // SecAction has no target and matches exactly once.
             evaluate(self, None, b"", None)?;
@@ -1572,22 +1580,32 @@ impl Transaction {
     }
 
     /// Apply a setvar operation.
-    fn apply_setvar(&mut self, op: &SetVarSpec, rule_id: Option<&str>) {
-        let name = if op.key.contains("%{") {
-            Cow::Owned(self.expand_operator_macros_bytes(&op.key).into_owned())
-        } else {
-            Cow::Borrowed(op.key.as_bytes())
-        };
+    fn apply_setvar(
+        &mut self,
+        op: &SetVarSpec,
+        prepared: &super::ruleset::CompiledSetVar,
+        rule_id: Option<&str>,
+    ) {
         let record = rule_id.filter(|_| self.record_setvar_effects);
-        let change = match &op.value {
-            SetVarValue::String(value) => {
-                self.tx.set_bytes(name.as_ref(), value.as_str());
-                record.map(|_| SetVarChange::Set(value.clone()))
+        let (key, audit_key) = match &prepared.key {
+            Some(key) => (key.clone(), record.map(|_| op.key.clone())),
+            None => {
+                let expanded = self.expand_operator_macros_bytes(&op.key);
+                let key = ByteValue::from(crate::variables::folded_key(&expanded));
+                (
+                    key,
+                    record.map(|_| ByteValue::from(expanded).display_text().to_owned()),
+                )
             }
-            SetVarValue::Int(n) => {
-                let value = ByteValue::decimal(*n);
+        };
+        let change = match &op.value {
+            SetVarValue::String(_) | SetVarValue::Int(_) => {
+                let value = prepared
+                    .value
+                    .as_ref()
+                    .expect("compiled literal assignment");
                 let change = record.map(|_| SetVarChange::Set(value.display_text().to_owned()));
-                self.tx.set_bytes(name.as_ref(), value);
+                self.tx.set_canonical(key, value.clone());
                 change
             }
             SetVarValue::Macro(raw) => {
@@ -1600,7 +1618,7 @@ impl Transaction {
                             Ok(text) => SetVarChange::Set(text.to_owned()),
                             Err(_) => SetVarChange::SetBytes(operand.as_bytes().to_vec()),
                         });
-                        self.tx.set_bytes(name.as_ref(), operand);
+                        self.tx.set_canonical(key, operand);
                         change
                     }
                     SetVarKind::Add | SetVarKind::Subtract => {
@@ -1613,7 +1631,7 @@ impl Transaction {
                         } else {
                             n
                         };
-                        self.tx.increment_bytes(&name, delta);
+                        self.tx.increment_canonical(key, delta);
                         if matches!(kind, SetVarKind::Subtract) {
                             Some(SetVarChange::Decrement(n))
                         } else {
@@ -1623,23 +1641,23 @@ impl Transaction {
                 }
             }
             SetVarValue::Increment(n) => {
-                self.tx.increment_bytes(&name, *n);
+                self.tx.increment_canonical(key, *n);
                 Some(SetVarChange::Increment(*n))
             }
             SetVarValue::Decrement(n) => {
-                self.tx.increment_bytes(&name, n.wrapping_neg());
+                self.tx.increment_canonical(key, n.wrapping_neg());
                 Some(SetVarChange::Decrement(*n))
             }
             SetVarValue::Delete => {
-                self.tx.delete_bytes(&name);
+                self.tx.delete_canonical(key.as_bytes());
                 Some(SetVarChange::Delete)
             }
         };
-        if let (Some(rule_id), Some(op_change)) = (record, change) {
+        if let (Some(rule_id), Some(key), Some(op_change)) = (record, audit_key, change) {
             self.setvar_effects.push(SetVarEffect {
                 rule_id: rule_id.into(),
                 collection: op.collection.to_ascii_lowercase(),
-                key: ByteValue::from(name.into_owned()).to_string(),
+                key,
                 op: op_change,
             });
         }

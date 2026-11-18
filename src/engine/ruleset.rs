@@ -5,11 +5,12 @@ use crate::operators::{compile_operator, Operator};
 use crate::parser::{
     Action, DataAction, Directive, DisruptiveAction, FlowAction, MetadataAction, OperatorName,
     OperatorSpec, Parser, RuleEngineMode as ParserRuleEngineMode, RuleIdSelector, Selection,
-    UpdateTargetById, VariableSpec,
+    SetVarValue, UpdateTargetById, VariableSpec,
 };
 use crate::transformations::TransformationPipeline;
 
 use super::phase::Phase;
+use crate::variables::{folded_key, ByteValue};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -106,6 +107,16 @@ impl Default for Rules {
     }
 }
 
+/// Per-transaction positions reserved for frequent numeric TX lookups.
+pub(super) const NUMERIC_TX_SLOTS: usize = 4;
+
+pub(super) struct CompiledSetVar {
+    pub action_index: usize,
+    /// Literal TX keys can be folded once, when configuration updates are final.
+    pub key: Option<ByteValue>,
+    pub value: Option<ByteValue>,
+}
+
 /// Execution metadata for a finalized rule. The public parsed rule and its ordered
 /// actions remain the source for captures, control arguments and audit messages.
 #[derive(Default)]
@@ -114,11 +125,15 @@ pub(super) struct RuleDispatch {
     pub selections: Box<[crate::variables::TargetSelection]>,
     /// Immutable numeric predicates match the full input without capture groups.
     pub numeric: Option<crate::operators::NumericComparison>,
+    /// A static comparison of one literal TX member or its count, without transforms or exclusions.
+    pub single_tx_numeric: bool,
+    pub numeric_tx_slot: Option<u8>,
     pub dynamic: bool,
     pub capture: bool,
     pub multi_match: bool,
-    /// Start of the suffix containing every setvar and control, or the action count.
-    pub effects_from: usize,
+    /// Start of the suffix containing every control, or the action count.
+    pub controls_from: usize,
+    pub setvars: Box<[CompiledSetVar]>,
     pub removable_by_tag: bool,
     pub target_removable_by_tag: bool,
     pub flow: CompiledFlow,
@@ -157,16 +172,36 @@ impl RuleDispatch {
             } else {
                 rule.operator.numeric_comparison()
             },
-            effects_from: rule.actions.len(),
+            controls_from: rule.actions.len(),
             disruptive: rule.actions.len(),
             dynamic,
             ..Self::default()
         };
+        dispatch.single_tx_numeric = dispatch.numeric.is_some()
+            && rule.transformations.is_empty()
+            && matches!(rule.variables.as_slice(), [spec] if spec.name == crate::parser::VariableName::Tx && spec.exclusions.is_empty())
+            && matches!(
+                dispatch.selections[0].member,
+                crate::variables::MemberSelector::Key(_)
+            );
+        let mut setvars = Vec::new();
         for (index, action) in rule.actions.iter().enumerate() {
             match action {
                 Action::Data(DataAction::Capture) => dispatch.capture = true,
-                Action::Data(DataAction::SetVar(_)) | Action::Control(_) => {
-                    dispatch.effects_from = dispatch.effects_from.min(index);
+                Action::Data(DataAction::SetVar(op)) => {
+                    setvars.push(CompiledSetVar {
+                        action_index: index,
+                        value: match &op.value {
+                            SetVarValue::Int(n) => Some(ByteValue::decimal(*n)),
+                            SetVarValue::String(text) => Some(text.as_str().into()),
+                            _ => None,
+                        },
+                        key: (!op.key.contains("%{"))
+                            .then(|| ByteValue::from(folded_key(op.key.as_bytes()))),
+                    });
+                }
+                Action::Control(_) => {
+                    dispatch.controls_from = dispatch.controls_from.min(index);
                 }
                 Action::Metadata(MetadataAction::Tag(tag)) => {
                     dispatch.removable_by_tag |= removed_tags.contains(tag.as_str());
@@ -188,7 +223,39 @@ impl RuleDispatch {
                 _ => {}
             }
         }
+        dispatch.setvars = setvars.into_boxed_slice();
         dispatch
+    }
+
+    fn numeric_tx_key(&self) -> Option<&[u8]> {
+        if self.single_tx_numeric {
+            if let crate::variables::MemberSelector::Key(key) = &self.selections[0].member {
+                return Some(key);
+            }
+        }
+        None
+    }
+
+    // Rank keys per phase so one-off guards cannot evict the positions used
+    // by repeated comparisons. The transaction verifies a position on each hit.
+    fn assign_numeric_tx_slots(dispatch: &mut [Self]) {
+        let mut counts = HashMap::<&[u8], usize>::new();
+        for key in dispatch.iter().filter_map(Self::numeric_tx_key) {
+            *counts.entry(key).or_default() += 1;
+        }
+        let mut repeated: Vec<_> = counts.into_iter().filter(|(_, count)| *count > 1).collect();
+        repeated.sort_unstable_by(|(a, n), (b, m)| m.cmp(n).then_with(|| a.cmp(b)));
+        let keys: Vec<_> = repeated
+            .into_iter()
+            .take(NUMERIC_TX_SLOTS)
+            .map(|(key, _)| key.to_owned())
+            .collect();
+        for rule in dispatch {
+            rule.numeric_tx_slot = rule
+                .numeric_tx_key()
+                .and_then(|key| keys.iter().position(|entry| key == entry))
+                .map(|index| index as u8);
+        }
     }
 
     pub(super) fn disruptive<'a>(&self, rule: &'a CompiledRule) -> Option<&'a DisruptiveAction> {
@@ -477,6 +544,9 @@ impl CompiledRuleset {
                 })
                 .collect()
         });
+        for phase in &mut ruleset.dispatch {
+            RuleDispatch::assign_numeric_tx_slots(phase);
+        }
         ruleset.body_config.validate()?;
         if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
             ruleset.body_config.request_limit_action =
