@@ -516,9 +516,7 @@ impl Transaction {
 
     /// Add original response header bytes without UTF-8 replacement.
     pub fn add_response_header_bytes(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
-        self.response
-            .headers
-            .add_bytes(name.to_ascii_lowercase(), value);
+        self.response.add_header_bytes(name, value);
         Ok(())
     }
 
@@ -599,16 +597,7 @@ impl Transaction {
 
     /// Whether the response media type is selected for phase-4 body inspection.
     pub fn response_body_processable(&self) -> bool {
-        let content_type = self
-            .response
-            .headers
-            .get_bytes(b"content-type")
-            .and_then(|values| values.first().copied())
-            .unwrap_or_default();
-        let media_type = content_type
-            .split(|byte| *byte == b';')
-            .next()
-            .unwrap_or_default();
+        let media_type = self.response.content_type_bytes();
         self.ruleset
             .body_config()
             .response_mime_types

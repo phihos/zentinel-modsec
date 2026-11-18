@@ -54,3 +54,20 @@ SecRule REQUEST_BASENAME "@contains (" "id:3,phase:2,pass""#,
         }
     }
 }
+
+#[test]
+fn query_bytes_do_not_change_a_text_path_or_previous_query() {
+    use zentinel_modsec::variables::ByteCollection;
+    let mut request = RequestData::new();
+    request.set_uri("/before?old=1");
+    let mut target = "/café?label=".as_bytes().to_vec();
+    target.push(0xff);
+    request.set_uri_bytes(&target);
+    assert_eq!(request.path_bytes(), "/café".as_bytes());
+    assert_eq!(request.uri_bytes(), target);
+    assert_eq!(request.args_get.get_bytes(b"label").unwrap(), [b"\xff"]);
+    assert!(request.args_get.get_bytes(b"old").is_none());
+    request.set_uri_bytes(b"/%ff?label=caf\xc3\xa9#fragment");
+    assert_eq!(request.path_bytes(), b"/\xff");
+    assert_eq!(request.query_bytes(), "label=café".as_bytes());
+}

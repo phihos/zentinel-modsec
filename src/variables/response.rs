@@ -39,12 +39,24 @@ impl ResponseData {
 
     /// Add a response header.
     pub fn add_header(&mut self, name: &str, value: &str) {
-        self.headers.add(name.to_lowercase(), value.to_string());
+        self.add_header_bytes(name.as_bytes(), value.as_bytes());
+    }
 
-        // Track content-type
-        if name.eq_ignore_ascii_case("content-type") {
-            self.content_type = value.to_string();
+    /// Add original response bytes, retaining each header name separately from
+    /// its normalized lookup key.
+    pub fn add_header_bytes(&mut self, name: &[u8], value: &[u8]) {
+        self.headers
+            .add_named_bytes(name.to_ascii_lowercase(), name, value);
+        if name.eq_ignore_ascii_case(b"content-type") {
+            self.content_type = super::ByteValue::from(media_type(value)).to_string();
         }
+    }
+
+    /// Media type from the last received Content-Type, before parameters.
+    pub fn content_type_bytes(&self) -> &[u8] {
+        self.headers
+            .last_value_bytes(b"content-type")
+            .map_or_else(|| self.content_type.as_bytes(), media_type)
     }
 
     /// Append to response body.
@@ -70,4 +82,8 @@ impl ResponseData {
             b""
         }
     }
+}
+
+fn media_type(value: &[u8]) -> &[u8] {
+    value.split(|&byte| byte == b';').next().unwrap_or_default()
 }

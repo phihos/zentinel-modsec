@@ -129,20 +129,20 @@ fn test_request(
         return Ok(());
     }
 
-    // Process request body if provided
+    // Phase 2 also inspects query and header variables on bodyless requests.
     if let Some(body_data) = body {
         tx.append_request_body(body_data.as_bytes())?;
-        tx.process_request_body()?;
+    }
+    tx.process_request_body()?;
 
-        if let Some(intervention) = tx.intervention() {
-            println!("BLOCKED (Phase 2)");
-            println!("  Status: {}", intervention.status);
-            println!("  Rules: {:?}", intervention.rule_ids);
-            if let Some(ref log) = intervention.log {
-                println!("  Message: {}", log);
-            }
-            return Ok(());
+    if let Some(intervention) = tx.intervention() {
+        println!("BLOCKED (Phase 2)");
+        println!("  Status: {}", intervention.status);
+        println!("  Rules: {:?}", intervention.rule_ids);
+        if let Some(ref log) = intervention.log {
+            println!("  Message: {}", log);
         }
+        return Ok(());
     }
 
     println!("ALLOWED");

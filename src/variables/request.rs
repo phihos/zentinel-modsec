@@ -102,43 +102,34 @@ impl RequestData {
 
     /// Set the URI and parse path/query string.
     pub fn set_uri(&mut self, uri: &str) {
-        self.binary_uri = None;
-        self.binary_query = None;
-        self.binary_path = None;
-        self.uri = uri.to_string();
-        self.uri_raw = uri.to_string();
-
-        if let Some(pos) = uri.find('?') {
-            self.path = decoded_request_path(&uri[..pos]);
-            self.query_string = uri[pos + 1..].to_string();
-            self.parse_query_string(&self.query_string.clone());
-        } else {
-            self.path = decoded_request_path(uri);
-            self.query_string.clear();
-        }
+        self.set_uri_bytes(uri.as_bytes());
     }
 
     /// Set a request target without replacing invalid UTF-8 or decoded bytes.
     pub fn set_uri_bytes(&mut self, uri: &[u8]) {
-        match std::str::from_utf8(uri) {
-            Ok(text) => self.set_uri(text),
-            Err(_) => self.set_uri(ByteValue::from(uri).display_text()),
-        }
-        let path_end = uri.iter().position(|&b| b == b'?').unwrap_or(uri.len());
-        let raw_path = &uri[..path_end];
-        if raw_path.contains(&b'%') || std::str::from_utf8(raw_path).is_err() {
-            let decoded = decoded_request_path_bytes(raw_path);
-            if std::str::from_utf8(&decoded).is_err() {
-                self.binary_path = Some(ByteValue::from(decoded));
+        let (display, binary) = component_strings(uri);
+        self.uri_raw = display.clone();
+        self.uri = display;
+        self.binary_uri = binary;
+
+        let target = uri.split(|&b| b == b'#').next().unwrap_or_default();
+        let mut parts = target.splitn(2, |&b| b == b'?');
+        let raw_path = parts.next().unwrap_or_default();
+        let query = parts.next().unwrap_or_default();
+        (self.query_string, self.binary_query) = component_strings(query);
+        self.args_get.clear();
+        parse_form_bytes(query, &mut self.args_get);
+
+        match String::from_utf8(decoded_request_path_bytes(raw_path)) {
+            Ok(path) => {
+                self.path = path;
+                self.binary_path = None;
             }
-        }
-        if std::str::from_utf8(uri).is_err() {
-            self.binary_uri = Some(ByteValue::from(uri));
-            self.args_get.clear();
-            if path_end < uri.len() {
-                let query = &uri[path_end + 1..];
-                self.binary_query = Some(ByteValue::from(query));
-                parse_form_bytes(query, &mut self.args_get);
+            Err(error) => {
+                self.binary_path = Some(ByteValue::from(error.into_bytes()));
+                // The public text field historically exposes the undecoded path
+                // when percent decoding produces non-UTF-8.
+                self.path = component_strings(raw_path).0;
             }
         }
     }
@@ -224,7 +215,7 @@ impl RequestData {
                 self.body_processor = "MULTIPART".into();
             }
         }
-        self.headers.add_bytes(lower, value);
+        self.headers.add_named_bytes(lower, name, value);
     }
 
     fn parse_cookie_header_bytes(&mut self, value: &[u8]) {
@@ -284,11 +275,6 @@ impl RequestData {
     /// Get body length.
     pub fn body_length(&self) -> usize {
         self.body.len()
-    }
-
-    /// Parse query string into args_get.
-    fn parse_query_string(&mut self, qs: &str) {
-        parse_form_bytes(qs.as_bytes(), &mut self.args_get);
     }
 
     /// Parse multipart without decoding binary fields or filenames as UTF-8.
@@ -385,13 +371,17 @@ impl RequestData {
     }
 }
 
-/// Decode only the path component. Query delimiters are split by the caller
-/// before decoding, and a literal plus in a path is never form-decoded.
-fn decoded_request_path(input: &str) -> String {
-    String::from_utf8(decoded_request_path_bytes(input.as_bytes()))
-        .unwrap_or_else(|_| input.to_string())
+fn component_strings(bytes: &[u8]) -> (String, Option<ByteValue>) {
+    match std::str::from_utf8(bytes) {
+        Ok(value) => (value.to_owned(), None),
+        Err(_) => {
+            let value = ByteValue::from(bytes);
+            (value.to_string(), Some(value))
+        }
+    }
 }
 
+/// Decode the path after query and fragment splitting. Plus is literal here.
 fn decoded_request_path_bytes(input: &[u8]) -> Vec<u8> {
     let without_fragment = input.split(|&b| b == b'#').next().unwrap_or(input);
     let path = if let Some(scheme_end) = without_fragment.windows(3).position(|part| part == b"://")
