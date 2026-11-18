@@ -217,3 +217,34 @@ fn matching_pass_rules_do_not_copy_unused_audit_metadata() {
     assert_eq!(extra_matches, matches);
     assert_eq!(with_metadata, baseline);
 }
+
+#[test]
+fn capture_publication_moves_the_subgroup_buffer_into_tx() {
+    use zentinel_modsec::variables::ByteCollection;
+
+    let data = vec![b'a'; 64 * 1024];
+    let measure = |pattern: &str, groups: usize| {
+        let rules = format!(
+            r#"SecRule REQUEST_HEADERS:X-Data "@rx {pattern}" "id:1,phase:1,pass,capture""#
+        );
+        let engine = ModSecurity::from_string(&rules).unwrap();
+        let run = || {
+            let mut tx = engine.new_transaction();
+            tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+            tx.add_request_header_bytes(b"X-Data", &data).unwrap();
+            REQUESTED_BYTES.set(0);
+            TRACKING.set(true);
+            tx.process_request_headers().unwrap();
+            TRACKING.set(false);
+            assert_eq!(tx.tx().get_bytes(b"0").unwrap(), [data.as_slice()]);
+            assert_eq!(tx.tx().get_bytes(b"1").is_some(), groups == 1);
+            REQUESTED_BYTES.get()
+        };
+        run();
+        run()
+    };
+    let whole = measure("^a+$", 0);
+    let group = measure("^(a+)$", 1);
+    // One additional result buffer, plus fixed regex/collection metadata.
+    assert!(group <= whole + data.len() + 2048, "{whole} -> {group}");
+}

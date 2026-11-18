@@ -44,6 +44,14 @@ impl ByteValue {
         }
     }
 
+    /// Move both audit representations out, reusing the escaped binary display.
+    pub(crate) fn into_display_and_bytes(self) -> (String, Vec<u8>) {
+        match self.storage {
+            Storage::Text(text) => (text.clone(), text.into_bytes()),
+            Storage::Binary { bytes, display } => (display, bytes),
+        }
+    }
+
     /// Move out the original bytes without replacing invalid UTF-8.
     pub fn into_bytes(self) -> Vec<u8> {
         match self.storage {
