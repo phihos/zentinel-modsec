@@ -9,21 +9,36 @@ use serde::Deserialize;
 use serde_json::{value::RawValue, Deserializer};
 use std::borrow::Cow;
 
-// Existing request processor limits. Array metadata has a separate entry cap
-// and shares the byte budget with scalar arguments, as in Coraza 3.8.1.
-const MAX_ENTRIES: usize = 4096;
-const MAX_DEPTH: usize = 64;
+pub(crate) const DEFAULT_DEPTH_LIMIT: usize = 1024;
+
+// Keep the traversal on the heap even when a ruleset permits very deep JSON.
+struct Container {
+    array: bool,
+    path_len: usize,
+    count: usize,
+    collect: bool,
+    truncated: bool,
+}
 
 struct Parser<'a, 'out> {
     remaining: &'a [u8],
     path: String,
     args: &'out mut HashMapCollection,
     remaining_bytes: usize,
+    argument_limit: usize,
+    depth_limit: usize,
+    truncated: &'out mut bool,
     leaves: usize,
     lengths: usize,
 }
 
-pub(super) fn parse(body: &[u8], args: &mut HashMapCollection) -> Result<(), String> {
+pub(crate) fn parse(
+    body: &[u8],
+    args: &mut HashMapCollection,
+    argument_limit: usize,
+    depth_limit: usize,
+    truncated: &mut bool,
+) -> Result<(), String> {
     if body.is_empty() {
         return Ok(());
     }
@@ -32,15 +47,18 @@ pub(super) fn parse(body: &[u8], args: &mut HashMapCollection) -> Result<(), Str
         path: "json".into(),
         args,
         remaining_bytes: body.len().saturating_mul(8).max(4096),
+        argument_limit,
+        depth_limit,
+        truncated,
         leaves: 0,
         lengths: 0,
     };
     match parser.peek() {
-        Some(b'{' | b'[') => parser.value(0)?,
+        Some(b'{' | b'[') => parser.containers()?,
         // The reference represents a top-level scalar as a one-member array.
         Some(_) => {
             parser.path.push_str(".0");
-            parser.value(0)?;
+            parser.scalar(true)?;
             parser.path.truncate(4);
             parser.array_length(1)?;
         }
@@ -82,82 +100,104 @@ impl<'a> Parser<'a, '_> {
         Ok(token)
     }
 
-    fn value(&mut self, depth: usize) -> Result<(), String> {
-        match self.peek() {
-            Some(b'{' | b'[') => {
-                if depth >= MAX_DEPTH {
-                    return Err(syntax("maximum container depth reached"));
-                }
-                self.container(depth + 1)
-            }
-            Some(_) => {
-                if self.leaves >= MAX_ENTRIES {
-                    return Err(syntax("argument count limit reached"));
-                }
-                let value = if self.peek() == Some(b'"') {
-                    Cow::Owned(self.token::<String>()?)
-                } else {
-                    let raw: &RawValue = self.token()?;
-                    Cow::Borrowed(if raw.get() == "null" { "" } else { raw.get() })
-                };
-                self.store(value)?;
-                self.leaves += 1;
-                Ok(())
-            }
-            None => Err(syntax("expected a JSON value")),
+    fn scalar(&mut self, collect: bool) -> Result<(), String> {
+        let value = if self.peek() == Some(b'"') {
+            Cow::Owned(self.token::<String>()?)
+        } else {
+            let raw: &RawValue = self.token()?;
+            Cow::Borrowed(if raw.get() == "null" { "" } else { raw.get() })
+        };
+        if collect {
+            self.store(value)?;
+            self.leaves += 1;
         }
+        Ok(())
     }
 
-    fn container(&mut self, depth: usize) -> Result<(), String> {
-        let array = self.remaining[0] == b'[';
-        let close = if array { b']' } else { b'}' };
-        self.remaining = &self.remaining[1..];
-        if self.consume(close) {
-            return Ok(());
+    fn start_container(&mut self, collect: bool, stack: &mut Vec<Container>) -> Result<(), String> {
+        if stack.len() >= self.depth_limit {
+            return Err(syntax("maximum container depth reached"));
         }
-        let mut count = 0;
-        let parent_len = self.path.len();
-        loop {
-            self.path.push('.');
-            if array {
-                use std::fmt::Write;
-                write!(&mut self.path, "{count}").expect("writing a string is infallible");
+        stack.push(Container {
+            array: self.remaining[0] == b'[',
+            path_len: self.path.len(),
+            count: 0,
+            collect,
+            truncated: false,
+        });
+        self.remaining = &self.remaining[1..];
+        Ok(())
+    }
+
+    fn containers(&mut self) -> Result<(), String> {
+        let mut stack = Vec::new();
+        self.start_container(true, &mut stack)?;
+        while let Some(frame) = stack.last_mut() {
+            self.path.truncate(frame.path_len);
+            let close = if frame.array { b']' } else { b'}' };
+            if self.consume(close) {
+                if frame.array && frame.count != 0 && frame.collect && !frame.truncated {
+                    frame.truncated = self.array_length(frame.count)?;
+                }
+                let truncated = frame.truncated;
+                stack.pop();
+                if let Some(parent) = stack.last_mut() {
+                    parent.truncated |= truncated;
+                }
+                continue;
+            }
+            if frame.count != 0 && !self.consume(b',') {
+                // The reference retains the observed count of an incomplete array.
+                if frame.array && self.peek().is_none() && frame.collect && !frame.truncated {
+                    self.array_length(frame.count)?;
+                }
+                return Err(syntax("expected a comma or closing delimiter"));
+            }
+            // Validate the entire document, including entries beyond the limit.
+            // Dropped entries neither grow the flattened path nor consume its budget.
+            let collect = frame.collect && self.leaves < self.argument_limit;
+            if !collect {
+                frame.truncated = true;
+                *self.truncated = true;
+            }
+            if collect {
+                self.path.push('.');
+            }
+            if frame.array {
+                if collect {
+                    use std::fmt::Write;
+                    write!(&mut self.path, "{}", frame.count)
+                        .expect("writing a string is infallible");
+                }
             } else {
                 self.peek();
                 let key: String = self.token()?;
-                self.path.push_str(&key);
+                if collect {
+                    self.path.push_str(&key);
+                }
                 if !self.consume(b':') {
                     return Err(syntax("expected colon"));
                 }
             }
-            self.value(depth)?;
-            self.path.truncate(parent_len);
-            count += 1;
-            if self.consume(close) {
-                break;
+            frame.count += 1;
+            match self.peek() {
+                Some(b'{' | b'[') => self.start_container(collect, &mut stack)?,
+                Some(_) => self.scalar(collect)?,
+                None => return Err(syntax("expected a JSON value")),
             }
-            if !self.consume(b',') {
-                // A truncated array still exposes its completed elements and
-                // their observed count, matching the pinned processor.
-                if array && self.peek().is_none() {
-                    self.array_length(count)?;
-                }
-                return Err(syntax("expected a comma or closing delimiter"));
-            }
-        }
-        if array {
-            self.array_length(count)?;
         }
         Ok(())
     }
 
-    fn array_length(&mut self, count: usize) -> Result<(), String> {
-        if self.lengths >= MAX_ENTRIES {
-            return Err(syntax("array metadata count limit reached"));
+    // Array metadata has its own entry count and shares the flattening byte budget.
+    fn array_length(&mut self, count: usize) -> Result<bool, String> {
+        if self.lengths >= self.argument_limit {
+            *self.truncated = true;
+            return Ok(true);
         }
         self.store(Cow::Owned(count.to_string()))?;
         self.lengths += 1;
-        Ok(())
+        Ok(false)
     }
 
     fn store(&mut self, value: Cow<'_, str>) -> Result<(), String> {
@@ -178,7 +218,14 @@ mod tests {
 
     fn flattened(input: &str) -> HashMapCollection {
         let mut args = HashMapCollection::new();
-        parse(input.as_bytes(), &mut args).unwrap();
+        parse(
+            input.as_bytes(),
+            &mut args,
+            1000,
+            DEFAULT_DEPTH_LIMIT,
+            &mut false,
+        )
+        .unwrap();
         args
     }
 
@@ -235,6 +282,9 @@ mod tests {
             path: "json.x".into(),
             args: &mut args,
             remaining_bytes: 7,
+            argument_limit: 1000,
+            depth_limit: DEFAULT_DEPTH_LIMIT,
+            truncated: &mut false,
             leaves: 0,
             lengths: 0,
         };

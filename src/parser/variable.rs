@@ -71,6 +71,8 @@ pub enum VariableName {
     RequestBody,
     /// `REQUEST_BODY_LENGTH`
     RequestBodyLength,
+    /// `ARGUMENTS_LIMIT_REACHED`
+    ArgumentsLimitReached,
     /// `INBOUND_DATA_ERROR`
     InboundDataError,
     /// `OUTBOUND_DATA_ERROR`
@@ -320,6 +322,7 @@ impl VariableName {
             | VariableName::RequestCookiesNames
             | VariableName::RequestBody
             | VariableName::RequestBodyLength
+            | VariableName::ArgumentsLimitReached
             | VariableName::InboundDataError
             | VariableName::OutboundDataError
             | VariableName::QueryString
@@ -455,6 +458,7 @@ variable_names! {
     "REQUEST_COOKIES_NAMES" => VariableName::RequestCookiesNames,
     "REQUEST_BODY" => VariableName::RequestBody,
     "REQUEST_BODY_LENGTH" => VariableName::RequestBodyLength,
+    "ARGUMENTS_LIMIT_REACHED" => VariableName::ArgumentsLimitReached,
     "INBOUND_DATA_ERROR" => VariableName::InboundDataError,
     "OUTBOUND_DATA_ERROR" => VariableName::OutboundDataError,
     "QUERY_STRING" => VariableName::QueryString,

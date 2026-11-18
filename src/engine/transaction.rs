@@ -256,8 +256,11 @@ impl Transaction {
     /// Create a new transaction.
     pub fn new(ruleset: Arc<CompiledRuleset>, default_status: u16) -> Self {
         Self {
+            request: RequestData::with_limits(
+                ruleset.body_config().argument_limit,
+                ruleset.body_config().request_json_depth_limit,
+            ),
             ruleset,
-            request: RequestData::new(),
             request_line: OnceLock::new(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
@@ -1606,6 +1609,9 @@ impl Transaction {
         let Some((collection, key)) = name.split_once('.') else {
             if name.eq_ignore_ascii_case("unique_id") {
                 return self.id().as_bytes();
+            }
+            if name.eq_ignore_ascii_case("arguments_limit_reached") {
+                return self.request.argument_limit_flag();
             }
             if name.eq_ignore_ascii_case("matched_var") {
                 return self

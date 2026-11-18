@@ -3,7 +3,8 @@
 //! This module handles variable resolution and collection management.
 
 mod collection;
-mod json;
+pub(crate) mod json;
+pub(crate) const DEFAULT_ARGUMENT_LIMIT: usize = 1000;
 mod multipart;
 mod request;
 mod resolver;

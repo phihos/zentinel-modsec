@@ -12,6 +12,10 @@ use super::ByteValue;
 pub struct RequestData {
     /// Generated on first access when the connector did not provide an ID.
     pub(crate) unique_id: OnceLock<String>,
+    argument_limit: usize,
+    request_json_depth_limit: usize,
+    /// A query or body processor dropped entries at its configured argument limit.
+    pub arguments_limit_reached: bool,
     /// HTTP method.
     pub method: String,
     /// Request URI (with query string).
@@ -104,6 +108,9 @@ impl Default for RequestData {
     fn default() -> Self {
         Self {
             unique_id: OnceLock::new(),
+            argument_limit: super::DEFAULT_ARGUMENT_LIMIT,
+            request_json_depth_limit: super::json::DEFAULT_DEPTH_LIMIT,
+            arguments_limit_reached: false,
             method: Default::default(),
             uri: Default::default(),
             uri_raw: Default::default(),
@@ -157,6 +164,22 @@ impl RequestData {
             .get_or_init(|| Alphabetic.sample_string(&mut rand::rng(), 19))
     }
 
+    pub(crate) fn with_limits(argument_limit: usize, request_json_depth_limit: usize) -> Self {
+        Self {
+            argument_limit,
+            request_json_depth_limit,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn argument_limit_flag(&self) -> &'static [u8] {
+        if self.arguments_limit_reached {
+            b"1"
+        } else {
+            b"0"
+        }
+    }
+
     /// Set the URI and parse path/query string.
     pub fn set_uri(&mut self, uri: &str) {
         self.set_uri_bytes(uri.as_bytes());
@@ -179,7 +202,8 @@ impl RequestData {
         };
         (self.query_string, self.binary_query) = component_strings(query);
         self.args_get.clear();
-        parse_form_bytes(query, &mut self.args_get);
+        self.arguments_limit_reached |=
+            parse_form_bytes(query, &mut self.args_get, self.argument_limit);
 
         match String::from_utf8(decoded_request_path_bytes(raw_path)) {
             Ok(path) => {
@@ -364,7 +388,8 @@ impl RequestData {
 
     /// Parse form body into args_post.
     pub fn parse_form_body(&mut self) {
-        parse_form_bytes(&self.body, &mut self.args_post);
+        self.arguments_limit_reached |=
+            parse_form_bytes(&self.body, &mut self.args_post, self.argument_limit);
     }
 
     /// Parse a JSON body into `args_post`, mirroring ModSecurity's JSON
@@ -389,7 +414,13 @@ impl RequestData {
     pub fn parse_json_body(&mut self) -> Result<(), String> {
         self.body_processor = "JSON".to_string();
 
-        let result = super::json::parse(&self.body, &mut self.args_post);
+        let result = super::json::parse(
+            &self.body,
+            &mut self.args_post,
+            self.argument_limit,
+            self.request_json_depth_limit,
+            &mut self.arguments_limit_reached,
+        );
         self.body_error = result.as_ref().err().cloned();
         result
     }
@@ -514,7 +545,11 @@ fn trim_ascii(mut value: &[u8]) -> &[u8] {
     value
 }
 
-fn parse_form_bytes(mut input: &[u8], collection: &mut HashMapCollection) {
+fn parse_form_bytes(
+    mut input: &[u8],
+    collection: &mut HashMapCollection,
+    mut remaining: usize,
+) -> bool {
     // Keep an escaped or opaque field from forcing unrelated plain fields
     // through the byte decoder. Always cut at an actual form separator.
     const BLOCK_BYTES: usize = 1024;
@@ -523,24 +558,38 @@ fn parse_form_bytes(mut input: &[u8], collection: &mut HashMapCollection) {
             break;
         };
         let end = BLOCK_BYTES + separator;
-        parse_form_block(&input[..end], collection);
+        if parse_form_block(&input[..end], collection, &mut remaining) {
+            return true;
+        }
         input = &input[end + 1..];
     }
-    parse_form_block(input, collection);
+    parse_form_block(input, collection, &mut remaining)
 }
 
-fn parse_form_block(input: &[u8], collection: &mut HashMapCollection) {
+fn parse_form_block(
+    input: &[u8],
+    collection: &mut HashMapCollection,
+    remaining: &mut usize,
+) -> bool {
     // Unescaped text needs no per-field decoder or UTF-8 validation.
     if memchr::memchr2(b'%', b'+', input).is_none() {
         if let Ok(text) = std::str::from_utf8(input) {
             for pair in text.split('&').filter(|pair| !pair.is_empty()) {
+                if *remaining == 0 {
+                    return true;
+                }
+                *remaining -= 1;
                 let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
                 collection.add_bytes(key, value);
             }
-            return;
+            return false;
         }
     }
     for pair in input.split(|&b| b == b'&').filter(|pair| !pair.is_empty()) {
+        if *remaining == 0 {
+            return true;
+        }
+        *remaining -= 1;
         let equal = pair.iter().position(|&b| b == b'=');
         let (key, value) = equal.map_or((pair, &b""[..]), |i| (&pair[..i], &pair[i + 1..]));
         collection.add_bytes(
@@ -548,6 +597,7 @@ fn parse_form_block(input: &[u8], collection: &mut HashMapCollection) {
             crate::transformations::bytes::url_decode_stage(value, false),
         );
     }
+    false
 }
 
 #[cfg(test)]
@@ -619,7 +669,7 @@ mod tests {
                 form.extend_from_slice(b"&a=%26%3D&b=two+words&bare");
 
                 let mut req = RequestData::new();
-                parse_form_bytes(&form, &mut req.args_post);
+                parse_form_bytes(&form, &mut req.args_post, usize::MAX);
                 let expected: &[(&[u8], &[u8], &[u8])] = &[
                     (b"a", b"A", &first),
                     (b"a", b"a", b"&="),
@@ -631,7 +681,7 @@ mod tests {
 
                 // The threshold may also lie within a sole field.
                 let mut req = RequestData::new();
-                parse_form_bytes(&form[..separator], &mut req.args_get);
+                parse_form_bytes(&form[..separator], &mut req.args_get, usize::MAX);
                 assert_eq!(req.args_get.all_bytes_with_names(), &expected[..1]);
             }
         }

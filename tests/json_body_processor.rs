@@ -239,25 +239,23 @@ fn a_malformed_body_does_not_abort_the_transaction() {
     assert!(run(rules, "application/json", br#"{bad"#));
 }
 
-/// A body can be small on the wire and expand into an enormous number of
-/// arguments. Hitting the cap is reported as a processing error rather than
-/// silently truncating, because a partially inspected body is not a safe one.
 #[test]
-fn exceeding_the_argument_cap_is_reported_as_an_error() {
-    let crs_200002 = "SecRuleEngine On\n\
-         SecRule REQBODY_ERROR \"!@eq 0\" \"id:200002,phase:2,deny,status:400\"";
-
-    let huge = format!("[{}]", vec!["1"; 5000].join(","));
-    assert!(
-        run(crs_200002, "application/json", huge.as_bytes()),
-        "a body past the argument cap must set REQBODY_ERROR"
-    );
+fn exceeding_the_argument_cap_sets_the_limit_flag_on_valid_json() {
+    let body = format!("[{}]", vec!["1"; 1001].join(","));
+    assert!(run(
+        r#"SecRule ARGUMENTS_LIMIT_REACHED "@eq 1" "id:301,phase:2,deny""#,
+        "application/json",
+        body.as_bytes()
+    ));
+    assert!(!run(
+        r#"SecRule REQBODY_ERROR "@eq 1" "id:302,phase:2,deny""#,
+        "application/json",
+        body.as_bytes()
+    ));
 }
 
 #[test]
 fn deeply_nested_json_does_not_overflow_the_stack() {
-    // serde_json refuses to parse past its own recursion limit, so this is
-    // reported as a parse error rather than crashing.
     let crs_200002 = "SecRuleEngine On\n\
          SecRule REQBODY_ERROR \"!@eq 0\" \"id:200002,phase:2,deny,status:400\"";
 
@@ -388,12 +386,7 @@ fn array_metadata_shares_the_reference_expanded_byte_budget() {
     let mut req = RequestData::new();
     req.append_body(body.as_bytes());
     assert!(req.parse_json_body().unwrap_err().contains("byte budget"));
-    // Observed with Coraza v3.8.1 and SecRequestBodyJsonDepthLimit 64.
     assert_eq!(req.args_post.count(), 47);
-    let mut req = RequestData::new();
-    req.append_body(format!("[{body}]").as_bytes());
-    assert!(req.parse_json_body().unwrap_err().contains("depth"));
-    assert_eq!(req.args_post.count(), 0);
 }
 
 #[test]

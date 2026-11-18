@@ -534,6 +534,13 @@ impl CompiledRuleset {
                 Directive::SecResponseBodyAccess(value) => {
                     ruleset.body_config.response_access = value
                 }
+                Directive::SecArgumentsLimit(value) => ruleset.body_config.argument_limit = value,
+                Directive::SecRequestBodyJsonDepthLimit(value) => {
+                    ruleset.body_config.request_json_depth_limit = value
+                }
+                Directive::SecResponseBodyJsonDepthLimit(value) => {
+                    ruleset.body_config.response_json_depth_limit = value
+                }
                 Directive::SecRequestBodyLimit(value) => ruleset.body_config.request_limit = value,
                 Directive::SecResponseBodyLimit(value) => {
                     ruleset.body_config.response_limit = value
