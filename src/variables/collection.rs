@@ -108,6 +108,10 @@ impl HashMapCollection {
         self.add_bytes(key, value);
     }
 
+    pub(super) fn last_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {
+        self.data.get(key)?.last().map(ByteValue::as_bytes)
+    }
+
     /// Append original bytes, keeping invalid UTF-8 and binary keys distinct.
     pub fn add_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
         let value = value.into();
