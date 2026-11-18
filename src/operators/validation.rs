@@ -104,8 +104,16 @@ impl Operator for ValidateUrlEncodingOperator {
 }
 
 fn is_valid_url_encoding(mut input: &[u8]) -> bool {
-    while let Some(percent) = memchr::memchr(b'%', input) {
-        let Some([hi, lo, rest @ ..]) = input.get(percent + 1..) else {
+    while !input.is_empty() {
+        // Consecutive escapes are common in encoded data. Search only when
+        // there are literal bytes to skip.
+        if input[0] != b'%' {
+            let Some(percent) = memchr::memchr(b'%', input) else {
+                return true;
+            };
+            input = &input[percent..];
+        }
+        let [_, hi, lo, rest @ ..] = input else {
             return false;
         };
         if !hi.is_ascii_hexdigit() || !lo.is_ascii_hexdigit() {
