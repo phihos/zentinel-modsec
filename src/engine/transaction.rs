@@ -7,7 +7,7 @@ use super::body::{BodyState, BodyWriteResult};
 use super::chain::ChainState;
 use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
-use super::match_log::{MatchLog, RawMatch};
+use super::match_log::{MatchLog, RawMatch, RuleLocation};
 use super::phase::Phase;
 use super::ruleset::{CompiledFlow, CompiledRule, CompiledRuleset, RuleDispatch, RuleEngineMode};
 use crate::actions::rule_metadata;
@@ -58,7 +58,7 @@ pub struct Transaction {
     /// Default block status.
     default_status: u16,
     /// Matched rules.
-    matched_rules: Vec<String>,
+    matched_rules: MatchLog<RuleLocation>,
     /// Last phase skipped by a request-wide or transaction-wide allow.
     allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
@@ -71,7 +71,7 @@ pub struct Transaction {
     /// rule so that `MATCHED_VARS` reads correctly. This accumulates for the
     /// whole transaction, because audit logging wants to answer "what did
     /// rule 942100 actually see" after the fact.
-    matched_data: MatchLog,
+    matched_data: MatchLog<(RuleLocation, RawMatch)>,
     /// What each `setvar` that ran did, in order. See [`SetVarEffect`].
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
@@ -228,7 +228,7 @@ impl Transaction {
             phase: Phase::RequestHeaders,
             intervention: None,
             default_status,
-            matched_rules: Vec::new(),
+            matched_rules: MatchLog::default(),
             allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
@@ -297,7 +297,7 @@ impl Transaction {
     /// Pairs with [`matched_rules`](Self::matched_rules): that says which
     /// rules fired, this says what they saw.
     pub fn matched_data(&self) -> &[MatchedData] {
-        self.matched_data.as_slice()
+        self.matched_data.as_slice(&self.ruleset, self.phase)
     }
 
     /// Record what every `setvar` does, for [`setvar_effects`](Self::setvar_effects).
@@ -897,7 +897,7 @@ impl Transaction {
 
     /// Get matched rule IDs.
     pub fn matched_rules(&self) -> &[String] {
-        &self.matched_rules
+        self.matched_rules.as_slice(&self.ruleset, self.phase)
     }
 
     /// Read the current legacy `TX:anomaly_score` value, or zero if absent.
@@ -1035,8 +1035,17 @@ impl Transaction {
                     first_message,
                 } = outcome;
                 if let Some(data) = first_data {
+                    let source = RuleLocation {
+                        phase,
+                        index: if rule.id.is_some() {
+                            idx
+                        } else {
+                            starter_index
+                        },
+                    };
+                    let data = (source, data);
                     if standalone {
-                        self.matched_data.extend(std::iter::once(data));
+                        self.matched_data.extend(&ruleset, std::iter::once(data));
                     } else {
                         pending_chain_data.push(data);
                     }
@@ -1061,10 +1070,17 @@ impl Transaction {
                 // starter's disruptive action, flow and metadata.
                 if chain_state.in_chain {
                     chain_state.reset();
-                    self.matched_data.extend(pending_chain_data.drain(..));
+                    self.matched_data
+                        .extend(&ruleset, pending_chain_data.drain(..));
                 }
-                if let Some(id) = &starter.id {
-                    self.matched_rules.push(id.clone());
+                if starter.id.is_some() {
+                    self.matched_rules.extend(
+                        &ruleset,
+                        std::iter::once(RuleLocation {
+                            phase,
+                            index: starter_index,
+                        }),
+                    );
                 }
 
                 if self.record_rule_messages {
@@ -1340,7 +1356,6 @@ impl Transaction {
                         portion.take()
                     };
                     outcome.first_data = Some(RawMatch {
-                        rule_id: logical_id.map(str::to_owned),
                         variable: name.clone(),
                         value: value.clone(),
                         portion: audit_portion,
@@ -1654,7 +1669,7 @@ impl std::fmt::Debug for Transaction {
             .field("phase", &self.phase)
             .field("has_intervention", &self.intervention.is_some())
             .field("anomaly_score", &self.anomaly_score())
-            .field("matched_rules", &self.matched_rules)
+            .field("matched_rules", &self.matched_rules())
             .finish()
     }
 }

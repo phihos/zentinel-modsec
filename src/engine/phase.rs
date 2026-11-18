@@ -37,6 +37,10 @@ impl Phase {
         *self as u8
     }
 
+    pub(super) fn index(self) -> usize {
+        usize::from(self.number() - 1)
+    }
+
     /// Get phase name.
     pub fn name(&self) -> &'static str {
         match self {
