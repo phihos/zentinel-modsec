@@ -17,7 +17,7 @@ pub(super) struct LocalRefs<'a> {
     dynamic_counts: HashMap<&'a str, usize>,
     recursive_roots: usize,
     // The borrowed documents stay immutable and live as long as this index.
-    scopes: HashMap<usize, usize>,
+    scopes: HashMap<usize, (usize, Draft)>,
 }
 
 impl<'a> LocalRefs<'a> {
@@ -76,7 +76,8 @@ impl<'a> LocalRefs<'a> {
                     scope
                 }
             };
-            self.scopes.insert(std::ptr::from_ref(node).addr(), scope);
+            self.scopes
+                .insert(std::ptr::from_ref(node).addr(), (scope, draft));
             let anchor = match draft {
                 Draft::Draft202012 | Draft::Draft201909 => {
                     node.get("$anchor").and_then(Value::as_str)
@@ -114,8 +115,15 @@ impl<'a> LocalRefs<'a> {
         Some(())
     }
 
+    pub(super) fn draft_for(&self, schema: &Value) -> Option<Draft> {
+        self.scopes
+            .get(&std::ptr::from_ref(schema).addr())
+            .map(|&(_, draft)| draft)
+    }
+
     pub(super) fn resolve(&self, from: &'a Value, reference: &str) -> Option<&'a Value> {
-        let current = &self.resources[*self.scopes.get(&std::ptr::from_ref(from).addr())?];
+        let &(scope, _) = self.scopes.get(&std::ptr::from_ref(from).addr())?;
+        let current = &self.resources[scope];
         let (path, fragment) = reference.rsplit_once('#').unwrap_or((reference, ""));
         let resource = if path.is_empty() {
             current
@@ -238,6 +246,19 @@ mod tests {
             refs.resolve_dynamic(&root, "other.json#other"),
             Some(&other)
         );
+    }
+
+    #[test]
+    fn embedded_dialects_apply_to_their_own_children() {
+        let base = Url::parse("file:///root.json").unwrap();
+        let root = json!({"$defs":{"child":{"$schema":"http://json-schema.org/draft-07/schema#","$id":"child.json","items":{"type":"number"}}}});
+        let refs = LocalRefs::new(&root, &base).unwrap();
+        assert_eq!(refs.draft_for(&root), Some(Draft::Draft202012));
+        assert_eq!(
+            refs.draft_for(&root["$defs"]["child"]["items"]),
+            Some(Draft::Draft7)
+        );
+        assert_eq!(refs.draft_for(&root["$defs"]), None);
     }
 
     #[test]
