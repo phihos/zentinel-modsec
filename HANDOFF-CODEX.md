@@ -2,6 +2,28 @@
 
 ## Current checkpoint
 
+Engine `cf479a6` parses unescaped query and form fields in groups, bulk inserts
+prepared TX defaults into each transaction’s own map, and reuses known field
+alphabets for URL, UTF-8 and byte-range validation.
+
+Against `4ebbf57`, the full 698-rule OWASP CRS 4.25.0 benchmark measured
+22.99 → 22.31 ms for 8,192 plain form fields. Plain, singly escaped and densely
+escaped forms each improved in all eight pairs, by 2.0–2.9%. On the separate
+8,192-field single-rule fixture, complete requests improved by 9.9–12.2% in
+the lower-contention repeat and by 8.0–10.7% against the revision before the
+previous regression. Densely escaped inputs showed mixed results on that fixture.
+Ordinary GET, form and JSON timings were within 0.5% of their baseline in the
+12-pair interleaved repeat. Mixed-traffic p99 also varied between runs.
+
+Both detector backends preserved corpus outcomes, blocking decisions and audit
+records. The parser produced byte-identical ordered fields on 12,384 generated
+query and form parses. Request allocations, transaction size and loaded
+ruleset heap matched the previous checkpoint. The
+[benchmark report and raw results](https://github.com/phihos/zentinel-modsec/blob/measure/full-crs-snapshot/benches/results/crs-round8/RESULTS.md)
+include paired timings, input fixtures and reproduction commands.
+
+## Cached argument widths checkpoint at `8aba31c`
+
 Engine `8aba31c` caches argument widths across phases, precomputes fixed rule
 target masks and accelerates simple anchored TX key selectors. Compared with
 `d872a35`, eight paired runs on the full 698-rule CRS 4.25.0 configuration

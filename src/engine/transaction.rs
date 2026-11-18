@@ -1224,10 +1224,8 @@ impl Transaction {
     ) {
         let phase = Phase::RequestHeaders;
         let dispatch = ruleset.dispatch_for_phase(phase);
-        self.tx.reserve(defaults.assignments.len());
-        for (key, value) in &defaults.assignments {
-            self.tx.set_canonical(key.clone(), value.clone());
-        }
+        self.tx
+            .apply_defaults(&defaults.assignments, defaults.capture_limit);
         // These are the first matches in a fresh transaction. The ruleset
         // already contains their IDs and count results in execution order.
         self.matched_rules = MatchedRules::from_defaults(&defaults.ids);
