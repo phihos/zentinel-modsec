@@ -69,7 +69,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - backend: heuristic
+          - backend: rust-libinjection
             features: ""
           - backend: libinjection-ffi
             features: libinjection-ffi

@@ -14,7 +14,7 @@
 //!
 //! - SecLang rule parsing and evaluation
 //! - Loads the stock OWASP CRS rule set
-//! - Rust heuristic or optional upstream C libinjection for @detectSQLi/@detectXSS
+//! - Rust port or optional upstream C libinjection for @detectSQLi/@detectXSS
 //! - Thread-safe, async-ready transaction processing
 //! - Zero external C/C++ dependencies in the default build
 //!

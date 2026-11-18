@@ -59,9 +59,8 @@ fn custom_text_only_operators_fail_explicitly_on_binary_input() {
         .contains("binary input"));
 }
 
-#[cfg(feature = "libinjection-ffi")]
 #[test]
-fn native_operators_inspect_binary_values() {
+fn detection_operators_inspect_binary_values() {
     let op = create_operator(OperatorName::DetectXss, "").unwrap();
     assert!(
         op.execute_bytes(b"\xff\0<script>alert(1)</script>")

@@ -1,5 +1,5 @@
 # OWASP CRS 30cb436b261a9f5ec32a5a0677e17f3cfa1a8739
-# [relative YAML file], then test_id.stage, Rust outcome, FFI outcome (third column omitted when identical).
+# [relative YAML file], then test_id.stage and the shared Rust/C reference outcome.
 # A dash records a comment-only file.
 [REQUEST-901-INITIALIZATION/901360.yaml]
 1.1	pass
@@ -2778,8 +2778,8 @@
 7.1	pass
 [REQUEST-941-APPLICATION-ATTACK-XSS/941100.yaml]
 1.1	pass
-2.1	missing:941100	pass
-3.1	missing:941100	pass
+2.1	pass
+3.1	pass
 4.1	pass
 5.1	pass
 6.1	pass
@@ -3075,7 +3075,7 @@
 [REQUEST-942-APPLICATION-ATTACK-SQLI/942100.yaml]
 1.1	pass
 2.1	pass
-3.1	missing:942100	pass
+3.1	pass
 4.1	pass
 5.1	pass
 6.1	pass
@@ -3085,7 +3085,7 @@
 10.1	pass
 11.1	pass
 12.1	pass
-13.1	missing:942100	pass
+13.1	pass
 14.1	pass
 15.1	pass
 16.1	pass
@@ -3101,7 +3101,7 @@
 8.1	pass
 9.1	pass
 10.1	pass
-11.1	unexpected:942101	pass
+11.1	pass
 [REQUEST-942-APPLICATION-ATTACK-SQLI/942120.yaml]
 1.1	pass
 2.1	pass
