@@ -26,6 +26,12 @@ pub(in crate::engine) struct CompiledSetVar {
 /// actions remain the source for captures, control arguments and audit messages.
 #[derive(Default)]
 pub(in crate::engine) struct RuleDispatch {
+    /// Markers since the last rule in this phase count toward Coraza skip:N.
+    pub preceding_markers: u32,
+    /// A rule with no variables available in this phase still occupies a skip position.
+    pub inactive: bool,
+    /// This chain can be evaluated in multiple phases.
+    pub multiphase_chain: bool,
     pub targets: target_indices::TargetIndices,
     /// First logical rule for which a miss on this target plan proves nothing.
     pub after_empty_targets: usize,
@@ -62,6 +68,7 @@ impl RuleDispatch {
     fn compile(
         rule: &CompiledRule,
         rules: &Rules,
+        phase: Phase,
         programs: &crate::variables::SelectorPrograms,
         removed_tags: &HashSet<&str>,
         target_tags: &HashSet<&str>,
@@ -158,8 +165,8 @@ impl RuleDispatch {
                 Action::Flow(FlowAction::Skip(n)) => dispatch.flow = CompiledFlow::Skip(*n),
                 Action::Flow(FlowAction::SkipAfter(marker)) => {
                     let destination = rules
-                        .marker(marker, rule.phase)
-                        .unwrap_or(rules.for_phase(rule.phase).len());
+                        .marker(marker, phase)
+                        .unwrap_or(rules.for_phase(phase).len());
                     dispatch.flow = CompiledFlow::SkipAfter(destination);
                 }
                 Action::Disruptive(DisruptiveAction::Pass) => {
@@ -269,7 +276,7 @@ impl RuleDispatch {
 }
 
 impl CompiledRuleset {
-    pub(super) fn compile_dispatch(&mut self) {
+    pub(super) fn compile_dispatch(&mut self, schedule: Option<&super::multiphase::Schedule>) {
         // All updates, markers and possible transaction controls are known now.
         let mut removed_tags = HashSet::new();
         let mut target_tags = HashSet::new();
@@ -289,14 +296,23 @@ impl CompiledRuleset {
             let dispatch = &mut self.dispatch[phase.index()];
             *dispatch = rules
                 .iter()
-                .map(|rule| {
-                    RuleDispatch::compile(
+                .enumerate()
+                .map(|(index, rule)| {
+                    let mut plan = RuleDispatch::compile(
                         rule,
                         &self.rules,
+                        phase,
                         &self.selectors,
                         &removed_tags,
                         &target_tags,
-                    )
+                    );
+                    if let Some(schedule) = schedule {
+                        let entry = &schedule[phase.index()][index];
+                        plan.preceding_markers = entry.preceding_markers;
+                        plan.inactive = entry.inactive;
+                        plan.multiphase_chain = entry.repeated_chain;
+                    }
+                    plan
                 })
                 .collect();
             RuleDispatch::assign_numeric_tx_slots(dispatch);

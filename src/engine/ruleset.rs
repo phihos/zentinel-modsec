@@ -3,6 +3,7 @@
 mod compile;
 mod dispatch;
 mod edits;
+mod multiphase;
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -108,6 +109,7 @@ impl Rules {
 pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
+    rule_count: usize,
     dispatch: [Vec<RuleDispatch>; Phase::ALL.len()],
     pub(super) header_slots: [Vec<Box<[u8]>>; Phase::ALL.len()],
     pub(super) width_sources: [super::target_indices::WidthSources; Phase::ALL.len()],
@@ -157,7 +159,8 @@ impl CompiledRuleset {
         &self.body_config
     }
 
-    /// Get rules for a phase.
+    /// Get rules scheduled for a phase, in configuration order. In multiphase
+    /// mode each entry retains its declared phase and its phase-specific targets.
     pub fn rules_for_phase(&self, phase: Phase) -> &[CompiledRule] {
         self.rules.for_phase(phase)
     }
@@ -168,7 +171,7 @@ impl CompiledRuleset {
 
     /// Get total rule count.
     pub fn rule_count(&self) -> usize {
-        self.rules.count()
+        self.rule_count
     }
 
     /// Get engine mode.

@@ -35,7 +35,7 @@ impl TxDefaults {
         let mut last_count = None;
         let mut end = 0;
         for (index, (rule, plan)) in rules.iter().zip(dispatch).take(MAX_RULES).enumerate() {
-            if rule.is_chain || !matches!(plan.flow, CompiledFlow::Next) {
+            if plan.inactive || rule.is_chain || !matches!(plan.flow, CompiledFlow::Next) {
                 break;
             }
             let count =

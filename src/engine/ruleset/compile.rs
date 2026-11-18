@@ -4,7 +4,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use super::{
     edits::{apply_rule_edits, apply_target_updates},
-    has_chain, numeric_id, CompiledRule, CompiledRuleset, RuleEngineMode, Rules,
+    has_chain,
+    multiphase::SourceOrder,
+    numeric_id, CompiledRule, CompiledRuleset, RuleEngineMode, Rules,
 };
 use crate::engine::{control::CtlDirective, diagnostics, phase::Phase, split_operator_macro};
 use crate::error::{Error, Result};
@@ -17,7 +19,20 @@ use crate::transformations::TransformationPipeline;
 
 impl CompiledRuleset {
     /// Compile parsed directives into a ruleset.
-    pub fn compile(mut directives: Vec<Directive>) -> Result<Self> {
+    pub fn compile(directives: Vec<Directive>) -> Result<Self> {
+        Self::compile_with_order(directives, None)
+    }
+
+    /// Compile using Coraza's tagged multiphase evaluation. Rules can inspect
+    /// variables as soon as their source becomes available.
+    pub fn compile_multiphase(directives: Vec<Directive>) -> Result<Self> {
+        Self::compile_with_order(directives, Some(SourceOrder::default()))
+    }
+
+    fn compile_with_order(
+        mut directives: Vec<Directive>,
+        mut order: Option<SourceOrder>,
+    ) -> Result<Self> {
         apply_rule_edits(&mut directives)?;
         let mut ruleset = Self::new();
         let mut pending_chain: Option<(Phase, usize)> = None;
@@ -55,9 +70,13 @@ impl CompiledRuleset {
                     };
                 }
                 Directive::SecRule(rule) => {
-                    ruleset
-                        .rules
-                        .compile_rule(rule, &mut pending_chain, &datasets)?;
+                    let (phase, index) =
+                        ruleset
+                            .rules
+                            .compile_rule(rule, &mut pending_chain, &datasets)?;
+                    if let Some(order) = &mut order {
+                        order.rule(phase, index, &ruleset.rules.for_phase(phase)[index]);
+                    }
                 }
                 Directive::SecRuleUpdateTargetById(update) => {
                     // Applied after every rule is compiled: the directive may
@@ -69,6 +88,9 @@ impl CompiledRuleset {
                     target_updates.push((Some(update.tag), update.targets));
                 }
                 Directive::SecMarker(marker) => {
+                    if let Some(order) = &mut order {
+                        order.marker(marker.name.clone());
+                    }
                     ruleset.rules.add_marker(marker.name);
                 }
                 Directive::SecRequestBodyAccess(value) => {
@@ -117,7 +139,9 @@ impl CompiledRuleset {
 
         apply_target_updates(&mut ruleset, &target_updates);
         ruleset.compile_controls();
-        ruleset.compile_dispatch();
+        ruleset.rule_count = ruleset.rules.count();
+        let schedule = order.map(|order| order.build(&mut ruleset.rules));
+        ruleset.compile_dispatch(schedule.as_ref());
         ruleset.needs_upload_paths = ruleset
             .rules
             .by_phase
@@ -162,7 +186,7 @@ impl Rules {
         rule: SecRule,
         pending_chain: &mut Option<(Phase, usize)>,
         datasets: &HashMap<String, Vec<String>>,
-    ) -> Result<()> {
+    ) -> Result<(Phase, usize)> {
         // Continuations inherit their starter's phase, including when it differs
         // from the default phase of a rule without a phase action.
         let phase = pending_chain.map_or_else(|| extract_phase(&rule.actions), |(phase, _)| phase);
@@ -193,7 +217,7 @@ impl Rules {
             chain_next: None,
         });
         *pending_chain = is_chain.then_some((phase, index));
-        Ok(())
+        Ok((phase, index))
     }
 }
 
