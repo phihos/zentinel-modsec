@@ -570,3 +570,42 @@ fn stock_crs_blocks_attacks_and_passes_ordinary_traffic() {
         wrong.join("\n  ")
     );
 }
+
+/// Drive the upstream Apache internal-request exception (905110), including
+/// its anonymous final link, followed by tagged and untagged sentinel rules.
+#[test]
+fn crs_internal_request_exception_removes_only_tagged_rules() {
+    let Some(dir) = crs_dir() else { return };
+    let exceptions =
+        std::fs::canonicalize(dir.join("rules/REQUEST-905-COMMON-EXCEPTIONS.conf")).unwrap();
+    let engine = ModSecurity::from_string(&format!(
+        r#"
+SecRuleEngine On
+Include "{}"
+SecAction "id:1,phase:1,pass,tag:OWASP_CRS"
+SecAction "id:2,phase:1,pass"
+SecAction "id:3,phase:4,pass,tag:OWASP_CRS"
+SecAction "id:4,phase:4,pass"
+"#,
+        exceptions.display()
+    ))
+    .unwrap();
+    for (addr, expected) in [
+        ("127.0.0.1", vec!["905110", "2", "4"]),
+        ("192.0.2.1", vec!["1", "2", "3", "4"]),
+    ] {
+        let mut tx = engine.new_transaction();
+        tx.set_client_addr(addr, 42300);
+        tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+        tx.add_request_header("Host", "localhost").unwrap();
+        tx.add_request_header("User-Agent", "Apache (internal dummy connection)")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        tx.process_response_headers_with_status(200, "HTTP/1.1")
+            .unwrap();
+        tx.process_response_body().unwrap();
+        tx.process_logging().unwrap();
+        assert_eq!(tx.matched_rules(), expected);
+    }
+}
