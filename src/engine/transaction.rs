@@ -38,6 +38,7 @@ pub struct Transaction {
     /// Request data.
     request: RequestData,
     request_spool: Option<Box<RequestSpool>>,
+    pub(super) autodetect_structured_bodies: bool,
     request_line: OnceLock<Box<[u8]>>,
     connector_metadata: ConnectorMetadata,
     /// Response data.
@@ -265,6 +266,7 @@ impl Transaction {
             ),
             ruleset,
             request_spool: None,
+            autodetect_structured_bodies: true,
             request_line: OnceLock::new(),
             connector_metadata: ConnectorMetadata::default(),
             response: ResponseData::new(),
@@ -287,17 +289,11 @@ impl Transaction {
         }
     }
 
-    pub(crate) fn new_with_id(
-        ruleset: Arc<CompiledRuleset>,
-        default_status: u16,
-        id: &str,
-    ) -> Self {
-        let mut transaction = Self::new(ruleset, default_status);
+    pub(super) fn set_initial_id(&mut self, id: &str) {
         let id = id.trim();
         if !id.is_empty() {
-            transaction.request.unique_id = OnceLock::from(id.to_owned());
+            self.request.unique_id = OnceLock::from(id.to_owned());
         }
-        transaction
     }
 
     /// The identifier shared by the connector, rule targets and macros.
@@ -515,21 +511,24 @@ impl Transaction {
         if self.request.body_processor == "MULTIPART" {
             return "MULTIPART";
         }
-        let media = self
-            .request
-            .headers
-            .first_value_bytes(b"content-type")
-            .and_then(|header| {
-                let end = memchr::memchr(b';', header).unwrap_or(header.len());
-                std::str::from_utf8(&header[..end]).ok()
-            })
-            .unwrap_or_default()
-            .trim();
-        if structured_media_type(media, "application/xml", "text/xml", "xml") {
-            "XML"
-        } else if structured_media_type(media, "application/json", "text/json", "json") {
-            "JSON"
-        } else if self.request.body_processor == "URLENCODED"
+        if self.autodetect_structured_bodies {
+            let media = self
+                .request
+                .headers
+                .first_value_bytes(b"content-type")
+                .and_then(|header| {
+                    let end = memchr::memchr(b';', header).unwrap_or(header.len());
+                    std::str::from_utf8(&header[..end]).ok()
+                })
+                .unwrap_or_default()
+                .trim();
+            if structured_media_type(media, "application/xml", "text/xml", "xml") {
+                return "XML";
+            } else if structured_media_type(media, "application/json", "text/json", "json") {
+                return "JSON";
+            }
+        }
+        if self.request.body_processor == "URLENCODED"
             || self.controls.force_request_body_variable()
         {
             "URLENCODED"

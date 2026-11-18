@@ -216,3 +216,55 @@ SecRule ARGS_POST:x "@streq attack" "id:2,phase:2,pass""#,
     tx.process_request_body().unwrap();
     assert_eq!(tx.matched_rules(), ["1", "2"]);
 }
+
+#[test]
+fn coraza_processor_selection_requires_a_rule_for_json_and_xml() {
+    for explicit in [false, true] {
+        let mut engine = ModSecurity::from_string(
+            r#"SecRequestBodyAccess On
+SecRule REQUEST_HEADERS:Mode "@streq json" "id:1,phase:1,pass,ctl:requestBodyProcessor=JSON"
+SecRule REQUEST_HEADERS:Mode "@streq xml" "id:2,phase:1,pass,ctl:requestBodyProcessor=XML"
+SecRule ARGS:json.sample "@streq value" "id:3,phase:2,pass"
+SecRule XML:/* "@streq value" "id:4,phase:2,pass"
+SecRule ARGS:sample "@streq value" "id:5,phase:2,pass""#,
+        )
+        .unwrap();
+        engine.set_autodetect_structured_request_bodies(false);
+        for (media, body, mode, matched) in [
+            (
+                "application/json",
+                r#"{"sample":"value"}"#,
+                "json",
+                &["1", "3"][..],
+            ),
+            ("text/xml", "<sample>value</sample>", "xml", &["2", "4"][..]),
+            (
+                "application/x-www-form-urlencoded",
+                "sample=value",
+                "form",
+                &["5"][..],
+            ),
+        ] {
+            let mut tx = if explicit {
+                engine.new_transaction_with_id("selected")
+            } else {
+                engine.new_transaction()
+            };
+            tx.add_request_header("Content-Type", media).unwrap();
+            if explicit {
+                tx.add_request_header("Mode", mode).unwrap();
+            }
+            tx.process_request_headers().unwrap();
+            tx.write_request_body(body.as_bytes()).unwrap();
+            tx.process_request_body().unwrap();
+            assert_eq!(
+                tx.matched_rules(),
+                if explicit || mode == "form" {
+                    matched
+                } else {
+                    &[]
+                }
+            );
+        }
+    }
+}

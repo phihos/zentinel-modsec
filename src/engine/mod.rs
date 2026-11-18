@@ -40,6 +40,7 @@ pub struct ModSecurity {
     ruleset: Arc<CompiledRuleset>,
     /// Default block status code.
     default_status: u16,
+    autodetect_structured_bodies: bool,
 }
 
 impl ModSecurity {
@@ -48,6 +49,7 @@ impl ModSecurity {
         Self {
             ruleset: Arc::new(ruleset),
             default_status: 403,
+            autodetect_structured_bodies: true,
         }
     }
 
@@ -68,15 +70,28 @@ impl ModSecurity {
         self.default_status = status;
     }
 
+    /// Select JSON and XML request processors from Content-Type automatically.
+    ///
+    /// The default is enabled. Disable this for Coraza's policy of requiring
+    /// an explicit `ctl:requestBodyProcessor` for JSON and XML. Form and
+    /// multipart requests retain their automatic processors in both modes.
+    pub fn set_autodetect_structured_request_bodies(&mut self, enabled: bool) {
+        self.autodetect_structured_bodies = enabled;
+    }
+
     /// Create a new transaction for processing a request.
     pub fn new_transaction(&self) -> Transaction {
-        Transaction::new(Arc::clone(&self.ruleset), self.default_status)
+        let mut tx = Transaction::new(Arc::clone(&self.ruleset), self.default_status);
+        tx.autodetect_structured_bodies = self.autodetect_structured_bodies;
+        tx
     }
 
     /// Create a transaction with a connector-supplied identifier.
     /// Surrounding whitespace is trimmed. An empty ID requests a generated one.
     pub fn new_transaction_with_id(&self, id: &str) -> Transaction {
-        Transaction::new_with_id(Arc::clone(&self.ruleset), self.default_status, id)
+        let mut tx = self.new_transaction();
+        tx.set_initial_id(id);
+        tx
     }
 
     /// Get the ruleset.

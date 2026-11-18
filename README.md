@@ -387,7 +387,10 @@ An error preserves fields already parsed and sets `RES_BODY_ERROR` and
 `MULTIPART_PART_HEADERS`), JSON, XML and explicit RAW. Missing or unknown body
 types remain unprocessed unless `ctl:forceRequestBodyVariable=On` selects the
 URLENCODED fallback used by Coraza 3.8.1. RAW exposes the body without form
-argument extraction. Only RAW and URLENCODED populate `REQUEST_BODY` and its
+argument extraction. The engine also selects JSON and XML automatically from
+Content-Type. To use Coraza’s rule-controlled selection for these media types,
+call `engine.set_autodetect_structured_request_bodies(false)` before creating
+transactions. Explicit processor controls work in either mode. Only RAW and URLENCODED populate `REQUEST_BODY` and its
 length; structured processors leave these scalar values empty and zero.
 
 The JSON processor preserves numeric token spelling and duplicate member values.
