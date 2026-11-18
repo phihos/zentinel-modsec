@@ -1536,6 +1536,7 @@ impl Transaction {
             if prefix.is_empty() && output.is_empty() && suffix.is_empty() {
                 return Cow::Borrowed(value);
             }
+            output.reserve(prefix.len() + value.len());
             output.extend_from_slice(prefix.as_bytes());
             output.extend_from_slice(value);
             rest = suffix;
