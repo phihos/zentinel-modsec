@@ -1,5 +1,7 @@
 //! JSON Schema files are trusted configuration, loaded once with their rule.
 mod arena;
+mod recursive;
+mod reference;
 
 use super::{ByteOperatorResult, Operator, OperatorResult};
 use crate::{Error, Result};
@@ -10,6 +12,7 @@ use std::path::{Component, Path, PathBuf};
 pub(crate) struct SchemaOperator {
     validator: jsonschema::Validator,
     inspection_depth: Option<(usize, bool)>,
+    recursive: Option<recursive::Program>,
 }
 
 // Pin retrieval to the configuration directory. This overrides any network/file
@@ -72,9 +75,17 @@ impl SchemaOperator {
             .with_retriever(SchemaDirectory(root))
             .should_validate_formats(false)
             .build(&schema)
-            .map(|validator| Self {
-                validator,
-                inspection_depth: inspection_depth(&schema),
+            .map(|validator| {
+                let inspection_depth = inspection_depth(&schema);
+                let recursive = inspection_depth
+                    .is_none()
+                    .then(|| recursive::Program::compile(&schema, &base, validator.draft()))
+                    .flatten();
+                Self {
+                    validator,
+                    inspection_depth,
+                    recursive,
+                }
             })
             .map_err(|e| error(e.to_string()))
     }
@@ -255,7 +266,11 @@ fn inspection_depth(schema: &Value) -> Option<(usize, bool)> {
 
 // Intern exact scalar values and containers of child IDs. Keys in this map
 // are at most one container deep, including during hashing, equality and drop.
-fn intern_subtree(mut bytes: &[u8], ids: &mut HashMap<Value, usize>) -> Option<usize> {
+fn intern_subtree(
+    mut bytes: &[u8],
+    ids: &mut HashMap<Value, usize>,
+    store_names: bool,
+) -> Option<usize> {
     let mut frames = Vec::<(Value, Option<String>)>::new();
     while let Some((&byte, rest)) = bytes.split_first() {
         let mut node = match byte {
@@ -288,6 +303,10 @@ fn intern_subtree(mut bytes: &[u8], ids: &mut HashMap<Value, usize>) -> Option<u
                 bytes = &bytes[tokens.byte_offset()..];
                 if let Some((Value::Object(_), key @ None)) = frames.last_mut() {
                     *key = Some(value.as_str()?.to_owned());
+                    if store_names {
+                        let next = ids.len();
+                        ids.entry(value).or_insert(next);
+                    }
                     continue;
                 }
                 value
@@ -358,6 +377,7 @@ fn project_deep_json(input: &[u8], (visible, unique): (usize, bool)) -> Option<s
                         let id = intern_subtree(
                             &raw.as_bytes()[omitted_start..=copy_from],
                             &mut identities,
+                            false,
                         )?;
                         if byte == b'}' {
                             projected.extend_from_slice(br#""":"#);
@@ -400,6 +420,10 @@ impl Operator for SchemaOperator {
         let valid = value.is_empty()
             || match serde_json::from_slice(value) {
                 Ok(instance) => self.validator.is_valid(&instance),
+                Err(_) if self.recursive.is_some() => self
+                    .recursive
+                    .as_ref()
+                    .is_some_and(|program| program.is_valid(value)),
                 Err(_) => self
                     .inspection_depth
                     .and_then(|depth| project_deep_json(value, depth))

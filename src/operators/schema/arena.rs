@@ -6,18 +6,32 @@ use std::collections::HashMap;
 pub(super) struct Arena {
     nodes: Vec<Value>,
     pub(super) root: usize,
+    names: HashMap<String, usize>,
 }
 
 impl Arena {
-    pub(super) fn parse(input: &[u8]) -> Option<Self> {
+    pub(super) fn parse(input: &[u8], store_names: bool) -> Option<Self> {
         let raw = serde_json::from_slice::<&serde_json::value::RawValue>(input).ok()?;
         let mut ids = HashMap::new();
-        let root = intern_subtree(raw.get().as_bytes(), &mut ids)?;
+        let root = intern_subtree(raw.get().as_bytes(), &mut ids, store_names)?;
         let mut nodes = vec![Value::Null; ids.len()];
         for (node, index) in ids {
             nodes[index] = node;
         }
-        Some(Self { nodes, root })
+        let names = if store_names {
+            nodes
+                .iter()
+                .enumerate()
+                .filter_map(|(id, v)| Some((v.as_str()?.to_owned(), id)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+        Some(Self { nodes, root, names })
+    }
+
+    pub(super) fn name(&self, key: &str) -> usize {
+        self.names[key]
     }
 
     pub(super) fn nodes(&self) -> &[Value] {
@@ -63,18 +77,24 @@ mod tests {
     use super::*;
     #[test]
     fn interns_only_shallow_nodes_and_preserves_equivalent_subtrees() {
-        let a = Arena::parse(br#"[[{"a":1,"b":0}],[{"b":0,"a":1.0}],[{"a":1,"b":-0.0}]]"#).unwrap();
+        let a = Arena::parse(
+            br#"[[{"a":1,"b":0}],[{"b":0,"a":1.0}],[{"a":1,"b":-0.0}]]"#,
+            false,
+        )
+        .unwrap();
         let children = a.nodes()[a.root].as_array().unwrap();
         assert_eq!(children[0], children[1]);
         assert_ne!(children[0], children[2]);
-        assert!(
-            Arena::parse(format!("{}1{}", "[".repeat(10_000), "]".repeat(10_000)).as_bytes())
-                .is_some()
-        );
-        assert!(
-            Arena::parse(format!("{}1{}", "[".repeat(10_001), "]".repeat(10_001)).as_bytes())
-                .is_none()
-        );
-        assert!(Arena::parse(b"[1e400]").is_none());
+        assert!(Arena::parse(
+            format!("{}1{}", "[".repeat(10_000), "]".repeat(10_000)).as_bytes(),
+            false
+        )
+        .is_some());
+        assert!(Arena::parse(
+            format!("{}1{}", "[".repeat(10_001), "]".repeat(10_001)).as_bytes(),
+            false
+        )
+        .is_none());
+        assert!(Arena::parse(b"[1e400]", false).is_none());
     }
 }
