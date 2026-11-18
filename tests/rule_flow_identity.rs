@@ -270,3 +270,19 @@ SecRule TX:orphan "@eq 1" "id:40,phase:1,pass"
         .is_err());
     }
 }
+
+#[test]
+fn static_removal_reads_continued_lines_and_literal_inline_hashes() {
+    for newline in ["\n", "\r\n"] {
+        let config = [
+            r#"SecAction "id:1,phase:1,pass,msg:'First  token #Last'""#,
+            "SecRuleRemoveByMsg First  \\",
+            "   # Comment between continued lines",
+            "",
+            "    token #Last",
+        ];
+        // A physical comment is skipped before concatenating the next line.
+        let rules = config.join(newline);
+        assert!(matches(&rules).is_empty());
+    }
+}
