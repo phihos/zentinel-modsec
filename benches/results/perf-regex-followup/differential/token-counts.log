@@ -1,0 +1,12 @@
+   Compiling zentinel-modsec v0.6.0 (/tmp/zentinel-token-counts)
+    Finished `release` profile [optimized] target(s) in 19.72s
+     Running unittests src/lib.rs (/tmp/zentinel-next-regex-target/release/deps/zentinel_modsec-4b42985b4d595045)
+
+running 1 test
+get total=263 old_rejected=191 new_rejected=206 new_skips=26 lost_skips=11
+form total=470 old_rejected=372 new_rejected=401 new_skips=38 lost_skips=9
+json total=632 old_rejected=327 new_rejected=503 new_skips=185 lost_skips=9
+test operators::pattern::count_widths ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 193 filtered out; finished in 0.56s
+

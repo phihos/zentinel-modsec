@@ -1,0 +1,26 @@
+{
+  "previous": {
+    "primary": "2d3ba5a00097a3dbbbf3e4db7cb2e9c396d31c85",
+    "benchmark": "ce20b3ad03ddcc07d46b7991f0a539cf42f81261",
+    "source_tree": "1863e442431b1ca794b24835a188bc416ad03100",
+    "test_tree": "4bf3e36b804bfb8db6a534ead52d07e692f1820e",
+    "files_differing_between_primary_and_benchmark": [
+      "HANDOFF-CODEX.md",
+      "benches/README.md",
+      "benches/modsec_bench.rs",
+      "benches/modsec_bench/full_crs.rs"
+    ]
+  },
+  "candidate": {
+    "primary": "2725d4b7dd652297d470b48fdfc0ca8058910db6",
+    "benchmark": "24a6186c2207c15c861fe5444284ffdd0ba3ebcf",
+    "source_tree": "62cdf66c78b467107b622aa0a582d31bd0a30104",
+    "test_tree": "4bf3e36b804bfb8db6a534ead52d07e692f1820e",
+    "files_differing_between_primary_and_benchmark": [
+      "HANDOFF-CODEX.md",
+      "benches/README.md",
+      "benches/modsec_bench.rs",
+      "benches/modsec_bench/full_crs.rs"
+    ]
+  }
+}

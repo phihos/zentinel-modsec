@@ -1,0 +1,50 @@
+   Compiling zentinel-modsec v0.6.0 (/home/phil/Quellcode/zentinel-review-worktrees/tx-default-profile)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.54s
+     Running unittests src/lib.rs (/home/phil/Quellcode/zentinel-modsec/target/debug/deps/zentinel_modsec-bfe5a47c17dfd4e7)
+
+running 1 test
+0 id=Some("900990") op=UnconditionalMatch target=[] single=false control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+1 id=Some("901001") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("crs_setup_version")), count_mode: true, exclusions: [] }] single=true control=false sets=[] disrupt=Some(Deny) flow_next=true cap=false
+2 id=Some("901100") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("inbound_anomaly_score_threshold")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+3 id=Some("901110") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("outbound_anomaly_score_threshold")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+4 id=Some("901111") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("reporting_level")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+5 id=Some("901115") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("early_blocking")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+6 id=Some("901120") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("blocking_paranoia_level")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+7 id=Some("901125") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("detection_paranoia_level")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, false)] disrupt=None flow_next=true cap=false
+8 id=Some("901130") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("sampling_percentage")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+9 id=Some("901140") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("critical_anomaly_score")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+10 id=Some("901141") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("error_anomaly_score")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+11 id=Some("901142") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("warning_anomaly_score")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+12 id=Some("901143") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("notice_anomaly_score")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+13 id=Some("901160") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("allowed_methods")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+14 id=Some("901162") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("allowed_request_content_type")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+15 id=Some("901168") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("allowed_request_content_type_charset")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+16 id=Some("901163") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("allowed_http_versions")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+17 id=Some("901164") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("restricted_extensions")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+18 id=Some("901165") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("restricted_headers_basic")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+19 id=Some("901171") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("restricted_headers_extended")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+20 id=Some("901510") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("allow_method_override_parameter")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+21 id=Some("901167") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("enforce_bodyproc_urlencoded")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+22 id=Some("901169") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("crs_validate_utf8_encoding")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+23 id=Some("901170") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("crs_skip_response_analysis")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, true)] disrupt=None flow_next=true cap=false
+24 id=Some("901200") op=UnconditionalMatch target=[] single=false control=false sets=[(true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true), (true, true)] disrupt=None flow_next=true cap=false
+25 id=Some("901320") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("ENABLE_DEFAULT_COLLECTIONS")), count_mode: true, exclusions: [] }] single=true control=false sets=[(true, false)] disrupt=None flow_next=false cap=false
+26 id=None op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("ENABLE_DEFAULT_COLLECTIONS")), count_mode: false, exclusions: [] }] single=true control=false sets=[] disrupt=None flow_next=false cap=false
+27 id=None op=UnconditionalMatch target=[VariableSpec { name: Tx, selection: Some(Key("ua_hash")), count_mode: false, exclusions: [] }] single=false control=false sets=[] disrupt=None flow_next=true cap=false
+28 id=Some("901340") op=Rx target=[VariableSpec { name: ReqBodyProcessor, selection: None, count_mode: false, exclusions: [] }] single=false control=true sets=[] disrupt=None flow_next=true cap=false
+29 id=Some("901350") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("enforce_bodyproc_urlencoded")), count_mode: false, exclusions: [] }] single=false control=false sets=[] disrupt=None flow_next=false cap=false
+30 id=None op=Rx target=[VariableSpec { name: ReqBodyProcessor, selection: None, count_mode: false, exclusions: [] }] single=false control=true sets=[] disrupt=None flow_next=true cap=false
+31 id=Some("901400") op=Eq target=[VariableSpec { name: Tx, selection: Some(Key("sampling_percentage")), count_mode: false, exclusions: [] }] single=true control=false sets=[] disrupt=None flow_next=false cap=false
+32 id=Some("901410") op=Rx target=[VariableSpec { name: UniqueId, selection: None, count_mode: false, exclusions: [] }] single=false control=false sets=[(true, false)] disrupt=None flow_next=true cap=true
+33 id=Some("901450") op=Lt target=[VariableSpec { name: Tx, selection: Some(Key("sampling_rnd100")), count_mode: false, exclusions: [] }] single=false control=true sets=[] disrupt=None flow_next=true cap=false
+34 id=Some("901500") op=Lt target=[VariableSpec { name: Tx, selection: Some(Key("detection_paranoia_level")), count_mode: false, exclusions: [] }] single=false control=false sets=[] disrupt=Some(Deny) flow_next=true cap=false
+35 id=Some("905100") op=StreQ target=[VariableSpec { name: RequestLine, selection: None, count_mode: false, exclusions: [] }] single=false control=false sets=[] disrupt=None flow_next=false cap=false
+36 id=None op=IpMatch target=[VariableSpec { name: RemoteAddr, selection: None, count_mode: false, exclusions: [] }] single=false control=true sets=[] disrupt=None flow_next=true cap=false
+37 id=Some("905110") op=IpMatch target=[VariableSpec { name: RemoteAddr, selection: None, count_mode: false, exclusions: [] }] single=false control=false sets=[] disrupt=None flow_next=false cap=false
+38 id=None op=EndsWith target=[VariableSpec { name: RequestHeaders, selection: Some(Key("User-Agent")), count_mode: false, exclusions: [] }] single=false control=false sets=[] disrupt=None flow_next=false cap=false
+39 id=None op=Rx target=[VariableSpec { name: RequestLine, selection: None, count_mode: false, exclusions: [] }] single=false control=true sets=[] disrupt=None flow_next=true cap=false
+plan 25 rules 44 assignments 24 ids 22 counts
+test engine::initialization::inspect_full_crs_plan ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 193 filtered out; finished in 3.72s
+

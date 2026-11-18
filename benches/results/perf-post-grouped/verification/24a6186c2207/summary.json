@@ -1,0 +1,75 @@
+{
+  "commit": "24a6186c2207c15c861fe5444284ffdd0ba3ebcf",
+  "source_tree": "952058b57c43ee6e8ef971d3bee403e64f4786c8",
+  "native_crs": "30cb436b261a9f5ec32a5a0677e17f3cfa1a8739",
+  "external_crs_release": "4.25.0",
+  "format": 0,
+  "whitespace": 0,
+  "backends": {
+    "default": {
+      "all_target_tests_passed": 681,
+      "all_target_tests_ignored": 0,
+      "strict_clippy": 0,
+      "benchmark_preflights": 3,
+      "native_stages": {
+        "evaluated": 5187,
+        "passed": 5096,
+        "skipped": 76,
+        "identical_to_reference": true,
+        "sha256": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b"
+      },
+      "blocking_cases_identical_to_coraza": 22,
+      "complete_audit_records_identical_to_baseline": 24,
+      "external_crs": {
+        "success": 4655,
+        "failed": 17,
+        "errored": 1
+      },
+      "external_case_sets_identical_to_coraza_and_reference": true
+    },
+    "ffi": {
+      "all_target_tests_passed": 683,
+      "all_target_tests_ignored": 1,
+      "strict_clippy": 0,
+      "benchmark_preflights": 3,
+      "native_stages": {
+        "evaluated": 5187,
+        "passed": 5096,
+        "skipped": 76,
+        "identical_to_reference": true,
+        "sha256": "910d3d4c933589eb6ebba24f12acf297a453da6de119690456c9fb9e9525a98b"
+      },
+      "blocking_cases_identical_to_coraza": 22,
+      "complete_audit_records_identical_to_baseline": 24,
+      "external_crs": {
+        "success": 4655,
+        "failed": 17,
+        "errored": 1
+      },
+      "external_case_sets_identical_to_coraza_and_reference": true
+    }
+  },
+  "receipt_hashes": {
+    "receipt.json": "1c9ea0c88482edff3950cb11a4c3775753a23062132337ad8cdb062743dc99f7",
+    "all-checks/receipt.json": "f71c722dd87d93298e7002ee0595773c02d6a4e8e210cf5a3d3f39203501c541",
+    "external/receipt.json": "831210a1107e113037e4a02757d1869c785594ec75d093ef1f91485964639f75"
+  },
+  "reference_detector_corpus": {
+    "git": "7244a1e3c633ea13b3c89d2f670da25789e152fc",
+    "exit": 0,
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "--release",
+      "--features",
+      "libinjection-ffi",
+      "--test",
+      "libinjection_conformance",
+      "--",
+      "--include-ignored"
+    ],
+    "log_sha256": "78eee1c03bd98427a73aee3d312c97304497d92c87bdfa3f0297baa30df18bf5"
+  }
+}

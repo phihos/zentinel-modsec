@@ -12,7 +12,7 @@ Across 24 mixed fixtures, default Rust p50 went from 163.2 to 155.2 µs and p99
 from 203.6 to 186.5 µs. Fresh full-CRS loading measured 279.4 to 277.5 ms.
 Both detector backends retained the same corpus outcomes, blocking traces and
 complete audit records. The final regex differential found zero mismatches in
-20,044,080 comparisons. The [local report and raw measurements](../zentinel-eval/results/perf-regex-followup/RESULTS.md)
+20,044,080 comparisons. The [local report and raw measurements](benches/results/perf-regex-followup/RESULTS.md)
 include the workload definitions, process-pair results and concurrent checks.
 
 ## Regex match-width checkpoint at `a213869`
@@ -25,7 +25,7 @@ default Rust p50 went from 177.2 to 161.5 µs and p99 from 218.9 to 204.7 µs.
 Fresh full-CRS loading went from 265.4 to 273.9 ms.
 
 Both detector backends retained the external corpus outcomes, 22 blocking traces
-and 24 full audit records. The local [report and raw measurements](../zentinel-eval/results/perf-post-grouped/RESULTS.md)
+and 24 full audit records. The local [report and raw measurements](benches/results/perf-post-grouped/RESULTS.md)
 identify the benchmark revisions and the separate cold-load and regex checks.
 
 ## Request target and TX checkpoint at `3594fa0`
