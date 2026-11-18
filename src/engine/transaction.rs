@@ -1,5 +1,6 @@
 //! Transaction processing for ModSecurity.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use super::body::{BodyState, BodyWriteResult};
@@ -264,8 +265,8 @@ impl Transaction {
         }
         Some(RuleMessage {
             rule_id: id?.to_string(),
-            message: msg.map(|s| self.expand_operator_macros_bytes(s)),
-            logdata: logdata.map(|s| self.expand_operator_macros_bytes(s)),
+            message: msg.map(|s| self.expand_operator_macros_bytes(s).into_owned()),
+            logdata: logdata.map(|s| self.expand_operator_macros_bytes(s).into_owned()),
         })
     }
 
@@ -1390,56 +1391,86 @@ impl Transaction {
         Ok(outcome)
     }
 
-    /// Expand `%{...}` macros in an operator argument against current TX state.
-    ///
-    /// Resolved: the `TX` collection (thresholds, `tx.allowed_methods`),
-    /// `ARGS`/`ARGS_GET`/`ARGS_POST`, `REQUEST_HEADERS.<name>` and
-    /// `MATCHED_VAR`/`MATCHED_VAR_NAME`. Anything
-    /// else expands to an empty string.
-    fn expand_operator_macros_bytes(&self, arg: &str) -> Vec<u8> {
-        static MACRO: once_cell::sync::Lazy<regex::Regex> =
-            once_cell::sync::Lazy::new(|| regex::Regex::new(r"%\{([^}]+)\}").unwrap());
-        let mut out = Vec::with_capacity(arg.len());
-        let mut end = 0;
-        for captures in MACRO.captures_iter(arg) {
-            let whole = captures.get(0).unwrap();
-            out.extend_from_slice(&arg.as_bytes()[end..whole.start()]);
-            let name = &captures[1];
-            let lower = name.to_ascii_lowercase();
-            let value = match lower.as_str() {
-                "matched_var" => self.matched_vars.last().map(|(_, v)| v.as_bytes()),
-                "matched_var_name" => self.matched_vars.last().map(|(k, _)| k.as_bytes()),
-                _ => {
-                    let (collection, key) = name.split_once('.').unwrap_or(("tx", name));
-                    let values = match collection.to_ascii_lowercase().as_str() {
-                        "tx" => self.tx.get_bytes(key.as_bytes()),
-                        "request_headers" => self
-                            .request
-                            .headers
-                            .get_bytes(key.to_ascii_lowercase().as_bytes()),
-                        "args" => self
-                            .request
-                            .args_get
-                            .get_bytes(key.as_bytes())
-                            .or_else(|| self.request.args_post.get_bytes(key.as_bytes())),
-                        "args_get" => self.request.args_get.get_bytes(key.as_bytes()),
-                        "args_post" => self.request.args_post.get_bytes(key.as_bytes()),
-                        _ => None,
-                    };
-                    values.and_then(|v| v.first().copied())
-                }
+    /// Expand against current transaction state. Literal text and standalone
+    /// macro values can be borrowed until the caller needs to store a snapshot.
+    fn expand_operator_macros_bytes<'a>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
+        let mut output = Vec::new();
+        let mut rest = arg;
+        let mut search_from = 0;
+        while let Some(offset) = rest[search_from..].find("%{") {
+            let start = search_from + offset;
+            let Some((name, suffix)) = rest[start + 2..].split_once('}') else {
+                break;
             };
-            if let Some(value) = value {
-                out.extend_from_slice(value);
-            } else if lower.split_once('.').is_some_and(|(collection, _)| {
-                matches!(collection, "args" | "args_get" | "args_post")
-            }) {
-                out.extend_from_slice(name.as_bytes());
+            if name.is_empty() {
+                // An empty placeholder is literal text. Keep looking after it.
+                search_from = start + 3;
+                continue;
             }
-            end = whole.end();
+
+            let value = self.macro_value_bytes(name);
+            if start == 0 && output.is_empty() && suffix.is_empty() {
+                return Cow::Borrowed(value);
+            }
+            output.extend_from_slice(&rest.as_bytes()[..start]);
+            output.extend_from_slice(value);
+            rest = suffix;
+            search_from = 0;
         }
-        out.extend_from_slice(&arg.as_bytes()[end..]);
-        out
+        if output.is_empty() {
+            Cow::Borrowed(rest.as_bytes())
+        } else {
+            output.extend_from_slice(rest.as_bytes());
+            Cow::Owned(output)
+        }
+    }
+
+    fn macro_value_bytes<'a>(&'a self, name: &'a str) -> &'a [u8] {
+        let Some((collection, key)) = name.split_once('.') else {
+            if name.eq_ignore_ascii_case("matched_var") {
+                return self
+                    .matched_vars
+                    .last()
+                    .map(|(_, v)| v.as_bytes())
+                    .unwrap_or_default();
+            }
+            if name.eq_ignore_ascii_case("matched_var_name") {
+                return self
+                    .matched_vars
+                    .last()
+                    .map(|(k, _)| k.as_bytes())
+                    .unwrap_or_default();
+            }
+            return self
+                .tx
+                .first_value_bytes(name.as_bytes())
+                .unwrap_or_default();
+        };
+        let key = key.as_bytes();
+        if collection.eq_ignore_ascii_case("tx") {
+            return self.tx.first_value_bytes(key).unwrap_or_default();
+        }
+        if collection.eq_ignore_ascii_case("request_headers") {
+            return self
+                .request
+                .headers
+                .first_value_bytes(key)
+                .unwrap_or_default();
+        }
+        let value = if collection.eq_ignore_ascii_case("args") {
+            self.request
+                .args_get
+                .first_value_bytes(key)
+                .or_else(|| self.request.args_post.first_value_bytes(key))
+        } else if collection.eq_ignore_ascii_case("args_get") {
+            self.request.args_get.first_value_bytes(key)
+        } else if collection.eq_ignore_ascii_case("args_post") {
+            self.request.args_post.first_value_bytes(key)
+        } else {
+            return &[];
+        };
+        // A missing ARGS macro expands to its original name.
+        value.unwrap_or(name.as_bytes())
     }
 
     /// Publish the captures of a `capture` rule as `TX:0`..`TX:9`.
@@ -1470,9 +1501,8 @@ impl Transaction {
 
     /// Apply a setvar operation.
     fn apply_setvar(&mut self, op: &SetVarSpec, rule_id: Option<&str>) {
-        use std::borrow::Cow;
         let name = if op.key.contains("%{") {
-            Cow::Owned(self.expand_operator_macros_bytes(&op.key))
+            Cow::Owned(self.expand_operator_macros_bytes(&op.key).into_owned())
         } else {
             Cow::Borrowed(op.key.as_bytes())
         };
@@ -1493,6 +1523,7 @@ impl Transaction {
                 let operand = self.expand_operator_macros_bytes(operand);
                 match kind {
                     SetVarKind::Set => {
+                        let operand = operand.into_owned();
                         let change = record.map(|_| match std::str::from_utf8(&operand) {
                             Ok(text) => SetVarChange::Set(text.to_owned()),
                             Err(_) => SetVarChange::SetBytes(operand.clone()),
@@ -1610,6 +1641,30 @@ mod tests {
 
     fn make_ruleset(rules: &str) -> Arc<CompiledRuleset> {
         Arc::new(CompiledRuleset::from_string(rules).unwrap())
+    }
+
+    #[test]
+    fn macro_expansion_preserves_literals_and_first_binary_values() {
+        let mut tx = Transaction::new(make_ruleset(""), 403);
+        tx.tx.set_bytes("x", "value");
+        tx.request.args_get.add_bytes("label", b"\xff".as_slice());
+        tx.request.args_get.add_bytes("label", "later");
+        tx.request.args_post.add_bytes("label", "body");
+        tx.request.add_header_bytes(b"X-Report", b"summary");
+
+        for (template, expected) in [
+            ("%{x}", b"value".as_slice()),
+            ("%%{x}-%{}-%{Tx.X}-%{", b"%value-%{}-value-%{"),
+            ("%{tx.a%{x}}", b"}"),
+            ("%{tX.absent}%{ARGS.Label}", b"\xff"),
+            ("%{arGs_Get.label}%{args_post.label}", b"\xffbody"),
+            ("%{ArGs.Missing}", b"ArGs.Missing"),
+            ("%{Request_Headers.X-REPORT}", b"summary"),
+            ("%{unknown.foo} and %{matched_var}", b" and "),
+            ("%{x}%{x}", b"valuevalue"),
+        ] {
+            assert_eq!(tx.expand_operator_macros_bytes(template).as_ref(), expected);
+        }
     }
 
     #[test]

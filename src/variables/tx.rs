@@ -34,6 +34,10 @@ impl TxCollection {
         &self.data
     }
 
+    pub(crate) fn first_value_bytes(&self, key: &[u8]) -> Option<&[u8]> {
+        self.data.first_value_bytes(&folded_key(key))
+    }
+
     /// Create a new TX collection.
     pub fn new() -> Self {
         Self::default()
@@ -57,11 +61,8 @@ impl TxCollection {
     /// Coraza on 64-bit targets. A nonnumeric value starts at zero.
     pub fn increment_bytes(&mut self, key: &[u8], amount: i64) {
         let current = self
-            .get_bytes(key)
-            .and_then(|v| {
-                v.first()
-                    .and_then(|v| std::str::from_utf8(v).ok()?.parse::<i64>().ok())
-            })
+            .first_value_bytes(key)
+            .and_then(|v| std::str::from_utf8(v).ok()?.parse::<i64>().ok())
             .unwrap_or(0);
         self.set_bytes(key.to_vec(), current.wrapping_add(amount).to_string());
     }
