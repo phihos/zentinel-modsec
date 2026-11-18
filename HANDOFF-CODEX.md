@@ -2,6 +2,25 @@
 
 ## Current local checkpoint
 
+Engine commit `92a6e0bd0de0fd9ba4f803c50b419dc6b75acfe1` on
+`spike/crs-parity` stores short text inline, shares binary match evidence
+and formats its escaped text on demand. The evaluator resolves targets
+in place, skips collections removed by tag controls, and reduces dispatch
+cost for empty and single-stage byte transformation pipelines.
+
+Compared with `df9f095` on the same full CRS, default Rust GET p50 fell
+from 89.03 to 78.11 µs and form POST from 191.34 to 165.04 µs. Both
+improved in all eight paired rounds, including with audit data read on every
+request. The mixed GET, form and nested-JSON workload fell from 261.02 to
+227.03 µs at p50 and from 329.34 to 308.63 µs at p99. GET allocations fell
+from 792 to 427 and form POST from 1,056 to 627. All 13 repository checks
+passed. Both backends reproduced the pinned corpus outcomes, blocking
+traces and complete mixed-request audit evidence. The
+[local performance and correctness report](../zentinel-eval/results/latency-a11fb89/RESULTS.md)
+includes the workload definitions, full distributions and binary-input results.
+
+## Selector and audit checkpoint at `df9f095`
+
 Engine commit `df9f095d9a804fc68ab7f259218899b0d2e90c19` on
 `spike/crs-parity` prepares collection selectors after configuration updates,
 skips empty collection resolution, visits scalar values directly and builds
