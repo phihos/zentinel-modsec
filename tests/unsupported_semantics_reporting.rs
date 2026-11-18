@@ -56,12 +56,23 @@ fn placeholder_operators_report_the_affected_rule_at_load() {
 }
 
 #[test]
-fn approximated_operator_reports_the_affected_rule_at_load() {
-    let (_, log) = load_logs(r#"SecRule ARGS "@strmatch example" "id:102,phase:2,pass""#);
-    assert!(
-        log.contains("operator") && log.contains("rule_ids=102"),
-        "{log}"
+fn strmatch_and_geo_preserve_capture_slots() {
+    use zentinel_modsec::variables::Collection;
+    let (engine, log) = load_logs(
+        r#"
+SecAction "id:1,phase:1,pass,setvar:tx.0=prior,setvar:tx.needle=ET"
+SecRule REQUEST_METHOD "@strmatch %{tx.needle}" "id:2,phase:1,pass,capture"
+SecRule REQUEST_METHOD "@strmatch et" "id:3,phase:1,pass"
+SecRule REQUEST_METHOD "@geoLookup" "id:4,phase:1,pass,capture"
+SecRule REQUEST_METHOD "!@geoLookup" "id:5,phase:1,pass""#,
     );
+    assert!(log.contains("leaves GEO empty") && log.contains("rule_ids=4"));
+    assert!(!log.contains("StrMatch"));
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "4"]);
+    assert_eq!(tx.tx().get("0"), Some(vec!["prior"]));
 }
 
 #[test]

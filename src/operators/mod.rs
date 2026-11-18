@@ -72,7 +72,9 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
             Ok(Arc::new(IpMatchOperator::from_file(argument)?))
         }
         OperatorName::NoMatch => Ok(Arc::new(NoMatchOperator)),
-        OperatorName::UnconditionalMatch => Ok(Arc::new(UnconditionalMatchOperator)),
+        OperatorName::GeoLookup | OperatorName::UnconditionalMatch => {
+            Ok(Arc::new(UnconditionalMatchOperator))
+        }
         OperatorName::ValidateByteRange => {
             Ok(Arc::new(ValidateByteRangeOperator::try_new(argument)?))
         }
@@ -85,9 +87,7 @@ pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
             std::path::Path::new("."),
         )?)),
         OperatorName::ValidateHash | OperatorName::ValidateDtd => Ok(Arc::new(NoMatchOperator)),
-        OperatorName::Rbl | OperatorName::GeoLookup | OperatorName::GsbLookup => {
-            Ok(Arc::new(NoMatchOperator))
-        }
+        OperatorName::Rbl | OperatorName::GsbLookup => Ok(Arc::new(NoMatchOperator)),
         OperatorName::InspectFile | OperatorName::FuzzyHash | OperatorName::Rsub => {
             Ok(Arc::new(NoMatchOperator))
         }

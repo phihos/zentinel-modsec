@@ -42,7 +42,7 @@ pub enum OperatorName {
     EndsWith,
     /// Within list.
     Within,
-    /// String match (single pattern, case-insensitive).
+    /// Case-sensitive substring match.
     StrMatch,
 
     // Numeric comparison

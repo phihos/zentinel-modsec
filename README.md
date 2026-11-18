@@ -310,7 +310,9 @@ the next matching start, including starts inside an earlier match.
 `@containsWord` follows ModSecurity v3. It matches case-sensitive bytes bounded
 by the input edges or bytes outside ASCII A–Z and a–z. An empty operand matches
 every value. Coraza 3.8.1 does not implement this operator. `@strmatch` uses
-substring matching and emits a load-time compatibility warning.
+case-sensitive substring matching, including macro-expanded operands. Neither
+`@strmatch` nor `@geoLookup` writes capture slots. As in Coraza 3.8.1,
+`@geoLookup` always matches and leaves GEO empty.
 
 `@validateByteRange` accepts decimal bytes and inclusive ranges, for example
 `9,13,32-126`. Rules with an invalid static entry fail at load. A macro-supplied
@@ -334,7 +336,7 @@ references, and schemas the depth analysis cannot resolve,
 the operator reports a violation at 128 nested containers.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
-`@validateHash`, `@validateDTD`, `@rbl`, `@geoLookup`,
+`@validateHash`, `@validateDTD`, `@rbl`,
 `@gsbLookup`, `@inspectFile`, `@fuzzyHash`, `@rsub`. A rule that depends on one
 of them cannot perform the requested check; negating a placeholder can make
 it match. These operators produce load-time warnings with rule IDs.

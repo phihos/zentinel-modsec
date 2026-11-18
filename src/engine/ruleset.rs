@@ -220,7 +220,12 @@ impl RuleDispatch {
         let mut setvars = Vec::new();
         for (index, action) in rule.actions.iter().enumerate() {
             match action {
-                Action::Data(DataAction::Capture) => dispatch.capture = true,
+                Action::Data(DataAction::Capture) => {
+                    dispatch.capture = !matches!(
+                        rule.operator_spec.name,
+                        OperatorName::GeoLookup | OperatorName::StrMatch
+                    );
+                }
                 Action::Data(DataAction::SetVar(op)) => {
                     setvars.push(CompiledSetVar {
                         action_index: index,
