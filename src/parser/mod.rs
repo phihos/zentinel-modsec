@@ -60,6 +60,9 @@ pub struct Parser {
     /// each of the five phases -- so a single flat list would let the last
     /// directive parsed govern every phase.
     default_actions: HashMap<u8, Vec<Action>>,
+    // After an update can create a chain, the compiler needs to distinguish
+    // explicitly disruptive child actions from inherited defaults.
+    defer_defaults: bool,
 }
 
 impl Parser {
@@ -70,6 +73,7 @@ impl Parser {
             include_count: 0,
             location: SourceLocation::default(),
             default_actions: HashMap::new(),
+            defer_defaults: false,
         }
     }
 
@@ -79,11 +83,13 @@ impl Parser {
         let count = self.directives.len();
         let includes = self.include_count;
         let defaults = self.default_actions.clone();
+        let defer_defaults = self.defer_defaults;
         let location = self.location.clone();
         if let Err(error) = parse(self) {
             self.directives.truncate(count);
             self.include_count = includes;
             self.default_actions = defaults;
+            self.defer_defaults = defer_defaults;
             self.location = location;
             return Err(error);
         }
@@ -303,14 +309,14 @@ impl Parser {
         // Parse actions (optional)
         let actions = if self.peek_quoted(lexer) {
             let actions_str = self.expect_quoted_argument(lexer, "SecRule actions")?;
-            let mut actions = action::parse_actions(&actions_str)?;
-            // Apply default actions
-            actions = self.merge_default_actions(actions);
+            action::parse_actions(&actions_str)?
+        } else {
+            Vec::new()
+        };
+        let actions = if self.defer_defaults {
             actions
         } else {
-            // No actions of its own: it still inherits the defaults for the
-            // phase it lands in, which with no `phase` action is phase 2.
-            self.defaults_for_phase(DEFAULT_PHASE).to_vec()
+            self.merge_default_actions(actions)
         };
 
         Ok(Directive::SecRule(SecRule {
@@ -377,8 +383,7 @@ impl Parser {
     fn parse_secdefaultaction(&mut self, lexer: &mut Lexer) -> Result<Directive> {
         let actions_str = self.expect_quoted_argument(lexer, "SecDefaultAction")?;
         let actions = action::parse_actions(&actions_str)?;
-        self.default_actions
-            .insert(phase_of(&actions).unwrap_or(DEFAULT_PHASE), actions.clone());
+        self.set_default_actions(&actions);
         Ok(Directive::SecDefaultAction(actions))
     }
 
@@ -433,6 +438,9 @@ impl Parser {
             return Err(invalid("missing rule ID or range"));
         }
         let actions = action::parse_update_actions(raw_actions)?;
+        self.defer_defaults |= actions
+            .iter()
+            .any(|a| matches!(a, Action::Flow(FlowAction::Chain)));
         match selectors.as_slice() {
             [RuleIdSelector::Single(id)] => {
                 Ok(Directive::SecRuleUpdateActionById { id: *id, actions })
@@ -761,7 +769,12 @@ impl Parser {
     }
 
     /// Merge default actions with rule-specific actions.
-    fn merge_default_actions(&self, rule_actions: Vec<Action>) -> Vec<Action> {
+    pub(crate) fn set_default_actions(&mut self, actions: &[Action]) {
+        self.default_actions
+            .insert(phase_of(actions).unwrap_or(DEFAULT_PHASE), actions.to_vec());
+    }
+
+    pub(crate) fn merge_default_actions(&self, rule_actions: Vec<Action>) -> Vec<Action> {
         let phase = phase_of(&rule_actions).unwrap_or(DEFAULT_PHASE);
         let defaults = self.defaults_for_phase(phase);
 

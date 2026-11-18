@@ -797,9 +797,30 @@ fn apply_rule_edits(directives: &mut Vec<Directive>) -> Result<()> {
     let mut starters = Vec::<usize>::new();
     let mut ids = std::collections::HashSet::new();
     let mut last_rule = None;
+    let mut defaults = Parser::new();
+    let mut defer_defaults = false;
     for index in 0..directives.len() {
         let (earlier, current) = directives.split_at_mut(index);
+        if defer_defaults {
+            if in_chain
+                && matches!(&current[0], Directive::SecRule(_) | Directive::SecAction(_))
+                && rule_actions(&current[0])
+                    .iter()
+                    .any(|action| matches!(action, Action::Disruptive(_)))
+            {
+                return Err(Error::Config {
+                    message: "disruptive actions can only be specified in the chain starter".into(),
+                });
+            }
+            if let Directive::SecRule(rule) = &mut current[0] {
+                rule.actions = defaults.merge_default_actions(std::mem::take(&mut rule.actions));
+            }
+        }
         let actions = match &current[0] {
+            Directive::SecDefaultAction(actions) if updates => {
+                defaults.set_default_actions(actions);
+                continue;
+            }
             Directive::SecRule(rule) => &rule.actions,
             Directive::SecAction(rule) => &rule.actions,
             removal if is_removal(removal) => {
@@ -831,8 +852,17 @@ fn apply_rule_edits(directives: &mut Vec<Directive>) -> Result<()> {
                     *deleted = remove;
                     child = has_chain(actions);
                 }
-                if child && remove {
-                    in_chain = false;
+                if last_rule.is_some_and(|slot: usize| removed[slot]) {
+                    last_rule = earlier
+                        .iter()
+                        .enumerate()
+                        .rfind(|(i, d)| {
+                            !removed[*i]
+                                && matches!(d, Directive::SecRule(_) | Directive::SecAction(_))
+                        })
+                        .map(|(i, _)| i);
+                    in_chain =
+                        last_rule.is_some_and(|slot| has_chain(rule_actions(&earlier[slot])));
                 }
                 if updates {
                     starters.retain(|index| !removed[*index]);
@@ -856,6 +886,7 @@ fn apply_rule_edits(directives: &mut Vec<Directive>) -> Result<()> {
                     }
                     _ => unreachable!(),
                 };
+                defer_defaults |= has_chain(changes);
                 for selector in selectors {
                     let mut found = false;
                     for &slot in &starters {

@@ -162,3 +162,31 @@ SecAction "setvar:tx.seen=1""#,
         assert_eq!(tx.matched_rules(), ["11"]);
     }
 }
+
+#[test]
+fn an_updated_chain_rejects_explicit_disruption_and_accepts_inherited_defaults() {
+    let config = r#"SecDefaultAction "phase:2,pass"
+SecRule REQUEST_URI "@streq /catalog" "id:11,phase:1,deny"
+SecRuleUpdateActionById 11 chain"#;
+    for child in [
+        r#"SecRule REQUEST_METHOD "@streq GET" "pass""#,
+        r#"SecRule REQUEST_METHOD "@streq GET" "id:12,phase:1,deny""#,
+        r#"SecAction "allow""#,
+    ] {
+        assert!(
+            ModSecurity::from_string(&format!("{config}\n{child}")).is_err(),
+            "{child}"
+        );
+    }
+    let engine = ModSecurity::from_string(&format!(
+        r#"{config}
+SecRule REQUEST_METHOD "@streq GET" "setvar:tx.seen=1""#
+    ))
+    .unwrap();
+    for (method, blocked) in [("GET", true), ("POST", false)] {
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/catalog", method, "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(tx.intervention().is_some(), blocked);
+    }
+}
