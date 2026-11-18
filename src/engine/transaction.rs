@@ -2,6 +2,7 @@
 
 mod actions;
 mod body;
+mod multiphase;
 
 use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
@@ -45,6 +46,7 @@ pub struct Transaction {
     default_status: u16,
     /// Matched rules.
     matched_rules: MatchedRules,
+    chain_history: Option<Box<multiphase::ChainHistory>>,
     /// Last phase skipped by a request-wide or transaction-wide allow.
     allow_through: Option<Phase>,
     /// Matched variables for current rule evaluation.
@@ -267,6 +269,7 @@ impl Transaction {
             intervention: None,
             default_status,
             matched_rules: MatchedRules::default(),
+            chain_history: None,
             allow_through: None,
             matched_vars: Vec::new(),
             controls: TransactionControls::default(),
@@ -566,6 +569,7 @@ impl Transaction {
             }
 
             let rule = &rules[idx];
+            skip_count = skip_count.saturating_sub(dispatch[idx].preceding_markers);
 
             let targets = dispatch[idx].targets.select(available);
             if !targets.may_match(rule.variables.len()) && chain_start.is_none() && skip_count == 0
@@ -607,13 +611,13 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && chain_start.is_none();
-            let outcome = if targets.may_match(rule.variables.len()) {
+            let outcome = if !dispatch[idx].inactive && targets.may_match(rule.variables.len()) {
                 self.evaluate_rule(
                     rule,
                     &dispatch[idx],
                     link_rule_id,
                     tag_actions,
-                    standalone,
+                    idx - starter_index,
                     targets,
                 )?
             } else {
@@ -666,6 +670,11 @@ impl Transaction {
                     self.matched_data
                         .extend(&ruleset, pending_chain_data.drain(..));
                 }
+                if starter_dispatch.multiphase_chain {
+                    if let (Some(history), Some(id)) = (&mut self.chain_history, &starter.id) {
+                        history.complete(id);
+                    }
+                }
                 if starter.id.is_some() {
                     self.matched_rules
                         .push(&ruleset, RuleLocation::new(phase, starter_index));
@@ -701,7 +710,7 @@ impl Transaction {
                     }
                     Some(action) => {
                         let metadata = rule_metadata(&starter.actions);
-                        let id = rule.id.clone();
+                        let id = starter.id.clone();
                         let mut intervention = match action {
                             DisruptiveAction::Deny | DisruptiveAction::Block => {
                                 let default = if matches!(action, DisruptiveAction::Block) {
@@ -885,7 +894,7 @@ impl Transaction {
         dispatch: &RuleDispatch,
         logical_id: Option<&str>,
         tag_actions: &[Action],
-        standalone: bool,
+        chain_depth: usize,
         targets: ActiveTargets,
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
@@ -909,6 +918,7 @@ impl Transaction {
             multi_match,
         };
         let mut evaluate = |tx: &mut Self,
+                            variable: Option<VariableName>,
                             name: Option<&ByteValue>,
                             value: &[u8],
                             prepared: Option<(&ByteValue, ByteOperatorResult)>|
@@ -953,13 +963,6 @@ impl Transaction {
             }
 
             let first = outcome.is_none();
-            let outcome = outcome.get_or_insert_with(|| {
-                tx.matched_vars.clear();
-                RuleOutcome {
-                    first_data: None,
-                    first_message: None,
-                }
-            });
             let matched_value =
                 name.map(|_| snapshot.cloned().unwrap_or_else(|| ByteValue::from(value)));
             let need_portion = capture || (first && name.is_some());
@@ -980,23 +983,6 @@ impl Transaction {
                     .filter(|_| need_portion)
                     .map(ByteValue::from)
             };
-            if let (Some(name), Some(value)) = (name, matched_value) {
-                if first {
-                    // TX:0 retains its own copy when capture is enabled. Otherwise
-                    // the audit snapshot can take ownership of the operator result.
-                    let audit_portion = if capture {
-                        portion.clone()
-                    } else {
-                        portion.take()
-                    };
-                    outcome.first_data = Some(RawMatch {
-                        variable: name.clone(),
-                        value: value.clone(),
-                        portion: audit_portion,
-                    });
-                }
-                tx.matched_vars.push((name.clone(), value));
-            }
             if capture {
                 if rule.operator_spec.name == crate::parser::OperatorName::ValidateNid {
                     for (slot, candidate) in result.captures.into_iter().enumerate() {
@@ -1005,11 +991,45 @@ impl Transaction {
                         }
                     }
                 } else {
-                    tx.tx.replace_captures(portion, result.captures);
+                    let captured = if first { portion.clone() } else { portion.take() };
+                    tx.tx.replace_captures(captured, result.captures);
                 }
             }
+            if dispatch.multiphase_chain {
+                if let Some(id) = logical_id {
+                    let field = (variable, matched_value.clone().unwrap_or_default());
+                    if !tx
+                        .chain_history
+                        .get_or_insert_with(Default::default)
+                        .accept(id, chain_depth, first, !rule.is_chain, field)
+                    {
+                        bound_operator = None;
+                        return Ok(());
+                    }
+                }
+            }
+            let outcome = outcome.get_or_insert_with(|| {
+                tx.matched_vars.clear();
+                RuleOutcome {
+                    first_data: None,
+                    first_message: None,
+                }
+            });
+            if let (Some(name), Some(value)) = (name, matched_value) {
+                if first {
+                    // TX:0 retains its own copy when capture is enabled. Otherwise
+                    // the audit snapshot can take ownership of the operator result.
+                    let audit_portion = portion.take();
+                    outcome.first_data = Some(RawMatch {
+                        variable: name.clone(),
+                        value: value.clone(),
+                        portion: audit_portion,
+                    });
+                }
+                tx.matched_vars.push((name.clone(), value));
+            }
             tx.apply_match_actions(rule, dispatch, logical_id);
-            if first && standalone && tx.record_rule_messages {
+            if first && chain_depth == 0 && !rule.is_chain && tx.record_rule_messages {
                 outcome.first_message = tx.expand_rule_message(&rule.actions);
             }
             // Captures, MATCHED_VAR and setvar may all change a macro even
@@ -1050,6 +1070,7 @@ impl Transaction {
                 };
                 evaluate(
                     self,
+                    Some(rule.variables[0].name),
                     selection.match_name.as_deref(),
                     value.as_bytes(),
                     Some((&value, result)),
@@ -1059,7 +1080,7 @@ impl Transaction {
         }
         if rule.variables.is_empty() {
             // SecAction has no target and matches exactly once.
-            evaluate(self, None, b"", None)?;
+            evaluate(self, None, None, b"", None)?;
         }
         for index in targets.indices(&rule.variables) {
             let spec = &rule.variables[index];
@@ -1087,6 +1108,7 @@ impl Transaction {
             if let Some((name, stage)) = target.first {
                 evaluate(
                     self,
+                    Some(spec.name),
                     Some(&name),
                     stage.value.as_bytes(),
                     Some((&stage.value, stage.result)),
@@ -1096,7 +1118,7 @@ impl Transaction {
                         stage.value.as_bytes(),
                         Some(after),
                         |_, value| {
-                            evaluate(self, Some(&name), value, None)?;
+                            evaluate(self, Some(spec.name), Some(&name), value, None)?;
                             Ok(None::<()>)
                         },
                     )?;
@@ -1105,11 +1127,11 @@ impl Transaction {
             for (name, value) in target.remaining {
                 if multi_match {
                     rule.transformations.for_each_byte_stage(&value, |stage| {
-                        evaluate(self, Some(&name), stage, None)
+                        evaluate(self, Some(spec.name), Some(&name), stage, None)
                     })?;
                 } else {
                     let transformed = rule.transformations.apply_bytes(&value)?;
-                    evaluate(self, Some(&name), &transformed, None)?;
+                    evaluate(self, Some(spec.name), Some(&name), &transformed, None)?;
                 }
             }
         }
@@ -1507,7 +1529,7 @@ SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
                     &rules.dispatch_for_phase(Phase::RequestHeaders)[0],
                     Some("77"),
                     &rule.actions,
-                    true,
+                    0,
                     rules.dispatch_for_phase(Phase::RequestHeaders)[0]
                         .targets
                         .select(RequestCollections::new(
