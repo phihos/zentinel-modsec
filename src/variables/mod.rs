@@ -11,6 +11,7 @@ mod response;
 mod selectors;
 mod tx;
 mod value;
+mod widths;
 mod xml;
 mod xml_entities;
 
@@ -25,3 +26,4 @@ pub(crate) use selectors::{
 pub use tx::TxCollection;
 pub(crate) use value::qualified_name;
 pub use value::ByteValue;
+pub(crate) use widths::Widths;
