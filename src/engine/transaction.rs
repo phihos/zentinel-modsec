@@ -1396,13 +1396,14 @@ impl Transaction {
             }
             // SecLang runs all setvars before the controls for each
             // matching value. The parsed operations belong to the ruleset.
-            let effects = &rule.actions[dispatch.effects_from..];
-            for action in effects {
-                if let Action::Data(DataAction::SetVar(op)) = action {
-                    tx.apply_setvar(op, logical_id);
-                }
+            for prepared in &dispatch.setvars {
+                let Action::Data(DataAction::SetVar(op)) = &rule.actions[prepared.action_index]
+                else {
+                    unreachable!("compiled setvar action index");
+                };
+                tx.apply_setvar(op, prepared, logical_id);
             }
-            for action in effects {
+            for action in &rule.actions[dispatch.controls_from..] {
                 let Action::Control(ctl) = action else {
                     continue;
                 };
@@ -1572,22 +1573,32 @@ impl Transaction {
     }
 
     /// Apply a setvar operation.
-    fn apply_setvar(&mut self, op: &SetVarSpec, rule_id: Option<&str>) {
-        let name = if op.key.contains("%{") {
-            Cow::Owned(self.expand_operator_macros_bytes(&op.key).into_owned())
-        } else {
-            Cow::Borrowed(op.key.as_bytes())
-        };
+    fn apply_setvar(
+        &mut self,
+        op: &SetVarSpec,
+        prepared: &super::ruleset::CompiledSetVar,
+        rule_id: Option<&str>,
+    ) {
         let record = rule_id.filter(|_| self.record_setvar_effects);
-        let change = match &op.value {
-            SetVarValue::String(value) => {
-                self.tx.set_bytes(name.as_ref(), value.as_str());
-                record.map(|_| SetVarChange::Set(value.clone()))
+        let (key, audit_key) = match &prepared.key {
+            Some(key) => (key.clone(), record.map(|_| op.key.clone())),
+            None => {
+                let expanded = self.expand_operator_macros_bytes(&op.key);
+                let key = ByteValue::from(crate::variables::folded_key(&expanded));
+                (
+                    key,
+                    record.map(|_| ByteValue::from(expanded).display_text().to_owned()),
+                )
             }
-            SetVarValue::Int(n) => {
-                let value = ByteValue::decimal(*n);
+        };
+        let change = match &op.value {
+            SetVarValue::String(_) | SetVarValue::Int(_) => {
+                let value = prepared
+                    .value
+                    .as_ref()
+                    .expect("compiled literal assignment");
                 let change = record.map(|_| SetVarChange::Set(value.display_text().to_owned()));
-                self.tx.set_bytes(name.as_ref(), value);
+                self.tx.set_canonical(key, value.clone());
                 change
             }
             SetVarValue::Macro(raw) => {
@@ -1600,7 +1611,7 @@ impl Transaction {
                             Ok(text) => SetVarChange::Set(text.to_owned()),
                             Err(_) => SetVarChange::SetBytes(operand.as_bytes().to_vec()),
                         });
-                        self.tx.set_bytes(name.as_ref(), operand);
+                        self.tx.set_canonical(key, operand);
                         change
                     }
                     SetVarKind::Add | SetVarKind::Subtract => {
@@ -1613,7 +1624,7 @@ impl Transaction {
                         } else {
                             n
                         };
-                        self.tx.increment_bytes(&name, delta);
+                        self.tx.increment_canonical(key, delta);
                         if matches!(kind, SetVarKind::Subtract) {
                             Some(SetVarChange::Decrement(n))
                         } else {
@@ -1623,23 +1634,23 @@ impl Transaction {
                 }
             }
             SetVarValue::Increment(n) => {
-                self.tx.increment_bytes(&name, *n);
+                self.tx.increment_canonical(key, *n);
                 Some(SetVarChange::Increment(*n))
             }
             SetVarValue::Decrement(n) => {
-                self.tx.increment_bytes(&name, n.wrapping_neg());
+                self.tx.increment_canonical(key, n.wrapping_neg());
                 Some(SetVarChange::Decrement(*n))
             }
             SetVarValue::Delete => {
-                self.tx.delete_bytes(&name);
+                self.tx.delete_canonical(key.as_bytes());
                 Some(SetVarChange::Delete)
             }
         };
-        if let (Some(rule_id), Some(op_change)) = (record, change) {
+        if let (Some(rule_id), Some(key), Some(op_change)) = (record, audit_key, change) {
             self.setvar_effects.push(SetVarEffect {
                 rule_id: rule_id.into(),
                 collection: op.collection.to_ascii_lowercase(),
-                key: ByteValue::from(name.into_owned()).to_string(),
+                key,
                 op: op_change,
             });
         }

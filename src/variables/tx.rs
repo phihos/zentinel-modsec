@@ -61,24 +61,36 @@ impl TxCollection {
     /// Store original value bytes under a case-insensitive original byte key.
     pub fn set_bytes(&mut self, key: impl Into<ByteValue>, value: impl Into<ByteValue>) {
         let key = key.into();
-        self.observe_capture_key(key.as_bytes());
+
         let key = match folded_key(key.as_bytes()) {
             Cow::Borrowed(_) => key,
             Cow::Owned(folded) => folded.into(),
         };
-        self.data.insert(key, value.into());
+        self.set_canonical(key, value.into());
+    }
+
+    pub(crate) fn set_canonical(&mut self, key: ByteValue, value: ByteValue) {
+        self.observe_capture_key(key.as_bytes());
+        self.data.insert(key, value);
     }
 
     /// Delete a case-insensitive original byte key.
     pub fn delete_bytes(&mut self, key: &[u8]) {
-        self.data.shift_remove(folded_key(key).as_ref());
+        self.delete_canonical(&folded_key(key));
+    }
+
+    pub(crate) fn delete_canonical(&mut self, key: &[u8]) {
+        self.data.shift_remove(key);
     }
 
     /// Increment a numeric byte value with signed 64-bit wrapping, matching
     /// Coraza on 64-bit targets. A nonnumeric value starts at zero.
     pub fn increment_bytes(&mut self, key: &[u8], amount: i64) {
-        self.observe_capture_key(key);
-        let key = ByteValue::from(folded_key(key));
+        self.increment_canonical(ByteValue::from(folded_key(key)), amount);
+    }
+
+    pub(crate) fn increment_canonical(&mut self, key: ByteValue, amount: i64) {
+        self.observe_capture_key(key.as_bytes());
         self.data
             .entry(key)
             .and_modify(|value| {
