@@ -169,6 +169,11 @@ impl HashMapCollection {
         self.data.is_empty()
     }
 
+    /// Borrow the values under an already folded collection key.
+    pub(crate) fn canonical_values(&self, key: &[u8]) -> Option<&[ByteValue]> {
+        self.data.get(key).map(|members| &**members)
+    }
+
     /// Visit every original name and value within a shared member budget.
     pub(crate) fn visit_bounded(
         &self,

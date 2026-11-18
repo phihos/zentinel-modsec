@@ -252,24 +252,77 @@ impl RuleDispatch {
         None
     }
 
+    fn header_members<'a>(
+        rule: &'a CompiledRule,
+        selections: &'a [crate::variables::TargetSelection],
+    ) -> impl Iterator<Item = (usize, &'a [u8])> {
+        rule.variables
+            .iter()
+            .zip(selections)
+            .take(super::target_indices::PREFIX)
+            .enumerate()
+            .filter_map(|(index, (spec, selection))| {
+                if let crate::variables::MemberSelector::Key(key) = &selection.member {
+                    if spec.name == crate::parser::VariableName::RequestHeaders && !spec.count_mode
+                    {
+                        return Some((index, key.as_ref()));
+                    }
+                }
+                None
+            })
+    }
+
+    /// Compile masks for the most frequently selected literal request headers.
+    fn assign_header_slots(rules: &[CompiledRule], dispatch: &mut [Self]) -> Vec<Box<[u8]>> {
+        let members = rules.iter().zip(dispatch.iter()).flat_map(|(rule, plan)| {
+            Self::header_members(rule, &plan.selections).map(|(_, key)| key)
+        });
+        let keys = Self::frequent_keys(members, 4, super::target_indices::HEADER_SLOTS);
+        if !keys.is_empty() {
+            for (rule, plan) in rules.iter().zip(dispatch) {
+                for (index, key) in Self::header_members(rule, &plan.selections) {
+                    if let Some(slot) = keys.iter().position(|k| k.as_ref() == key) {
+                        plan.targets.header_targets[slot] |= 1 << index;
+                    }
+                }
+            }
+        }
+        keys
+    }
+
+    fn frequent_keys<'a>(
+        keys: impl Iterator<Item = &'a [u8]>,
+        min_count: usize,
+        limit: usize,
+    ) -> Vec<Box<[u8]>> {
+        let mut counts = HashMap::new();
+        for key in keys {
+            *counts.entry(key).or_insert(0) += 1;
+        }
+        let mut repeated: Vec<_> = counts
+            .into_iter()
+            .filter(|(_, count)| *count >= min_count)
+            .collect();
+        repeated.sort_unstable_by(|(a, n), (b, m)| m.cmp(n).then_with(|| a.cmp(b)));
+        repeated
+            .into_iter()
+            .take(limit)
+            .map(|(key, _)| key.into())
+            .collect()
+    }
+
     // Rank keys per phase so one-off guards cannot evict the positions used
     // by repeated comparisons. The transaction verifies a position on each hit.
     fn assign_numeric_tx_slots(dispatch: &mut [Self]) {
-        let mut counts = HashMap::<&[u8], usize>::new();
-        for key in dispatch.iter().filter_map(Self::numeric_tx_key) {
-            *counts.entry(key).or_default() += 1;
-        }
-        let mut repeated: Vec<_> = counts.into_iter().filter(|(_, count)| *count > 1).collect();
-        repeated.sort_unstable_by(|(a, n), (b, m)| m.cmp(n).then_with(|| a.cmp(b)));
-        let keys: Vec<_> = repeated
-            .into_iter()
-            .take(NUMERIC_TX_SLOTS)
-            .map(|(key, _)| key.to_owned())
-            .collect();
+        let keys = Self::frequent_keys(
+            dispatch.iter().filter_map(Self::numeric_tx_key),
+            2,
+            NUMERIC_TX_SLOTS,
+        );
         for rule in dispatch {
             rule.numeric_tx_slot = rule
                 .numeric_tx_key()
-                .and_then(|key| keys.iter().position(|entry| key == entry))
+                .and_then(|key| keys.iter().position(|entry| key == entry.as_ref()))
                 .map(|index| index as u8);
         }
     }
@@ -287,7 +340,8 @@ pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
     dispatch: [Vec<RuleDispatch>; 5],
-    pub(super) summarize_arguments: [bool; 5],
+    pub(super) header_slots: [Vec<Box<[u8]>>; 5],
+    pub(super) width_sources: [super::target_indices::WidthSources; 5],
     pub(super) tx_defaults: Option<Box<super::initialization::TxDefaults>>,
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
@@ -315,7 +369,8 @@ impl CompiledRuleset {
             rules: Rules::new(),
             dispatch: Default::default(),
             tx_defaults: None,
-            summarize_arguments: [false; 5],
+            width_sources: Default::default(),
+            header_slots: Default::default(),
             selectors: Default::default(),
             controls: Default::default(),
             engine_mode: RuleEngineMode::default(),
@@ -567,11 +622,18 @@ impl CompiledRuleset {
         for phase in &mut ruleset.dispatch {
             RuleDispatch::assign_numeric_tx_slots(phase);
         }
-        ruleset.summarize_arguments = Phase::ALL.map(|phase| {
-            ruleset
-                .dispatch_for_phase(phase)
-                .iter()
-                .any(|rule| rule.targets.prunes_arguments())
+        ruleset.header_slots = Phase::ALL.map(|phase| {
+            RuleDispatch::assign_header_slots(
+                ruleset.rules.for_phase(phase),
+                &mut ruleset.dispatch[phase.index()],
+            )
+        });
+        ruleset.width_sources = Phase::ALL.map(|phase| {
+            let mut sources = super::target_indices::WidthSources::default();
+            for rule in ruleset.dispatch_for_phase(phase) {
+                rule.targets.add_width_sources(&mut sources);
+            }
+            sources
         });
         ruleset.tx_defaults = super::initialization::TxDefaults::compile(
             ruleset.rules_for_phase(Phase::RequestHeaders),
