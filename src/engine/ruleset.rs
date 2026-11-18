@@ -271,6 +271,7 @@ pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
     dispatch: [Vec<RuleDispatch>; 5],
+    pub(super) tx_defaults: Option<Box<super::initialization::TxDefaults>>,
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
     body_config: super::body::BodyConfig,
@@ -296,6 +297,7 @@ impl CompiledRuleset {
         Self {
             rules: Rules::new(),
             dispatch: Default::default(),
+            tx_defaults: None,
             selectors: Default::default(),
             controls: Default::default(),
             engine_mode: RuleEngineMode::default(),
@@ -547,6 +549,10 @@ impl CompiledRuleset {
         for phase in &mut ruleset.dispatch {
             RuleDispatch::assign_numeric_tx_slots(phase);
         }
+        ruleset.tx_defaults = super::initialization::TxDefaults::compile(
+            ruleset.rules_for_phase(Phase::RequestHeaders),
+            ruleset.dispatch_for_phase(Phase::RequestHeaders),
+        );
         ruleset.body_config.validate()?;
         if ruleset.engine_mode == RuleEngineMode::DetectionOnly {
             ruleset.body_config.request_limit_action =
