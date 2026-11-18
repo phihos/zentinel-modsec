@@ -249,9 +249,15 @@ Body directives are implemented: `SecRequestBodyAccess`, `SecResponseBodyAccess`
 between 1 byte and 1 GiB. MIME directives replace the list, matching the pinned
 reference implementation. In-memory spooling and no-files limits remain
 unsupported and warn; the hard body limit still bounds retained bytes.
-`SecRuleUpdateActionById` remains unsupported, with affected rule IDs in its
-load-time warning. Other unknown directives also warn
-at load. `SecComponentSignature` is accepted as metadata.
+`SecRuleUpdateActionById 112 "deny,status:409"` changes an earlier standalone
+rule or the starter of a `SecRule` chain. Standalone `SecAction` rules are
+also supported. Supply one positive ID and a comma-separated list of
+`pass`, `deny` and unsigned 16-bit `status` values without spaces.
+A status-only update preserves the disruptive action. The last supplied
+status and the last disruptive action each take effect. A missing or removed
+ID, ID range, unsupported action, incomplete chain, or chain containing
+`SecAction` rejects the load.
+Other unknown directives warn at load. `SecComponentSignature` is accepted as metadata.
 
 `SecRuleUpdateTargetByTag attack-sqli "!ARGS:password"` excludes that argument
 from every rule carrying the exact, case-sensitive `attack-sqli` tag. Positive

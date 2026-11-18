@@ -47,16 +47,6 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
                 Some(&rule.operator),
             ),
             Directive::SecAction(rule) => (&rule.actions, &[][..], None),
-            Directive::SecRuleUpdateActionById { id, .. } => {
-                record(
-                    &mut found,
-                    "directive",
-                    "SecRuleUpdateActionById",
-                    "action updates are not applied",
-                    &id.to_string(),
-                );
-                continue;
-            }
             Directive::Unknown(name) if !name.eq_ignore_ascii_case("SecComponentSignature") => {
                 record(
                     &mut found,
