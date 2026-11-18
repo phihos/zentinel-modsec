@@ -4,7 +4,7 @@
 
 use super::traits::{ByteOperatorResult, Operator, OperatorResult};
 use crate::error::{Error, Result};
-use aho_corasick::AhoCorasick;
+use aho_corasick::{AhoCorasick, MatchKind};
 use once_cell::sync::Lazy;
 use regex::bytes::{Regex, RegexBuilder};
 use std::collections::HashMap;
@@ -212,12 +212,7 @@ impl Operator for RxOperator {
 
 /// Phrase match operator (@pm).
 pub struct PmOperator {
-    program: Arc<PhraseProgram>,
-}
-
-struct PhraseProgram {
-    automaton: AhoCorasick,
-    patterns: Vec<String>,
+    program: Arc<AhoCorasick>,
 }
 
 /// Exact parsed phrases, including order and case, identify the program.
@@ -225,11 +220,11 @@ struct PhraseProgram {
 /// Weak values release automata with the last live ruleset, like the RX cache.
 #[derive(Default)]
 struct PhraseCache {
-    entries: Mutex<HashMap<Vec<String>, Weak<PhraseProgram>>>,
+    entries: Mutex<HashMap<Vec<Vec<u8>>, Weak<AhoCorasick>>>,
 }
 
 impl PhraseCache {
-    fn get(&self, patterns: Vec<String>) -> Result<Arc<PhraseProgram>> {
+    fn get(&self, patterns: Vec<Vec<u8>>) -> Result<Arc<AhoCorasick>> {
         // Serialize compilation with insertion so simultaneous configuration
         // loads do not briefly allocate duplicate large automata. Searches
         // access only the immutable program and never lock this cache.
@@ -240,15 +235,13 @@ impl PhraseCache {
         entries.retain(|_, program| program.strong_count() > 0);
         let automaton = AhoCorasick::builder()
             .ascii_case_insensitive(true)
+            .match_kind(MatchKind::LeftmostLongest)
             .build(&patterns)
             .map_err(|error| Error::PatternSet {
                 message: error.to_string(),
             })?;
-        let program = Arc::new(PhraseProgram {
-            automaton,
-            patterns,
-        });
-        entries.insert(program.patterns.clone(), Arc::downgrade(&program));
+        let program = Arc::new(automaton);
+        entries.insert(patterns, Arc::downgrade(&program));
         Ok(program)
     }
 }
@@ -258,16 +251,16 @@ static PHRASE_CACHE: Lazy<PhraseCache> = Lazy::new(PhraseCache::default);
 impl PmOperator {
     #[cfg(test)]
     fn automaton_address(&self) -> *const AhoCorasick {
-        &self.program.automaton
+        Arc::as_ptr(&self.program)
     }
 
     /// Create a new phrase match operator from space-separated patterns.
     pub fn new(patterns_str: &str) -> Result<Self> {
-        let patterns: Vec<String> = patterns_str
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
+        Self::from_patterns(patterns_str.split_whitespace().map(str::as_bytes))
+    }
 
+    pub(super) fn from_patterns<'a>(patterns: impl Iterator<Item = &'a [u8]>) -> Result<Self> {
+        let patterns: Vec<_> = patterns.map(<[u8]>::to_vec).collect();
         if patterns.is_empty() {
             return Err(Error::PatternSet {
                 message: "empty pattern list".to_string(),
@@ -281,71 +274,58 @@ impl PmOperator {
 
     /// Create a phrase match operator from a file.
     pub fn from_file(path: &str) -> Result<Self> {
-        // Try the path as-is first, then common CRS locations
-        let possible_paths = [
-            path.to_string(),
-            format!("test-rules/crs/rules/{}", path),
-            format!("rules/{}", path),
-        ];
-
-        let mut content = None;
-        let mut last_error = None;
-
-        for p in &possible_paths {
-            match std::fs::read_to_string(p) {
-                Ok(c) => {
-                    content = Some(c);
+        let path = std::path::Path::new(path);
+        let mut file = std::fs::read_to_string(path);
+        // Inline configurations may name a file in the usual CRS directories.
+        // A supplied directory or an unreadable file is authoritative.
+        if path.parent() == Some(std::path::Path::new("")) {
+            for dir in ["test-rules/crs/rules", "rules"] {
+                if !matches!(&file, Err(e) if e.kind() == std::io::ErrorKind::NotFound) {
                     break;
                 }
-                Err(e) => {
-                    last_error = Some(e);
-                }
+                file = std::fs::read_to_string(std::path::Path::new(dir).join(path));
             }
         }
-
-        let content = content.ok_or_else(|| Error::RuleFileLoad {
+        let content = file.map_err(|source| Error::RuleFileLoad {
             path: path.into(),
-            source: last_error.unwrap(),
+            source,
         })?;
 
-        let patterns: Vec<String> = content
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .map(|s| s.to_string())
-            .collect();
-
-        if patterns.is_empty() {
-            return Err(Error::PatternSet {
-                message: "empty pattern file".to_string(),
-            });
-        }
-
-        Ok(Self {
-            program: PHRASE_CACHE.get(patterns)?,
-        })
+        Self::from_patterns(
+            content
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(str::as_bytes),
+        )
     }
 }
 
 impl Operator for PmOperator {
     fn execute_bytes(&self, value: &[u8]) -> Result<ByteOperatorResult> {
-        Ok(match self.program.automaton.find(value) {
-            Some(found) => ByteOperatorResult::matched(
-                self.program.patterns[found.pattern().as_usize()]
-                    .as_bytes()
-                    .to_vec(),
-            ),
-            None => ByteOperatorResult::no_match(),
-        })
+        self.execute_rule_bytes(value, true)
+    }
+
+    fn execute_rule_bytes(&self, value: &[u8], capture: bool) -> Result<ByteOperatorResult> {
+        let mut matches = self.program.find_iter(value);
+        let Some(first) = matches.next() else {
+            return Ok(ByteOperatorResult::no_match());
+        };
+        let mut result = ByteOperatorResult::matched(&value[first.range()]);
+        if capture {
+            result.captures = matches.take(9).map(|m| value[m.range()].to_vec()).collect();
+        }
+        Ok(result)
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
-        if let Some(mat) = self.program.automaton.find(value) {
-            let matched = &self.program.patterns[mat.pattern().as_usize()];
-            OperatorResult::matched(matched.clone())
-        } else {
-            OperatorResult::no_match()
-        }
+        self.execute_bytes(value.as_bytes())
+            .expect("infallible phrase search")
+            .into_text()
+    }
+
+    fn supports_capture(&self) -> bool {
+        true
     }
 
     fn name(&self) -> &'static str {
@@ -467,7 +447,7 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
         );
         assert_eq!(
             first.execute_bytes(b"xxadmin\xff").unwrap().matched_value,
-            Some(b"ADMIN".to_vec())
+            Some(b"admin".to_vec())
         );
         assert_eq!(
             different_case

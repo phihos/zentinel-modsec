@@ -90,8 +90,6 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
                     Some("operator is a placeholder and always returns no match (negation may invert that result)"),
                 OperatorName::ContainsWord => Some("word boundaries are not implemented; this operator uses substring matching"),
                 OperatorName::StrMatch => Some("operator is approximated by substring matching"),
-                OperatorName::Pmf => Some("file loading is not implemented for this alias; its argument is treated as inline phrases; use @pmFromFile"),
-                OperatorName::IpMatchF => Some("file loading is not implemented for this alias; its argument is treated as inline addresses; use @ipMatchFromFile"),
                 _ => None,
             };
             if let Some(reason) = reason {
@@ -103,7 +101,9 @@ pub(super) fn report(directives: &[Directive], programs: &mut SelectorPrograms) 
                     &effective_id,
                 );
             }
-            report_macros(&mut found, &operator.argument, &effective_id);
+            if !operator.name.uses_data_file() {
+                report_macros(&mut found, &operator.argument, &effective_id);
+            }
         }
         for action in actions {
             report_action(&mut found, action, &effective_id);

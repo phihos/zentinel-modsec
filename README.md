@@ -269,9 +269,10 @@ chain starter selects its entire chain. Untagged rules continue to execute.
 `@detectSQLi`, `@detectXSS`, `@ipMatch`, `@ipMatchFromFile`,
 `@validateUrlEncoding`, `@validateUtf8Encoding`, `@validateByteRange`,
 `@unconditionalMatch`, `@noMatch`. `@containsWord` and `@strmatch` are
-approximated by `@contains`. The `@pmf` and `@ipMatchF` aliases interpret their
-arguments as inline phrases/addresses; use `@pmFromFile` and `@ipMatchFromFile`
-for files. These approximations produce load-time warnings with rule IDs.
+approximated by `@contains`. The file-backed aliases `@pmf` and `@ipMatchF` read the same
+files as `@pmFromFile` and `@ipMatchFromFile`. With `capture`, phrase matches
+populate `TX:0` through `TX:9` in input order using the original bytes.
+Overlapping phrases select the longest match at the earliest position.
 
 These parse but **never match**: `@verifyCC`, `@verifySSN`, `@verifyCPF`,
 `@validateHash`, `@validateDTD`, `@validateSchema`, `@rbl`, `@geoLookup`,

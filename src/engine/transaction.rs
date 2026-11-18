@@ -1237,7 +1237,8 @@ impl Transaction {
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
-        let dynamic = rule.operator_spec.argument.contains("%{");
+        let dynamic =
+            rule.operator_spec.argument.contains("%{") && !rule.operator_spec.name.uses_data_file();
         let capture = rule
             .actions
             .iter()

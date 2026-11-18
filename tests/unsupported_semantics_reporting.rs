@@ -58,12 +58,8 @@ fn placeholder_operators_report_the_affected_rule_at_load() {
 
 #[test]
 fn approximated_operators_report_the_affected_rule_at_load() {
-    for operator in ["containsWord", "strmatch", "pmf", "ipMatchF"] {
-        let argument = if operator == "ipMatchF" {
-            "127.0.0.1"
-        } else {
-            "example"
-        };
+    for operator in ["containsWord", "strmatch"] {
+        let argument = "example";
         let (_, log) = load_logs(&format!(
             r#"SecRule ARGS "@{operator} {argument}" "id:102,phase:2,pass""#
         ));
