@@ -53,6 +53,8 @@ pub enum Directive {
     SecRequestBodyJsonDepthLimit(usize),
     /// Maximum nesting of response JSON containers.
     SecResponseBodyJsonDepthLimit(usize),
+    /// SecRequestBodyInMemoryLimit directive.
+    SecRequestBodyInMemoryLimit(usize),
     /// SecRequestBodyLimit directive.
     SecRequestBodyLimit(usize),
     /// SecResponseBodyLimit directive.

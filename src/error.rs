@@ -157,6 +157,10 @@ pub enum Error {
         source: std::collections::TryReserveError,
     },
 
+    /// Failed to acquire or read a request body in private temporary storage.
+    #[error("request body spool I/O failed: {0}")]
+    BodySpoolIo(#[source] std::io::Error),
+
     /// A previous header/body callback failed and cannot safely be replayed.
     #[error("previous {direction} callback failed: {message}")]
     BodyCallbackFailed {

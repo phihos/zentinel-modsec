@@ -88,6 +88,8 @@ pub struct RequestData {
     /// that the origin application happily accepts is a bypass when it
     /// happens quietly.
     pub body_error: Option<String>,
+    /// Raw body variables become visible when phase 2 processes the request.
+    pub(crate) body_processed: bool,
     /// Request body.
     pub body: Vec<u8>,
     /// Acquisition reached its body limit; a partial body may end mid-part.
@@ -141,6 +143,7 @@ impl Default for RequestData {
             multipart_invalid_quoting: Default::default(),
             body_processor: Default::default(),
             body_error: Default::default(),
+            body_processed: true,
             body: Default::default(),
             inbound_data_error: Default::default(),
             client_ip: Default::default(),
@@ -168,6 +171,7 @@ impl RequestData {
         Self {
             argument_limit,
             request_json_depth_limit,
+            body_processed: false,
             ..Self::default()
         }
     }
@@ -327,7 +331,7 @@ impl RequestData {
 
     /// REQUEST_BODY's original bytes, observing processor-specific visibility.
     pub fn request_body_bytes_variable(&self) -> &[u8] {
-        if matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
+        if self.body_processed && matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
             &self.body
         } else {
             b""
@@ -337,20 +341,12 @@ impl RequestData {
     /// Public REQUEST_BODY value, distinct from the internally retained bytes.
     /// Coraza populates it only for the URLENCODED and RAW processors.
     pub fn request_body_variable(&self) -> String {
-        if matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
-            self.body_str()
-        } else {
-            String::new()
-        }
+        String::from_utf8_lossy(self.request_body_bytes_variable()).into_owned()
     }
 
     /// Structured processors leave REQUEST_BODY_LENGTH at its initial zero.
     pub fn request_body_length_variable(&self) -> String {
-        if matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
-            self.body_length().to_string()
-        } else {
-            "0".into()
-        }
+        self.request_body_bytes_variable().len().to_string()
     }
 
     /// Get body length.

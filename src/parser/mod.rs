@@ -221,6 +221,11 @@ impl Parser {
                 "SecResponseBodyJsonDepthLimit",
                 Directive::SecResponseBodyJsonDepthLimit,
             ),
+            "secrequestbodyinmemorylimit" => self.parse_positive_limit(
+                lexer,
+                "SecRequestBodyInMemoryLimit",
+                Directive::SecRequestBodyInMemoryLimit,
+            ),
             "secrequestbodylimit" => self.parse_body_limit(lexer, true),
             "secresponsebodylimit" => self.parse_body_limit(lexer, false),
             "secrequestbodylimitaction" => self.parse_body_limit_action(lexer, true),

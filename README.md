@@ -253,8 +253,11 @@ Body directives are implemented: `SecRequestBodyAccess`, `SecResponseBodyAccess`
 `SecRequestBodyLimit`, `SecResponseBodyLimit`, their `LimitAction` settings,
 `SecResponseBodyMimeType` and `SecResponseBodyMimeTypesClear`. Limits must be
 between 1 byte and 1 GiB. MIME directives replace the list, matching the pinned
-reference implementation. In-memory spooling and no-files limits remain
-unsupported and warn; the hard body limit still bounds retained bytes.
+reference implementation. `SecRequestBodyInMemoryLimit` sets the acquisition
+threshold. Larger request prefixes move to a private temporary file. A selected
+body processor reads the retained prefix into memory in phase 2. The threshold
+defaults to the request limit and must be positive and no larger than that limit.
+The standard Coraza build also leaves `SecRequestBodyNoFilesLimit` unenforced.
 `SecRuleUpdateActionById 112 "deny,status:409"` changes an earlier standalone
 rule or the starter of a `SecRule` chain. Standalone `SecAction` rules are
 also supported. Supply one positive ID and a comma-separated list of

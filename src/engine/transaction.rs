@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
 
-use super::body::{BodyState, BodyWriteResult};
+use super::body::{append_memory, BodyState, BodyWriteResult, RequestSpool};
 use super::control::{CtlDirective, TagTargetRemoval, TransactionControls};
 use super::intervention::Intervention;
 use super::match_log::{MatchLog, MatchedRules, RawMatch, RuleLocation};
@@ -36,6 +36,7 @@ pub struct Transaction {
     ruleset: Arc<CompiledRuleset>,
     /// Request data.
     request: RequestData,
+    request_spool: Option<Box<RequestSpool>>,
     request_line: OnceLock<Box<[u8]>>,
     /// Response data.
     response: ResponseData,
@@ -261,6 +262,7 @@ impl Transaction {
                 ruleset.body_config().request_json_depth_limit,
             ),
             ruleset,
+            request_spool: None,
             request_line: OnceLock::new(),
             response: ResponseData::new(),
             tx: TxCollection::new(),
@@ -461,30 +463,15 @@ impl Transaction {
             return Ok(());
         }
 
-        // Coraza does not select a fallback processor for an empty body.
-        if self.request.body.is_empty() {
-            self.run_body_callback(Phase::RequestBody)?;
-            return Ok(());
-        }
-
-        // ctl:requestBodyAccess=Off, typically set in phase 1, suppresses body
-        // parsing entirely. Phase 2 rules still run; they just find no ARGS_POST
-        // or FILES, which is what disabling body access means.
-        if !self.request_body_accessible() {
-            self.run_body_callback(Phase::RequestBody)?;
-            return Ok(());
-        }
-
-        // ctl:requestBodyProcessor overrides Content-Type sniffing. CRS relies
-        // on this to force a processor when the header is absent or lying.
-        if let Some(forced) = self.controls.request_body_processor() {
-            match forced {
+        if self.request_body_buffered_len() > 0 && self.request_body_accessible() {
+            if self.request_spool.is_some() && !self.selected_request_processor().is_empty() {
+                self.materialize_request_spool()?;
+            }
+            self.request.body_processed = true;
+            match self.selected_request_processor() {
                 "MULTIPART" => {
                     if !self.process_multipart_body() {
-                        tracing::warn!(
-                            "ctl:requestBodyProcessor=MULTIPART, but the body has no parseable \
-                             boundary; body arguments were not extracted"
-                        );
+                        tracing::warn!("multipart request without a parseable boundary");
                     }
                 }
                 "URLENCODED" => {
@@ -494,15 +481,33 @@ impl Transaction {
                 "JSON" => self.process_json_body(),
                 "XML" => self.process_xml_body(),
                 "RAW" => self.request.body_processor = "RAW".to_string(),
-                // CtlDirective::parse admits no other value.
-                other => debug_assert!(false, "unsupported forced body processor: {other}"),
+                _ => {}
             }
-            self.run_body_callback(Phase::RequestBody)?;
-            return Ok(());
         }
+        self.run_body_callback(Phase::RequestBody)
+    }
 
-        // Parameters may contain opaque bytes. Only the trimmed media type
-        // participates in JSON and XML selection.
+    fn materialize_request_spool(&mut self) -> Result<()> {
+        if let Some(spool) = &mut self.request_spool {
+            match spool.read_prefix() {
+                Ok(body) => self.request.body = body,
+                Err(error) => {
+                    self.request_body_state.failure = Some(error.to_string());
+                    return Err(error);
+                }
+            }
+            self.request_spool = None;
+        }
+        Ok(())
+    }
+
+    fn selected_request_processor(&self) -> &str {
+        if let Some(forced) = self.controls.request_body_processor() {
+            return forced;
+        }
+        if self.request.body_processor == "MULTIPART" {
+            return "MULTIPART";
+        }
         let media = self
             .request
             .headers
@@ -513,37 +518,17 @@ impl Transaction {
             })
             .unwrap_or_default()
             .trim();
-        if self.request.body_processor == "MULTIPART" {
-            // Multipart body processor: populates ARGS_POST, FILES and
-            // MULTIPART_PART_HEADERS. Never fall back to the urlencoded
-            // parser for multipart payloads — that would produce bogus ARGS.
-            if !self.process_multipart_body() {
-                tracing::warn!(
-                    "multipart/form-data request without a parseable boundary; \
-                     body arguments were not extracted"
-                );
-            }
-        } else if structured_media_type(media, "application/xml", "text/xml", "xml") {
-            self.process_xml_body();
+        if structured_media_type(media, "application/xml", "text/xml", "xml") {
+            "XML"
         } else if structured_media_type(media, "application/json", "text/json", "json") {
-            // JSON bodies previously fell through to the urlencoded parser,
-            // which extracts nothing usable from them -- so ARGS was empty and
-            // rules like CRS 942100 (`SecRule ARGS "@detectSQLi"`) had nothing
-            // to inspect. An injection payload was blocked in a form body and
-            // passed unexamined in a JSON body.
-            self.process_json_body();
+            "JSON"
         } else if self.request.body_processor == "URLENCODED"
             || self.controls.force_request_body_variable()
         {
-            // Pinned Coraza selects URLENCODED for forceRequestBodyVariable
-            // when no other processor exists. It exposes the acquired body and
-            // extracts form arguments; explicit RAW deliberately does not.
-            self.request.parse_form_body();
-            self.request.body_processor = "URLENCODED".to_string();
+            "URLENCODED"
+        } else {
+            ""
         }
-
-        self.run_body_callback(Phase::RequestBody)?;
-        Ok(())
     }
 
     /// Select the original Content-Type bytes for multipart boundary parsing.
@@ -711,7 +696,9 @@ impl Transaction {
 
     /// Number of bytes currently retained for request inspection.
     pub fn request_body_buffered_len(&self) -> usize {
-        self.request.body.len()
+        self.request_spool
+            .as_ref()
+            .map_or(self.request.body.len(), |spool| spool.len)
     }
 
     /// Parsed response JSON and any processor error when a rule selected JSON.
@@ -803,7 +790,7 @@ impl Transaction {
             self.ruleset.body_config().response_limit
         };
         let current = if request {
-            self.request.body.len()
+            self.request_body_buffered_len()
         } else {
             self.response.body.len()
         };
@@ -811,27 +798,11 @@ impl Transaction {
         let reached = data.len() >= remaining;
         let action = self.body_limit_action(request);
         let consumed = data.len().min(remaining);
-        // Reserve before committing acquisition state: a recoverable allocation
-        // failure must not mark an uncopied prefix as complete.
         if !(reached && !pending_headers && action == BodyLimitAction::Reject) {
-            let body = if request {
-                &mut self.request.body
+            if request {
+                self.append_request_prefix(&data[..consumed], limit)?;
             } else {
-                &mut self.response.body
-            };
-            let required = current + consumed;
-            if required > body.capacity() {
-                // Amortize small writes without requesting capacity beyond the inspection limit.
-                let capacity = required.max(body.capacity().saturating_mul(2).min(limit));
-                body.try_reserve_exact(capacity - current)
-                    .or_else(|error| {
-                        if capacity > required {
-                            body.try_reserve_exact(consumed)
-                        } else {
-                            Err(error)
-                        }
-                    })
-                    .map_err(|source| crate::Error::BodyBufferAllocation { source })?;
+                append_memory(&mut self.response.body, &data[..consumed], limit)?;
             }
         }
         if reached {
@@ -863,12 +834,6 @@ impl Transaction {
                 state.pending_reject_length = Some(current);
             }
         }
-        let body = if request {
-            &mut self.request.body
-        } else {
-            &mut self.response.body
-        };
-        body.extend_from_slice(&data[..consumed]);
         if reached && !pending_headers {
             if request {
                 self.process_request_body()?;
@@ -887,6 +852,37 @@ impl Transaction {
             pending_headers,
             inspection_complete: processed,
         })
+    }
+
+    fn append_request_prefix(&mut self, data: &[u8], limit: usize) -> Result<()> {
+        if let Some(spool) = &mut self.request_spool {
+            return spool.append(data).map_err(crate::Error::BodySpoolIo);
+        }
+        let threshold = self
+            .ruleset
+            .body_config()
+            .request_in_memory_limit
+            .unwrap_or(limit)
+            .min(limit);
+        if self.request.body.len() + data.len() <= threshold {
+            return append_memory(&mut self.request.body, data, threshold);
+        }
+        let mut spool = RequestSpool::new(&self.request.body).map_err(crate::Error::BodySpoolIo)?;
+        spool.append(data).map_err(crate::Error::BodySpoolIo)?;
+        self.request_spool = Some(Box::new(spool));
+        self.request.body = Vec::new();
+        Ok(())
+    }
+
+    fn truncate_request_body(&mut self, len: usize) {
+        if len == 0 {
+            self.request_spool = None;
+            self.request.body = Vec::new();
+        } else if let Some(spool) = &mut self.request_spool {
+            spool.len = spool.len.min(len);
+        } else {
+            self.request.body.truncate(len);
+        }
     }
 
     fn log_body_limit(&self, request: bool, action: BodyLimitAction) {
@@ -925,7 +921,7 @@ impl Transaction {
         };
         if !accessible || self.engine_mode() == RuleEngineMode::Off {
             if request {
-                self.request.body = Vec::new();
+                self.truncate_request_body(0);
                 self.request.inbound_data_error = false;
                 self.request_body_state.limit_reached = false;
                 self.request_body_state.pending_reject_length = None;
@@ -947,7 +943,7 @@ impl Transaction {
             self.log_body_limit(request, action);
             if action == BodyLimitAction::Reject {
                 if request {
-                    self.request.body.truncate(previous);
+                    self.truncate_request_body(previous);
                 } else {
                     self.response.body.truncate(previous);
                 }
@@ -2392,6 +2388,100 @@ SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
 #[cfg(test)]
 mod body_buffer_boundaries {
     use crate::ModSecurity;
+
+    #[test]
+    fn spilled_and_resident_forms_publish_the_same_prefix_in_phase_two() {
+        for threshold in [3, 8] {
+            let engine = ModSecurity::from_string(&format!(
+                r#"
+SecRequestBodyAccess On
+SecRequestBodyLimit 8
+SecRequestBodyInMemoryLimit {threshold}
+SecRequestBodyLimitAction ProcessPartial
+SecRule REQUEST_BODY_LENGTH "@gt 0" "id:1,phase:1,pass"
+SecRule REQUEST_BODY "@streq x=abcdef" "id:2,phase:2,pass"
+SecRule ARGS_POST:x "@streq abcdef" "id:3,phase:2,pass""#
+            ))
+            .unwrap();
+            let mut tx = engine.new_transaction();
+            tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
+                .unwrap();
+            tx.write_request_body(b"x=a").unwrap();
+            assert!(tx.request_spool.is_none());
+            tx.write_request_body(b"bc").unwrap();
+            assert_eq!(tx.request_body_buffered_len(), 5);
+            assert_eq!(tx.request_spool.is_some(), threshold == 3);
+            if threshold == 3 {
+                assert_eq!(tx.request.body.capacity(), 0);
+            }
+            tx.process_request_headers().unwrap();
+            assert_eq!(tx.write_request_body(b"defghi").unwrap().consumed, 3);
+            assert_eq!(tx.matched_rules(), ["2", "3"]);
+            assert_eq!(tx.request_body_buffered_len(), 8);
+        }
+    }
+
+    #[test]
+    fn spooled_provisional_bytes_are_discarded_when_headers_disable_access() {
+        let engine = ModSecurity::from_string(
+            r#"SecRequestBodyAccess On
+SecRequestBodyInMemoryLimit 2
+SecAction "id:1,phase:1,pass,ctl:requestBodyAccess=Off""#,
+        )
+        .unwrap();
+        let mut tx = engine.new_transaction();
+        tx.write_request_body(b"sample").unwrap();
+        assert!(tx.request_spool.is_some());
+        tx.process_request_headers().unwrap();
+        assert!(tx.request_spool.is_none());
+        assert_eq!(tx.request_body_buffered_len(), 0);
+    }
+
+    #[test]
+    fn unknown_media_keeps_the_spool_and_binary_raw_reads_it_in_full() {
+        for raw in [false, true] {
+            let rule = if raw {
+                r#"SecAction "id:1,phase:1,pass,ctl:requestBodyProcessor=RAW""#
+            } else {
+                ""
+            };
+            let engine = ModSecurity::from_string(&format!(
+                "SecRequestBodyAccess On\nSecRequestBodyInMemoryLimit 2\n{rule}"
+            ))
+            .unwrap();
+            let mut tx = engine.new_transaction();
+            tx.process_request_headers().unwrap();
+            for chunk in [b"one".as_slice(), &[255, 0, 128], b"two"] {
+                tx.write_request_body(chunk).unwrap();
+            }
+            tx.process_request_body().unwrap();
+            assert_eq!(tx.request_body_buffered_len(), 9);
+            assert_eq!(tx.request_spool.is_some(), !raw);
+            assert_eq!(
+                tx.request.request_body_bytes_variable(),
+                if raw {
+                    b"one\xff\0\x80two".as_slice()
+                } else {
+                    b""
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn memory_limit_is_checked_against_the_final_request_limit() {
+        for config in [
+            "SecRequestBodyInMemoryLimit 0",
+            "SecRequestBodyInMemoryLimit -1",
+            "SecRequestBodyInMemoryLimit 3\nSecRequestBodyLimit 2",
+        ] {
+            assert!(ModSecurity::from_string(config).is_err());
+        }
+        assert!(
+            ModSecurity::from_string("SecRequestBodyInMemoryLimit 3\nSecRequestBodyLimit 3")
+                .is_ok()
+        );
+    }
 
     #[test]
     fn partial_body_reserves_only_its_bounded_prefix() {
