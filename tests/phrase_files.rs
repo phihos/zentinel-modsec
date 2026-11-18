@@ -7,6 +7,7 @@ fn nested_includes_resolve_each_list_at_its_declaring_rule_and_load_it_once() {
     let dir = tempfile::tempdir().unwrap();
     let child = dir.path().join("child");
     fs::create_dir(&child).unwrap();
+    fs::write(child.join("empty.data"), "# ordinary empty list\n").unwrap();
     fs::write(child.join("list.data"), "short\nshort blue\n").unwrap();
     fs::write(
         child.join("rules.conf"),
@@ -24,6 +25,7 @@ fn nested_includes_resolve_each_list_at_its_declaring_rule_and_load_it_once() {
 SecRule REMOTE_ADDR "@IpMatchF {filename}" "id:2,phase:1,pass"
 SecRule ARGS:q "@pmFromFile child/list.data" "id:3,phase:1,pass"
 SecRule REMOTE_ADDR "@ipMatchFromFile {filename}" "id:4,phase:1,pass"
+SecRule ARGS:q "@pmf child/empty.data" "id:5,phase:1,pass"
 "#
         ),
     )
@@ -79,7 +81,7 @@ fn capture_uses_the_leftmost_longest_occurrences_and_limits_slots_to_ten() {
         .unwrap();
     tx.process_request_headers().unwrap();
     assert_eq!(tx.tx().get_bytes(b"0").unwrap(), [b"aBc".as_slice()]);
-    assert_eq!(tx.tx().get_bytes(b"3").unwrap(), [b"B".as_slice()]);
+    assert_eq!(tx.tx().get_bytes(b"4").unwrap(), [b"B".as_slice()]);
     assert_eq!(tx.tx().get_bytes(b"9").unwrap(), [b"b".as_slice()]);
     assert!(tx.tx().get_bytes(b"10").is_none());
 }
@@ -95,5 +97,6 @@ fn binary_macro_operand_uses_the_same_phrase_order_and_capture_bytes() {
         .unwrap();
     tx.process_request_headers().unwrap();
     assert_eq!(tx.tx().get_bytes(b"0").unwrap(), [b"aBC".as_slice()]);
-    assert_eq!(tx.tx().get_bytes(b"1").unwrap(), [&[0x80u8][..]]);
+    assert_eq!(tx.tx().get_bytes(b"1").unwrap(), [b"B".as_slice()]);
+    assert_eq!(tx.tx().get_bytes(b"2").unwrap(), [&[0x80u8][..]]);
 }

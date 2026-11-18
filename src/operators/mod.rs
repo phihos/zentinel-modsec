@@ -197,11 +197,7 @@ impl WithinOperator {
     }
 
     fn matches(&self, needle: &[u8]) -> bool {
-        needle.is_empty()
-            || self
-                .haystack
-                .windows(needle.len())
-                .any(|part| part == needle)
+        memchr::memmem::find(&self.haystack, needle).is_some()
     }
 }
 
