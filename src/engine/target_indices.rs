@@ -177,8 +177,14 @@ impl TargetIndices {
         }
     }
 
-    pub fn add_width_sources(&self, sources: &mut WidthSources) {
-        sources.arguments |= self.bounded_targets[0] != 0 || self.bounded_targets[1] != 0;
+    pub fn add_width_sources(&self, sources: &mut WidthSources, specs: &[VariableSpec]) {
+        // A literal argument uses an indexed lookup. Build the collection summary
+        // only when a width-aware target would otherwise visit the collection.
+        let arguments = self.bounded_targets[0] | self.bounded_targets[1];
+        sources.arguments |= specs.iter().take(PREFIX).enumerate().any(|(i, spec)| {
+            arguments & (1 << i) != 0
+                && !matches!(spec.selection, Some(crate::parser::Selection::Key(_)))
+        });
         sources.filename |= self.bounded_targets[2] != 0;
         sources.optional_targets |= self.optional_targets != 0;
     }
@@ -407,7 +413,7 @@ mod tests {
         plan.add_optional_header(0, b"alpha");
         let active = |request: &RequestData| {
             let mut sources = WidthSources::default();
-            plan.add_width_sources(&mut sources);
+            plan.add_width_sources(&mut sources, &specs);
             plan.select(RequestCollections::new(request, sources))
                 .indices(&specs)
                 .collect::<Vec<_>>()
