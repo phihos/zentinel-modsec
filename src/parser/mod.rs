@@ -41,10 +41,16 @@ use crate::error::{Error, Result, SourceLocation};
 use std::collections::HashMap;
 use std::path::Path;
 
+// Coraza counts Include directives cumulatively, including directives in
+// previously loaded files. One glob is one directive regardless of its size.
+const MAX_INCLUDES: usize = 100;
+
 /// Parser for ModSecurity configuration files.
 pub struct Parser {
     /// Parsed directives.
     directives: Vec<Directive>,
+    /// Number of Include directives expanded into this configuration.
+    include_count: usize,
     /// Current source location for error reporting.
     location: SourceLocation,
     /// Default actions to apply to rules, keyed by the phase they configure.
@@ -60,6 +66,7 @@ impl Parser {
     pub fn new() -> Self {
         Self {
             directives: Vec::new(),
+            include_count: 0,
             location: SourceLocation::default(),
             default_actions: HashMap::new(),
         }
@@ -120,15 +127,16 @@ impl Parser {
             .map_err(|e| Error::parse(format!("invalid glob pattern: {}", e), pattern))?;
 
         for entry in paths {
-            match entry {
-                Ok(path) => {
-                    if path.is_file() {
-                        self.parse_file(&path)?;
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "error reading glob entry");
-                }
+            let path = entry.map_err(|e| Error::RuleFileLoad {
+                path: e.path().to_path_buf(),
+                source: e.into_error(),
+            })?;
+            let metadata = path.metadata().map_err(|source| Error::RuleFileLoad {
+                path: path.clone(),
+                source,
+            })?;
+            if metadata.is_file() {
+                self.parse_file(&path)?;
             }
         }
 
@@ -576,16 +584,35 @@ impl Parser {
     /// Parse an Include directive.
     fn parse_include(&mut self, lexer: &mut Lexer) -> Result<Directive> {
         let path = self.expect_argument(lexer, "Include path")?;
+        if self.include_count >= MAX_INCLUDES {
+            return Err(Error::parse(
+                format!("configuration exceeds the limit of {MAX_INCLUDES} Include directives"),
+                self.location.to_string(),
+            ));
+        }
+        self.include_count += 1;
 
         let is_glob = path.contains(['*', '?', '[']);
-        let path = std::path::Path::new(&path);
-        let resolved_path = match self.location.file.as_ref().and_then(|f| f.parent()) {
-            Some(parent) => parent.join(path),
-            None => path.to_path_buf(),
-        };
+        let path = Path::new(&path);
         let including_location = self.location.clone();
+        let parent = including_location
+            .file
+            .as_deref()
+            .and_then(Path::parent)
+            .filter(|_| path.is_relative())
+            .unwrap_or(Path::new(""));
+        let resolved_path = parent.join(path);
         let parsed = if is_glob {
-            self.parse_glob(&resolved_path.to_string_lossy())
+            // Only the directive's operand is a pattern. The declaring
+            // directory may itself have brackets or other glob characters.
+            let parent = parent.to_str().ok_or_else(|| {
+                Error::parse(
+                    "glob include needs a UTF-8 directory",
+                    including_location.to_string(),
+                )
+            })?;
+            let escaped = glob::Pattern::escape(parent);
+            self.parse_glob(&Path::new(&escaped).join(path).to_string_lossy())
         } else {
             self.parse_file(&resolved_path)
         };
@@ -642,7 +669,8 @@ impl Parser {
     /// Skip to end of current line.
     fn skip_to_end_of_line(&self, lexer: &mut Lexer) {
         while let Some(token) = lexer.next_token() {
-            if matches!(token.kind, TokenKind::Newline) {
+            // Comment tokens already consume their terminating newline.
+            if matches!(token.kind, TokenKind::Comment | TokenKind::Newline) {
                 break;
             }
         }
