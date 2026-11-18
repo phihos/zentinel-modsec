@@ -150,7 +150,7 @@ impl RequestCollections {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub(super) struct TargetIndices {
     present: [u16; 16],
     bounded_targets: [u16; 3],

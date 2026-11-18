@@ -1031,6 +1031,13 @@ impl Transaction {
 
             let rule = &rules[idx];
 
+            let targets = dispatch[idx].targets.select(available);
+            if !targets.may_match(rule.variables.len()) && chain_start.is_none() && skip_count == 0
+            {
+                idx = dispatch[idx].after_empty_targets;
+                continue;
+            }
+
             // Coraza applies removals before counting skip:N, at the entry
             // to a logical rule. A child tag cannot select its starter.
             // Likewise a removal fired by the starter cannot cancel its own
@@ -1064,7 +1071,6 @@ impl Transaction {
             };
             let link_rule_id = rule.id.as_deref().or(starter.id.as_deref());
             let standalone = !rule.is_chain && chain_start.is_none();
-            let targets = dispatch[idx].targets.select(available);
             let outcome = if targets.may_match(rule.variables.len()) {
                 self.evaluate_rule(
                     rule,
@@ -1958,6 +1964,49 @@ SecRule REQUEST_HEADERS:x-test "@rx (?-u:\xFF)" "id:66,phase:1,deny,status:406""
                 a.intervention().map(|i| i.status),
                 (count == 33).then_some(406)
             );
+        }
+    }
+
+    #[test]
+    fn empty_target_runs_preserve_counted_skips_markers_and_chains() {
+        let config = r#"SecRuleEngine On
+SecRule REQUEST_METHOD "@streq POST" "id:70,phase:1,pass,skip:2,ctl:ruleRemoveById=71"
+SecRule REQUEST_METHOD "@streq HEAD" "id:80,phase:1,pass,skipAfter:MIDDLE"
+SecRule ARGS "@streq hit" "id:71,phase:1,pass,chain"
+SecRule REQUEST_METHOD "@rx ." "setvar:tx.child=1"
+SecRule ARGS "@streq hit" "id:72,phase:1,pass"
+SecMarker MIDDLE
+SecRule ARGS "@streq hit" "id:73,phase:1,pass"
+SecAction "id:74,phase:1,pass,setvar:tx.visited=1"
+SecRule REQUEST_METHOD "@rx ." "id:75,phase:1,pass,chain,setvar:tx.starter=1"
+SecRule ARGS "@streq hit" "chain"
+SecRule REQUEST_METHOD "@rx ." "setvar:tx.tail=1"
+SecRule &ARGS "@eq 0" "id:76,phase:1,pass"
+SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
+        let fast = make_ruleset(config);
+        let rules = fast.dispatch_for_phase(Phase::RequestHeaders);
+        assert!(rules[2].after_empty_targets >= 6);
+        // TX:unset always resolves to no values, but its mutable collection
+        // keeps the reference evaluator on the ordinary per-rule path.
+        let reference = make_ruleset(&config.replace("SecRule ARGS ", "SecRule ARGS|TX:unset "));
+        for method in ["GET", "HEAD", "POST"] {
+            for uri in ["/", "/?v=hit"] {
+                let run = |rules| {
+                    let mut tx = Transaction::new(rules, 403);
+                    tx.set_record_rule_messages(true);
+                    tx.set_record_setvar_effects(true);
+                    tx.process_uri(uri, method, "HTTP/1.1").unwrap();
+                    tx.process_request_headers().unwrap();
+                    tx
+                };
+                let (a, b) = (run(fast.clone()), run(reference.clone()));
+                assert_eq!(a.matched_rules(), b.matched_rules());
+                assert_eq!(a.matched_data(), b.matched_data());
+                assert_eq!(a.rule_messages(), b.rule_messages());
+                assert_eq!(a.setvar_effects(), b.setvar_effects());
+                assert_eq!(a.tx.all_bytes(), b.tx.all_bytes());
+                assert!(a.matched_rules().iter().any(|id| id == "77"));
+            }
         }
     }
 
