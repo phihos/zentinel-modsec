@@ -706,8 +706,20 @@ impl Transaction {
             } else {
                 &mut self.response.body
             };
-            body.try_reserve_exact(consumed)
-                .map_err(|source| crate::Error::BodyBufferAllocation { source })?;
+            let required = current + consumed;
+            if required > body.capacity() {
+                // Amortize small writes without requesting capacity beyond the inspection limit.
+                let capacity = required.max(body.capacity().saturating_mul(2).min(limit));
+                body.try_reserve_exact(capacity - current)
+                    .or_else(|error| {
+                        if capacity > required {
+                            body.try_reserve_exact(consumed)
+                        } else {
+                            Err(error)
+                        }
+                    })
+                    .map_err(|source| crate::Error::BodyBufferAllocation { source })?;
+            }
         }
         if reached {
             if !pending_headers {
@@ -1913,6 +1925,25 @@ mod body_buffer_boundaries {
         assert_eq!(tx.request.body.len(), 4);
         assert!(tx.request.body.capacity() <= 4);
         assert!(tx.request.inbound_data_error);
+    }
+
+    #[test]
+    fn small_writes_grow_amortized_and_respect_a_non_power_of_two_limit() {
+        let engine = ModSecurity::from_string(
+            "SecRequestBodyAccess On\nSecRequestBodyLimit 100\nSecRequestBodyLimitAction ProcessPartial",
+        ).unwrap();
+        let mut tx = engine.new_transaction();
+        tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        let mut growths = 0;
+        for _ in 0..100 {
+            let previous = tx.request.body.capacity();
+            assert_eq!(tx.write_request_body(b"x").unwrap().consumed, 1);
+            growths += usize::from(tx.request.body.capacity() > previous);
+            assert!(tx.request.body.capacity() <= 100);
+        }
+        assert!(growths <= 8);
+        assert_eq!(tx.request_body_buffered_len(), 100);
     }
 
     #[test]
