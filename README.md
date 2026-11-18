@@ -243,6 +243,10 @@ async fn waf(
 **Directives:** `SecRule`, `SecAction`, `SecMarker`, `SecRuleEngine`,
 `SecDefaultAction`, `SecRuleRemoveById`, `SecRuleUpdateTargetById`,
 `SecRuleUpdateTargetByTag`, `Include`.
+Relative includes resolve beside their declaring file. A glob applies only to
+the written operand. An unmatched glob is allowed, and an unreadable matched
+file fails the load. As in Coraza 3.8.1, one configuration can expand up to
+100 `Include` directives, including nested directives. Each glob counts once.
 Body directives are implemented: `SecRequestBodyAccess`, `SecResponseBodyAccess`,
 `SecRequestBodyLimit`, `SecResponseBodyLimit`, their `LimitAction` settings,
 `SecResponseBodyMimeType` and `SecResponseBodyMimeTypesClear`. Limits must be
