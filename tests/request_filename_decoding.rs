@@ -95,3 +95,23 @@ fn basename_retains_the_decoded_path_when_it_ends_in_a_separator() {
         assert_eq!(tx.tx().get("base"), Some(vec![expected]), "{uri}");
     }
 }
+
+#[test]
+fn target_delimiters_and_scheme_validation_precede_path_decoding() {
+    let mut request = RequestData::new();
+    for (uri, path, query) in [
+        ("x+v.2://example/a%20b#f?q", "/a b", ""),
+        ("x+v.2://example?empty", "", "empty"),
+        ("x+v.2://example/%2f%#f?q", "x+v.2://example/%2f%", ""),
+        ("9x://example/a%2Fb?q#f", "9x://example/a/b", "q"),
+        ("foo:bar://host/a%2f?q??#f", "foo:bar://host/a/", "q??"),
+        ("/%41%42%43", "/ABC", ""),
+    ] {
+        request.set_uri(uri);
+        assert_eq!(
+            (request.path.as_str(), request.query_string.as_str()),
+            (path, query)
+        );
+        assert_eq!(request.uri_bytes(), uri.as_bytes());
+    }
+}
