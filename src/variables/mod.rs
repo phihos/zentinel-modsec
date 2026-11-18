@@ -20,7 +20,7 @@ pub(crate) use collection::folded_key;
 pub use collection::{ByteCollection, Collection, HashMapCollection, MutableCollection};
 pub use request::RequestData;
 pub use resolver::VariableResolver;
-pub use response::ResponseData;
+pub use response::{ResponseData, ResponseJson};
 pub(crate) use selectors::{
     compile_selector, regex_exclusion, MemberSelector, SelectorPrograms, TargetSelection,
 };

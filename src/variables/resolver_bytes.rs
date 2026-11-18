@@ -89,6 +89,11 @@ impl<'a> VariableResolver<'a> {
                 collection(&request.headers, "REQUEST_HEADERS_NAMES", true, None)
             }
             ResponseHeaders => collection(&self.response.headers, "RESPONSE_HEADERS", false, None),
+            ResponseArgs => {
+                if let Some(json) = &self.response.json {
+                    collection(&json.args, "RESPONSE_ARGS", false, None);
+                }
+            }
             ResponseHeadersNames => {
                 collection(&self.response.headers, "RESPONSE_HEADERS_NAMES", true, None)
             }
@@ -216,11 +221,35 @@ impl<'a> VariableResolver<'a> {
                 }
             }
             RequestBody => scalar("REQUEST_BODY", request.request_body_bytes_variable()),
+            ResBodyProcessor => scalar(
+                "RES_BODY_PROCESSOR",
+                if self.response.json.is_some() {
+                    b"JSON"
+                } else {
+                    b""
+                },
+            ),
+            ResBodyError | ResBodyProcessorError | ResBodyErrorMsg | ResBodyProcessorErrorMsg => {
+                let error = self
+                    .response
+                    .json
+                    .as_ref()
+                    .and_then(|json| json.error.as_deref());
+                let prefix = name.seclang_name();
+                match (name, error) {
+                    (_, None) => scalar(prefix, b""),
+                    (ResBodyErrorMsg, Some(error)) => {
+                        scalar(prefix, format!("JSON: {error}").as_bytes())
+                    }
+                    (ResBodyProcessorErrorMsg, Some(error)) => scalar(prefix, error.as_bytes()),
+                    _ => scalar(prefix, b"1"),
+                }
+            }
             ResponseBody => scalar("RESPONSE_BODY", self.response.body_variable_bytes()),
             ResponseContentLength => {
                 // An inspected empty body exposes "0"; an uninspected body
                 // retains the initial empty scalar, even with a length header.
-                let length = if self.response.body_inspected {
+                let length = if self.response.body_inspected && self.response.json.is_none() {
                     self.response.body_length().to_string()
                 } else {
                     String::new()

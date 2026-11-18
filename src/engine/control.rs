@@ -67,6 +67,8 @@ pub enum CtlDirective {
     ResponseBodyAccess(bool),
     /// `ctl:requestBodyProcessor=URLENCODED|MULTIPART|JSON|XML|RAW`
     RequestBodyProcessor(String),
+    /// `ctl:responseBodyProcessor=JSON`
+    ResponseBodyProcessorJson,
     /// Expose an otherwise unprocessed body (Coraza 3.8.1 uses URLENCODED).
     ForceRequestBodyVariable(bool),
     /// A directive this engine does not implement.
@@ -247,6 +249,14 @@ impl CtlDirective {
                 ),
             },
 
+            "responsebodyprocessor" if value.eq_ignore_ascii_case("json") => {
+                Self::ResponseBodyProcessorJson
+            }
+            "responsebodyprocessor" => Self::unsupported(
+                directive,
+                value,
+                "only the JSON response processor is supported",
+            ),
             "requestbodyprocessor" => {
                 let upper = value.to_ascii_uppercase();
                 if SUPPORTED_BODY_PROCESSORS.contains(&upper.as_str()) {
@@ -336,6 +346,7 @@ pub struct TransactionControls {
     removed_tag_targets: Vec<(String, VariableSpec, Option<Arc<regex::bytes::Regex>>)>,
     request_body_access: Option<bool>,
     request_body_processor: Option<String>,
+    response_json: bool,
     force_request_body_variable: bool,
     /// Unsupported directives already reported, so a rule that fires on every
     /// request does not produce a warning per request.
@@ -410,6 +421,7 @@ impl TransactionControls {
             }
             CtlDirective::RequestBodyAccess(on) => self.request_body_access = Some(on),
             CtlDirective::ResponseBodyAccess(on) => self.response_body_access = Some(on),
+            CtlDirective::ResponseBodyProcessorJson => self.response_json = true,
             CtlDirective::RequestBodyProcessor(p) => self.request_body_processor = Some(p),
             CtlDirective::ForceRequestBodyVariable(on) => self.force_request_body_variable = on,
             CtlDirective::Unsupported {
@@ -595,6 +607,11 @@ impl TransactionControls {
             super::ruleset::has_tag(actions, tag)
                 && target_matches_member(var, target, key, regex.as_deref())
         })
+    }
+
+    /// Whether a rule selected JSON response processing.
+    pub fn response_json_selected(&self) -> bool {
+        self.response_json
     }
 
     /// Whether the request body should be parsed at all.
