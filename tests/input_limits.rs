@@ -64,10 +64,13 @@ SecRule ARGS_POST:json "@streq 2" "id:24,phase:2,pass""#;
     );
     assert_eq!(
         observations(rules, "", json, br#"{"keep":1,"KEEP":2,"late":!}"#),
-        ["20", "21", "22"]
+        ["21", "22"]
     );
     assert_eq!(observations(rules, "", json, b"[1,2]"), ["24"]);
     assert_eq!(observations(rules, "", json, b"[1,2,3]"), ["20"]);
+    for body in [b"[1,2,]".as_slice(), b"[1,2,"] {
+        assert_eq!(observations(rules, "", json, body), ["21", "24"]);
+    }
 }
 
 #[test]
