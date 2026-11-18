@@ -5,8 +5,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::parser::{
-    Action, DataAction, Directive, DisruptiveAction, FlowAction, LoggingAction, MetadataAction,
-    OperatorName, Selection, SetVarValue, VariableName, VariableSpec, XmlTarget,
+    Action, DataAction, Directive, FlowAction, LoggingAction, MetadataAction, OperatorName,
+    Selection, SetVarValue, VariableName, VariableSpec, XmlTarget,
 };
 use crate::variables::SelectorPrograms;
 
@@ -217,14 +217,6 @@ fn report_action(found: &mut Diagnostics, action: &Action, id: &str) {
         Action::Data(DataAction::Exec(_)) => ("exec", ignored),
         Action::Data(DataAction::Prepend(_)) => ("prepend", ignored),
         Action::Data(DataAction::Append(_)) => ("append", ignored),
-        Action::Disruptive(DisruptiveAction::AllowPhase) => (
-            "allow:phase",
-            "phase-scoped allow is not implemented; treated as global allow",
-        ),
-        Action::Disruptive(DisruptiveAction::AllowRequest) => (
-            "allow:request",
-            "request-scoped allow is not implemented; treated as global allow",
-        ),
         Action::Logging(action) => {
             let name = match action {
                 LoggingAction::Log => "log",

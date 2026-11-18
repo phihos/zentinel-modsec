@@ -298,11 +298,16 @@ fn parse_single_action(input: &str) -> Result<Action> {
         "block" => Ok(Action::Disruptive(DisruptiveAction::Block)),
         "pass" => Ok(Action::Disruptive(DisruptiveAction::Pass)),
         "allow" => {
-            let action = match argument.as_deref().map(str::to_ascii_lowercase).as_deref() {
-                None => DisruptiveAction::Allow,
-                Some("phase") => DisruptiveAction::AllowPhase,
-                Some("request") => DisruptiveAction::AllowRequest,
-                Some(_) => {
+            let argument = argument.as_deref().unwrap_or_default().trim();
+            let scope = argument
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+                .unwrap_or(argument);
+            let action = match scope {
+                "" => DisruptiveAction::Allow,
+                "phase" => DisruptiveAction::AllowPhase,
+                "request" => DisruptiveAction::AllowRequest,
+                _ => {
                     return Err(Error::InvalidActionArgument {
                         action: "allow".into(),
                         message: "expected phase or request".into(),
