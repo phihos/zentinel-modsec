@@ -8,7 +8,7 @@ pub struct UrlDecode;
 
 impl Transformation for UrlDecode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(super::bytes::url_decode_stage(input, false))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
@@ -34,7 +34,7 @@ pub struct UrlDecodeUni;
 
 impl Transformation for UrlDecodeUni {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(super::bytes::url_decode_stage(input, true))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
@@ -192,7 +192,7 @@ pub struct HtmlEntityDecode;
 
 impl Transformation for HtmlEntityDecode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(super::bytes::html_entity_stage(input))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
@@ -214,7 +214,7 @@ pub struct JsDecode;
 
 impl Transformation for JsDecode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(super::bytes::escape_decode_stage(input, false, true))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
@@ -298,7 +298,7 @@ pub struct CssDecode;
 
 impl Transformation for CssDecode {
     fn transform_bytes<'a>(&self, input: &'a [u8]) -> crate::Result<Cow<'a, [u8]>> {
-        super::bytes::apply(self, input)
+        Ok(super::bytes::escape_decode_stage(input, true, false))
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
