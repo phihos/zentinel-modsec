@@ -213,7 +213,7 @@ fn known_unsupported_controls_warn_only_during_loading() {
         .finish();
     tracing::subscriber::with_default(subscriber, || {
         let engine =
-            ModSecurity::from_string(r#"SecAction "id:111,phase:1,pass,ctl:auditLogParts=+E""#)
+            ModSecurity::from_string(r#"SecAction "id:111,phase:1,pass,ctl:auditLogParts=+Z""#)
                 .unwrap();
         let loaded = bytes.lock().unwrap().clone();
         assert!(String::from_utf8_lossy(&loaded).contains("rule_ids=111"));

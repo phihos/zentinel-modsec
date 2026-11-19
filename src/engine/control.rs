@@ -38,11 +38,26 @@ pub struct RuleIdRange {
     end: u64,
 }
 
+/// Transaction audit mode selected by a rule for use by the connector's writer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuditEngineMode {
+    /// Record all transactions.
+    On,
+    /// Suppress the audit record.
+    Off,
+    /// Select transactions using matched audit actions and relevant status.
+    RelevantOnly,
+}
+
 /// A parsed `ctl:` directive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CtlDirective {
     /// `ctl:ruleEngine=On|Off|DetectionOnly`
     RuleEngine(RuleEngineMode),
+    /// Override the connector's audit policy for this transaction.
+    AuditEngine(AuditEngineMode),
+    /// Replace, add, or remove parts of the audit record.
+    AuditLogParts(String),
     /// `ctl:ruleRemoveById=ID` or `=START-END`, or several separated by commas.
     RuleRemoveById(Vec<RuleIdRange>),
     /// `ctl:ruleRemoveByTag=TAG` (exact, case-sensitive rule tag).
@@ -304,11 +319,22 @@ impl CtlDirective {
                 }
             }
 
-            "auditengine" | "auditlogparts" => CtlDirective::unsupported(
-                directive,
-                value,
-                "this engine has no audit log subsystem, so there is nothing to control",
-            ),
+            "auditengine" => match value.to_ascii_lowercase().as_str() {
+                "off" => Self::AuditEngine(AuditEngineMode::Off),
+                "on" => Self::AuditEngine(AuditEngineMode::On),
+                "relevantonly" => Self::AuditEngine(AuditEngineMode::RelevantOnly),
+                _ => Self::unsupported(directive, value, "expected On, Off, or RelevantOnly"),
+            },
+            "auditlogparts" => {
+                let letters = value
+                    .strip_prefix(['+', '-'])
+                    .or_else(|| value.strip_prefix('A')?.strip_suffix('Z'));
+                if letters.is_some_and(|parts| parts.bytes().all(|p| (b'B'..=b'K').contains(&p))) {
+                    Self::AuditLogParts(value.to_owned())
+                } else {
+                    Self::unsupported(directive, value, "invalid audit log parts")
+                }
+            }
 
             _ => CtlDirective::unsupported(directive, value, "unrecognised ctl directive"),
         }
@@ -365,6 +391,8 @@ fn parse_id_ranges(value: &str) -> Option<Vec<RuleIdRange>> {
 #[derive(Debug, Default, Clone)]
 pub struct TransactionControls {
     engine_mode: Option<RuleEngineMode>,
+    pub(super) audit_engine: Option<AuditEngineMode>,
+    audit_log_parts: Vec<String>,
     response_body_access: Option<bool>,
     // Sorted, disjoint inclusive intervals for all active ruleRemoveById controls.
     removed_rules: Vec<RuleIdRange>,
@@ -407,6 +435,8 @@ impl TransactionControls {
     ) {
         match directive {
             CtlDirective::RuleEngine(mode) => self.engine_mode = Some(mode),
+            CtlDirective::AuditEngine(mode) => self.audit_engine = Some(mode),
+            CtlDirective::AuditLogParts(change) => self.audit_log_parts.push(change),
             CtlDirective::RuleRemoveById(ranges) => self.add_removed_ids(ranges),
             CtlDirective::RuleRemoveByTag(tag) => {
                 if !self.removed_tags.contains(&tag) {
@@ -495,6 +525,28 @@ impl TransactionControls {
     /// Engine mode for this transaction, given the ruleset's configured mode.
     pub fn engine_mode(&self, ruleset_mode: RuleEngineMode) -> RuleEngineMode {
         self.engine_mode.unwrap_or(ruleset_mode)
+    }
+
+    pub(super) fn audit_log_parts(&self, base: &str) -> String {
+        let mut selected = base.to_owned();
+        for change in &self.audit_log_parts {
+            let add = change.starts_with('+');
+            if add || change.starts_with('-') {
+                // Coraza canonicalizes relative edits to the ordered optional parts.
+                selected = ('B'..='K')
+                    .filter(|&part| {
+                        if change[1..].contains(part) {
+                            add
+                        } else {
+                            selected.contains(part)
+                        }
+                    })
+                    .collect();
+            } else {
+                selected.clone_from(change);
+            }
+        }
+        selected
     }
 
     fn add_removed_ids(&mut self, mut ranges: Vec<RuleIdRange>) {
@@ -986,8 +1038,8 @@ mod tests {
         // like it worked.
         for (directive, value) in [
             ("requestBodyProcessor", "YAML"),
-            ("auditEngine", "Off"),
-            ("auditLogParts", "+E"),
+            ("auditEngine", "unknown"),
+            ("auditLogParts", "+Z"),
             ("forceRequestBodyVariable", "sometimes"),
         ] {
             assert!(

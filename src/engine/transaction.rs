@@ -42,6 +42,7 @@ pub struct Transaction {
     phase: Phase,
     /// Intervention (if any).
     intervention: Option<Intervention>,
+    detection_only_status: Option<u16>,
     /// Default block status.
     default_status: u16,
     /// Matched rules.
@@ -272,6 +273,7 @@ impl Transaction {
             numeric_tx_indices: [usize::MAX; super::ruleset::NUMERIC_TX_SLOTS],
             phase: Phase::RequestHeaders,
             intervention: None,
+            detection_only_status: None,
             default_status,
             matched_rules: MatchedRules::default(),
             chain_history: None,
@@ -536,8 +538,33 @@ impl Transaction {
     /// `ctl:ruleEngine` overrides the ruleset's configured mode for the
     /// remainder of the transaction; with no override this is the ruleset's
     /// own mode.
-    fn engine_mode(&self) -> RuleEngineMode {
+    pub fn engine_mode(&self) -> RuleEngineMode {
         self.controls.engine_mode(self.ruleset.engine_mode())
+    }
+
+    /// The status of the first disruptive match observed in DetectionOnly mode.
+    pub fn detection_only_status(&self) -> Option<u16> {
+        self.detection_only_status
+    }
+
+    /// Last audit engine control applied to this transaction, if any.
+    pub fn audit_engine_override(&self) -> Option<super::control::AuditEngineMode> {
+        self.controls.audit_engine
+    }
+
+    /// Apply transaction controls to the audit sections configured by the connector.
+    pub fn audit_log_parts(&self, base: &str) -> String {
+        self.controls.audit_log_parts(base)
+    }
+
+    /// Request metadata and headers available to the connector after inspection.
+    pub fn request_data(&self) -> &RequestData {
+        &self.request
+    }
+
+    /// Response metadata and headers available to the connector after inspection.
+    pub fn response_data(&self) -> &ResponseData {
+        &self.response
     }
 
     /// Run rules for a specific phase.
@@ -801,7 +828,12 @@ impl Transaction {
                 }
                 match starter_dispatch.disruptive(starter) {
                     None | Some(DisruptiveAction::Pass) => {}
-                    _ if self.engine_mode() != RuleEngineMode::On => {}
+                    _ if self.engine_mode() == RuleEngineMode::Off => {}
+                    Some(
+                        DisruptiveAction::Allow
+                        | DisruptiveAction::AllowPhase
+                        | DisruptiveAction::AllowRequest,
+                    ) if self.engine_mode() == RuleEngineMode::DetectionOnly => {}
                     Some(DisruptiveAction::AllowPhase) => return Ok(()),
                     Some(DisruptiveAction::AllowRequest) => {
                         if phase.is_request_phase() {
@@ -844,10 +876,15 @@ impl Transaction {
                             }
                             _ => unreachable!("non-interrupting actions handled above"),
                         };
-                        intervention.add_metadata(metadata);
-                        self.intervention = Some(intervention);
-                        if phase != Phase::Logging {
-                            return Ok(());
+                        if self.engine_mode() == RuleEngineMode::DetectionOnly {
+                            self.detection_only_status
+                                .get_or_insert(intervention.status);
+                        } else {
+                            intervention.add_metadata(metadata);
+                            self.intervention = Some(intervention);
+                            if phase != Phase::Logging {
+                                return Ok(());
+                            }
                         }
                     }
                 }

@@ -439,3 +439,30 @@ fn an_unsupported_ctl_does_not_disable_the_engine() {
 fn load_with_request_body(config: &str) -> zentinel_modsec::Result<ModSecurity> {
     ModSecurity::from_string(&format!("SecRequestBodyAccess On\n{config}"))
 }
+
+#[test]
+fn connector_audit_state_follows_matched_rules_and_stays_transaction_local() {
+    use zentinel_modsec::engine::{control::AuditEngineMode, ruleset::RuleEngineMode};
+    let rules = r#"
+SecRuleEngine DetectionOnly
+SecRule REQUEST_URI "@streq /catalog" "id:51,phase:1,allow"
+SecRule REQUEST_URI "@streq /catalog" "id:52,phase:1,deny,status:409,ctl:auditEngine=On,ctl:auditLogParts=+F"
+SecRule REQUEST_URI "@streq /catalog" "id:53,phase:1,deny,status:418,ctl:auditEngine=RelevantOnly,ctl:auditLogParts=-B"
+"#;
+    let waf = ModSecurity::from_string(rules).unwrap();
+    let mut tx = waf.new_transaction();
+    tx.process_uri("/catalog", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.engine_mode(), RuleEngineMode::DetectionOnly);
+    assert!(!tx.has_intervention());
+    assert_eq!(tx.detection_only_status(), Some(409));
+    assert_eq!(
+        tx.audit_engine_override(),
+        Some(AuditEngineMode::RelevantOnly)
+    );
+    assert_eq!(tx.audit_log_parts("ABHZ"), "FH");
+    let next = waf.new_transaction();
+    assert_eq!(next.detection_only_status(), None);
+    assert_eq!(next.audit_engine_override(), None);
+    assert_eq!(next.audit_log_parts("ABHZ"), "ABHZ");
+}
