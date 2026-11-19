@@ -52,6 +52,9 @@ pub enum Directive {
         /// Actions applied to each selected rule.
         actions: Vec<Action>,
     },
+    /// Select literal prefiltering for subsequent regular expressions.
+    SecRxPreFilter(bool),
+
     /// SecRequestBodyAccess directive.
     SecRequestBodyAccess(bool),
     /// SecResponseBodyAccess directive.

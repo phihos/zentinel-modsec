@@ -19,7 +19,7 @@ pub use comparison::{
 };
 pub use detection::{DetectSqliOperator, DetectXssOperator};
 pub use network::IpMatchOperator;
-pub(crate) use pattern::token_byte;
+pub(crate) use pattern::{token_byte, RegexOptions};
 pub use pattern::{PmOperator, RxOperator};
 pub use traits::{ByteOperatorResult, Operator, OperatorResult};
 pub use validation::{
@@ -46,13 +46,13 @@ pub fn create_operator(name: OperatorName, argument: &str) -> Result<Arc<dyn Ope
 
 /// Create a compiled operator from a specification.
 pub fn compile_operator(spec: &OperatorSpec) -> Result<Arc<dyn Operator>> {
-    compile_with_dataset(spec, None, false)
+    compile_with_dataset(spec, None, RegexOptions::default())
 }
 
 pub(crate) fn compile_with_dataset(
     spec: &OperatorSpec,
     dataset: Option<&[String]>,
-    no_regex_multiline: bool,
+    regex: RegexOptions,
 ) -> Result<Arc<dyn Operator>> {
     let name = &spec.name;
     let argument = &spec.argument;
@@ -70,10 +70,7 @@ pub(crate) fn compile_with_dataset(
             }
         }
         OperatorName::RestPath => Ok(Arc::new(restpath::RestPath::new(argument)?)),
-        OperatorName::Rx => Ok(Arc::new(RxOperator::with_multiline(
-            argument,
-            !no_regex_multiline,
-        )?)),
+        OperatorName::Rx => Ok(Arc::new(RxOperator::with_options(argument, regex)?)),
         OperatorName::Pm => Ok(Arc::new(PmOperator::new(argument)?)),
         OperatorName::PmFromFile | OperatorName::Pmf => {
             Ok(Arc::new(PmOperator::from_file(argument)?))

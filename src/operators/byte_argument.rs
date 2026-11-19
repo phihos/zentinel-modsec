@@ -3,13 +3,13 @@ use super::*;
 
 /// Compile a runtime argument without formatting binary macros for display.
 pub fn compile_operator_bytes(spec: &OperatorSpec, argument: &[u8]) -> Result<Arc<dyn Operator>> {
-    compile_bound_operator(spec, argument, false)
+    compile_bound_operator(spec, argument, RegexOptions::default())
 }
 
 pub(crate) fn compile_bound_operator(
     spec: &OperatorSpec,
     argument: &[u8],
-    no_regex_multiline: bool,
+    regex: RegexOptions,
 ) -> Result<Arc<dyn Operator>> {
     match spec.name {
         OperatorName::Eq => return Ok(Arc::new(EqOperator::from_expanded(argument))),
@@ -35,7 +35,7 @@ pub(crate) fn compile_bound_operator(
                 argument: argument.into(),
             },
             None,
-            no_regex_multiline,
+            regex,
         );
     }
     match spec.name {
@@ -49,10 +49,7 @@ pub(crate) fn compile_bound_operator(
                     write!(pattern, "\\x{byte:02x}").expect("String write");
                 }
             }
-            Ok(Arc::new(RxOperator::with_multiline(
-                &pattern,
-                !no_regex_multiline,
-            )?))
+            Ok(Arc::new(RxOperator::with_options(&pattern, regex)?))
         }
         OperatorName::Pm => Ok(Arc::new(PmOperator::from_patterns(
             argument

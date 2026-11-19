@@ -18,7 +18,7 @@ struct RegexCache {
     entries: Mutex<HashMap<String, Weak<RegexProgram>>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct MatchRequirements {
     any: usize,
     token: usize,
@@ -135,22 +135,37 @@ impl MatchRequirements {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct RegexOptions {
+    pub multiline: bool,
+    pub prefilter: bool,
+}
+
+impl Default for RegexOptions {
+    fn default() -> Self {
+        Self {
+            multiline: true,
+            prefilter: true,
+        }
+    }
+}
+
 struct RegexProgram {
     regex: Regex,
     requirements: MatchRequirements,
 }
 
 impl RegexCache {
-    fn get(&self, pattern: &str, multiline: bool) -> Result<Arc<RegexProgram>> {
+    fn get(&self, pattern: &str, options: RegexOptions) -> Result<Arc<RegexProgram>> {
         // Compilation is serialized with insertion, preventing concurrent
         // loads of the same pattern from building duplicate automata. Matching
         // never takes this lock.
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let binary = matches_arbitrary_bytes(pattern);
-        let multiline = multiline && !binary;
+        let multiline = options.multiline && !binary;
         let key = format!(
-            "unicode={};dotall={};multiline={};binary={}:{}",
-            !binary, !binary, multiline, binary, pattern
+            "unicode={};dotall={};multiline={};binary={};prefilter={}:{}",
+            !binary, !binary, multiline, binary, options.prefilter, pattern
         );
         if let Some(regex) = entries.get(&key).and_then(Weak::upgrade) {
             return Ok(regex);
@@ -174,6 +189,7 @@ impl RegexCache {
         let regex = Regex::builder()
             .configure(
                 Regex::config()
+                    .auto_prefilter(options.prefilter)
                     .utf8_empty(false)
                     .nfa_size_limit(Some(10 * (1 << 20)))
                     .hybrid_cache_capacity(2 * (1 << 20)),
@@ -185,12 +201,16 @@ impl RegexCache {
                     None => regex::Error::Syntax(err.to_string()),
                 })
             })?;
-        let requirements = MatchRequirements {
-            any: hir.properties().minimum_len().unwrap_or(0),
-            token: token_width(&hir, 32, &TOKEN_RANGES),
-            alphanumeric: token_width(&hir, 32, &WORD_RANGES).min(65) as u8,
-            dotted: token_width(&hir, 32, &DOTTED_RANGES).min(65) as u8,
-            required: required_byte(&hir, 32),
+        let requirements = if options.prefilter {
+            MatchRequirements {
+                any: hir.properties().minimum_len().unwrap_or(0),
+                token: token_width(&hir, 32, &TOKEN_RANGES),
+                alphanumeric: token_width(&hir, 32, &WORD_RANGES).min(65) as u8,
+                dotted: token_width(&hir, 32, &DOTTED_RANGES).min(65) as u8,
+                required: required_byte(&hir, 32),
+            }
+        } else {
+            MatchRequirements::default()
         };
         let regex = Arc::new(RegexProgram {
             regex,
@@ -299,6 +319,7 @@ fn normalize_binary_braced_escapes(pattern: &str, binary: bool) -> std::borrow::
 /// error, is reported by the loader with the affected rule ID.
 pub struct RxOperator {
     compiled: Arc<RegexProgram>,
+    pub(crate) options: RegexOptions,
     requirements: MatchRequirements,
     has_subgroups: bool,
 }
@@ -306,10 +327,10 @@ pub struct RxOperator {
 impl RxOperator {
     /// Compile a regex or share the compiled object of an existing live rule.
     pub fn new(pattern: &str) -> Result<Self> {
-        Self::with_multiline(pattern, true)
+        Self::with_options(pattern, RegexOptions::default())
     }
 
-    pub(crate) fn from_coraza_pattern(pattern: &str, no_multiline: bool) -> Result<Self> {
+    pub(crate) fn from_coraza_pattern(pattern: &str, options: RegexOptions) -> Result<Self> {
         // Go RE2 accepts a non-numeric opening brace as literal text. Rust's
         // parser requires an escape for the opening brace of a SecLang macro.
         // Leave valid repetition counts (e.g. %{2}) and regex syntax inside
@@ -329,21 +350,22 @@ impl RxOperator {
             start = offset + 2;
         }
         if start == 0 {
-            return Self::with_multiline(pattern, !no_multiline);
+            return Self::with_options(pattern, options);
         }
         normalized.push_str(&pattern[start..]);
-        Self::with_multiline(&normalized, !no_multiline)
+        Self::with_options(&normalized, options)
     }
 
-    pub(crate) fn with_multiline(pattern: &str, multiline: bool) -> Result<Self> {
+    pub(crate) fn with_options(pattern: &str, options: RegexOptions) -> Result<Self> {
         if pattern.is_empty() {
             return Err(Error::RegexCompile {
                 pattern: pattern.to_string(),
                 source: regex::Error::Syntax("empty pattern".to_string()),
             });
         }
-        let compiled = REGEX_CACHE.get(pattern, multiline)?;
+        let compiled = REGEX_CACHE.get(pattern, options)?;
         Ok(Self {
+            options,
             requirements: compiled.requirements,
             has_subgroups: compiled.regex.group_info().group_len(PatternID::ZERO) > 1,
             compiled,
@@ -793,6 +815,45 @@ mod tests {
     }
 
     #[test]
+    fn seclang_prefilter_applies_to_subsequent_rules_and_the_cache_key() {
+        use crate::{
+            engine::{phase::Phase, ruleset::CompileOptions},
+            parser::Parser,
+            CompiledRuleset,
+        };
+        let mut parser = Parser::new();
+        parser
+            .parse(
+                r#"
+SecRule REQUEST_METHOD "@rx ^(GET|HEAD)$" "id:1,phase:1,pass"
+SecRxPreFilter On
+SecRule REQUEST_METHOD "@rx ^(GET|HEAD)$" "id:2,phase:1,pass"
+SecRxPreFilter Off
+SecRule REQUEST_METHOD "@rx ^(GET|HEAD)$" "id:3,phase:1,pass"
+"#,
+            )
+            .unwrap();
+        let rules = CompiledRuleset::compile_with_options(
+            parser.into_directives(),
+            CompileOptions::CORAZA_SPOA,
+        )
+        .unwrap();
+        let ops: Vec<_> = rules
+            .rules_for_phase(Phase::RequestHeaders)
+            .iter()
+            .map(|r| r.operator.compiled_regex().unwrap())
+            .collect();
+        assert!(Arc::ptr_eq(&ops[0].compiled, &ops[2].compiled));
+        assert!(!Arc::ptr_eq(&ops[0].compiled, &ops[1].compiled));
+        for (op, enabled) in ops.iter().zip([false, true, false]) {
+            assert_eq!(op.compiled.regex.get_config().get_auto_prefilter(), enabled);
+            assert_eq!(op.requirements.rules_out(b"G"), enabled);
+            assert_eq!(op.execute("HEAD").captures, vec!["HEAD"]);
+        }
+        assert!(Parser::new().parse("SecRxPreFilter invalid").is_err());
+    }
+
+    #[test]
     fn identical_patterns_share_the_compiled_regex() {
         let first = RxOperator::new(r"(?i:shared-regex)-(\d+)").unwrap();
         let second = RxOperator::new(r"(?i:shared-regex)-(\d+)").unwrap();
@@ -819,7 +880,7 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
         ))
         .unwrap();
         let owners = REGEX_CACHE.entries.lock().unwrap()
-            ["unicode=true;dotall=true;multiline=true;binary=false:^shared-exclusion-pattern$"]
+            ["unicode=true;dotall=true;multiline=true;binary=false;prefilter=true:^shared-exclusion-pattern$"]
             .strong_count();
         assert_eq!(owners, 2, "one shared regex owned by both loaded rulesets");
         for (engine, should_block) in [(&original, true), (&excluded, false)] {
@@ -855,16 +916,20 @@ SecRule ARGS "@rx ^shared-exclusion-pattern$" "id:1001,phase:2,deny""#;
         // A local cache keeps this lifetime assertion independent of other
         // tests running against the process-wide cache concurrently.
         let cache = RegexCache::default();
-        let compiled = cache.get("^dropped-cache-pattern$", true).unwrap();
+        let compiled = cache
+            .get("^dropped-cache-pattern$", RegexOptions::default())
+            .unwrap();
         let weak = Arc::downgrade(&compiled);
         drop(compiled);
         assert!(weak.upgrade().is_none());
-        let live = cache.get("^replacement-cache-pattern$", true).unwrap();
+        let live = cache
+            .get("^replacement-cache-pattern$", RegexOptions::default())
+            .unwrap();
         let entries = cache.entries.lock().unwrap();
         assert_eq!(entries.len(), 1);
         assert!(Arc::ptr_eq(
             &live,
-            &entries["unicode=true;dotall=true;multiline=true;binary=false:^replacement-cache-pattern$"].upgrade().unwrap()
+            &entries["unicode=true;dotall=true;multiline=true;binary=false;prefilter=true:^replacement-cache-pattern$"].upgrade().unwrap()
         ));
     }
 

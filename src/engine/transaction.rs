@@ -1152,7 +1152,7 @@ impl Transaction {
                         bound_operator = Some(compile_bound_operator(
                             &rule.operator_spec,
                             &expanded,
-                            tx.ruleset.no_regex_multiline,
+                            search.regex.map(|rx| rx.options).unwrap_or_default(),
                         )?);
                     }
                     bound_operator.as_deref().expect("bound just above")

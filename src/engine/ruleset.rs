@@ -167,7 +167,6 @@ pub struct CompiledRuleset {
     rules: Rules,
     rule_count: usize,
     pub(super) multiphase: bool,
-    pub(super) no_regex_multiline: bool,
     dispatch: [Vec<RuleDispatch>; Phase::ALL.len()],
     pub(super) header_slots: [Vec<Box<[u8]>>; Phase::ALL.len()],
     pub(super) width_sources: [super::target_indices::WidthSources; Phase::ALL.len()],

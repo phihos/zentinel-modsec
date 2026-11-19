@@ -10,7 +10,7 @@ use super::{
 };
 use crate::engine::{control::CtlDirective, diagnostics, phase::Phase, split_operator_macro};
 use crate::error::{Error, Result};
-use crate::operators::{compile_operator, Operator};
+use crate::operators::{compile_operator, Operator, RegexOptions, RxOperator};
 use crate::parser::{
     Action, DataAction, Directive, MetadataAction, OperatorName, OperatorSpec,
     RuleEngineMode as ParserRuleEngineMode, SecRule, Selection, SetVarValue, UpdateTargetById,
@@ -44,7 +44,6 @@ impl CompiledRuleset {
         apply_rule_edits(&mut directives)?;
         let mut ruleset = Self {
             multiphase: options.multiphase,
-            no_regex_multiline: options.no_regex_multiline,
             ..Self::default()
         };
         let mut pending_chain: Option<(Phase, usize)> = None;
@@ -54,6 +53,11 @@ impl CompiledRuleset {
         let mut target_updates: Vec<(Option<String>, UpdateTargetById)> = Vec::new();
 
         let mut datasets = HashMap::new();
+        let mut regex = RegexOptions {
+            multiline: !options.no_regex_multiline,
+            // The Go connector defaults to Off unless the rule file enables it.
+            prefilter: !options.literal_regex_arguments,
+        };
         for directive in directives {
             let directive = match directive {
                 Directive::SecAction(action) => Directive::SecRule(SecRule {
@@ -81,11 +85,15 @@ impl CompiledRuleset {
                         ParserRuleEngineMode::DetectionOnly => RuleEngineMode::DetectionOnly,
                     };
                 }
+                Directive::SecRxPreFilter(enabled) => regex.prefilter = enabled,
                 Directive::SecRule(rule) => {
-                    let (phase, index) =
-                        ruleset
-                            .rules
-                            .compile_rule(rule, &mut pending_chain, &datasets, options)?;
+                    let (phase, index) = ruleset.rules.compile_rule(
+                        rule,
+                        &mut pending_chain,
+                        &datasets,
+                        options.literal_regex_arguments,
+                        regex,
+                    )?;
                     if let Some(order) = &mut order {
                         order.rule(phase, index, &ruleset.rules.for_phase(phase)[index]);
                     }
@@ -201,7 +209,8 @@ impl Rules {
         rule: SecRule,
         pending_chain: &mut Option<(Phase, usize)>,
         datasets: &HashMap<String, Vec<String>>,
-        options: CompileOptions,
+        literal_regex_arguments: bool,
+        regex: RegexOptions,
     ) -> Result<(Phase, usize)> {
         // Continuations inherit their starter's phase, including when it differs
         // from the default phase of a rule without a phase action.
@@ -214,7 +223,8 @@ impl Rules {
             id.as_deref(),
             rule.location.file.as_deref(),
             datasets,
-            options,
+            literal_regex_arguments,
+            regex,
         )?;
         let phase_rules = &mut self.by_phase[phase.index()];
         let index = phase_rules.len();
@@ -268,7 +278,8 @@ fn compile_operator_reporting(
     rule_id: Option<&str>,
     rule_file: Option<&std::path::Path>,
     datasets: &HashMap<String, Vec<String>>,
-    options: CompileOptions,
+    literal_regex_arguments: bool,
+    regex: RegexOptions,
 ) -> Result<(Arc<dyn Operator>, bool)> {
     if spec.name == OperatorName::ValidateSchema {
         let root = rule_file
@@ -294,14 +305,15 @@ fn compile_operator_reporting(
     } else {
         None
     };
-    let compiled = if spec.name == OperatorName::Rx && options.literal_regex_arguments {
-        crate::operators::RxOperator::from_coraza_pattern(
-            &spec.argument,
-            options.no_regex_multiline,
-        )
-        .map(|rx| Arc::new(rx) as Arc<dyn Operator>)
+    let compiled = if spec.name == OperatorName::Rx && literal_regex_arguments {
+        RxOperator::from_coraza_pattern(&spec.argument, regex)
+            .map(|rx| Arc::new(rx) as Arc<dyn Operator>)
+    } else if spec.name == OperatorName::Rx && split_operator_macro(&spec.argument).is_some() {
+        // The expression is supplied at evaluation time. Retain the declaration's
+        // options on a shared, never-matching program until the operand is bound.
+        RxOperator::with_options(r"\b\B", regex).map(|rx| Arc::new(rx) as Arc<dyn Operator>)
     } else {
-        crate::operators::compile_with_dataset(spec, dataset, options.no_regex_multiline)
+        crate::operators::compile_with_dataset(spec, dataset, regex)
     };
     match compiled {
         Ok(operator) => Ok((operator, spec.negated)),

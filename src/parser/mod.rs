@@ -246,6 +246,7 @@ impl Parser {
             "secruleupdatetargetbyid" => self.parse_secruleupdatetargetbyid(lexer),
             "secruleupdatetargetbytag" => self.parse_secruleupdatetargetbytag(lexer),
             "secruleupdateactionbyid" => self.parse_action_update(lexer),
+            "secrxprefilter" => self.parse_boolean_directive(lexer, "SecRxPreFilter"),
             "secrequestbodyaccess" => self.parse_boolean_directive(lexer, "SecRequestBodyAccess"),
             "secresponsebodyaccess" => self.parse_boolean_directive(lexer, "SecResponseBodyAccess"),
             "secargumentslimit" => {
@@ -707,6 +708,7 @@ impl Parser {
         };
 
         match name {
+            "SecRxPreFilter" => Ok(Directive::SecRxPreFilter(value)),
             "SecRequestBodyAccess" => Ok(Directive::SecRequestBodyAccess(value)),
             "SecResponseBodyAccess" => Ok(Directive::SecResponseBodyAccess(value)),
             _ => Ok(Directive::Unknown(name.to_string())),
