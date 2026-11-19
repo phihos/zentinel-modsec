@@ -466,3 +466,51 @@ SecRule REQUEST_URI "@streq /catalog" "id:53,phase:1,deny,status:418,ctl:auditEn
     assert_eq!(next.audit_engine_override(), None);
     assert_eq!(next.audit_log_parts("ABHZ"), "ABHZ");
 }
+
+#[test]
+fn audit_records_each_field_only_when_the_entire_rule_matches() {
+    use zentinel_modsec::{engine::ruleset::CompileOptions, parser::Parser, CompiledRuleset};
+    let rules = r#"
+SecRule ARGS "@streq blue" "id:10,phase:2,pass,msg:'%{MATCHED_VAR_NAME}'"
+SecRule ARGS:first "@streq blue" "id:11,phase:2,pass,chain,msg:'%{MATCHED_VAR_NAME}'"
+ SecRule ARGS:second "@streq blue" "logdata:'%{MATCHED_VAR}'"
+SecRule ARGS:first "@streq blue" "id:12,phase:2,pass,chain"
+ SecRule ARGS:second "@streq red"
+SecAction "id:13,phase:2,pass"
+"#;
+    let mut parser = Parser::new();
+    parser.parse(rules).unwrap();
+    let waf = ModSecurity::new(
+        CompiledRuleset::compile_with_options(
+            parser.into_directives(),
+            CompileOptions::CORAZA_SPOA,
+        )
+        .unwrap(),
+    );
+    let mut tx = waf.new_transaction();
+    tx.set_record_audit_messages(true);
+    tx.process_uri("/?first=blue&second=blue", "GET", "HTTP/1.1")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    let groups = tx.audit_messages();
+    let ids: Vec<_> = groups.iter().map(|g| g[0].rule_id.as_str()).collect();
+    assert_eq!(ids, ["10", "11", "13"]);
+    assert_eq!(groups[0].len(), 2);
+    assert_eq!(
+        groups[0][0].message.as_deref(),
+        Some(b"ARGS_GET:first".as_slice())
+    );
+    assert_eq!(
+        groups[0][1].message.as_deref(),
+        Some(b"ARGS_GET:second".as_slice())
+    );
+    assert_eq!(groups[1].len(), 2);
+    assert_eq!(
+        groups[1][0].message.as_deref(),
+        Some(b"ARGS_GET:second".as_slice())
+    );
+    assert_eq!(groups[1][1].logdata.as_deref(), Some(b"blue".as_slice()));
+    assert_eq!(groups[2][0].message, None);
+    assert!(tx.rule_messages().is_empty());
+}

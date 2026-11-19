@@ -73,6 +73,7 @@ pub struct Transaction {
     /// Optional expanded message snapshots, captured when each rule completes.
     rule_messages: Vec<RuleMessage>,
     record_rule_messages: bool,
+    audit: Option<Box<AuditMessages>>,
     request_body_state: BodyState,
     response_body_state: BodyState,
 }
@@ -204,6 +205,13 @@ pub struct MatchedData {
     pub matched_portion_bytes: Option<Vec<u8>>,
 }
 
+#[derive(Default)]
+struct AuditMessages {
+    // Hold a chain's individual matches until every link has matched.
+    pending: Vec<RuleMessage>,
+    completed: Vec<Vec<RuleMessage>>,
+}
+
 /// Expanded message data for a completed logical rule.
 ///
 /// Values are original bytes captured at match time, before a later rule can
@@ -288,6 +296,7 @@ impl Transaction {
             record_setvar_effects: false,
             rule_messages: Vec::new(),
             record_rule_messages: false,
+            audit: None,
             request_body_state: BodyState::default(),
             response_body_state: BodyState::default(),
         }
@@ -328,21 +337,34 @@ impl Transaction {
         &self.rule_messages
     }
 
-    fn expand_rule_message(&self, actions: &[Action]) -> Option<RuleMessage> {
-        let (mut id, mut msg, mut logdata) = (None, None, None);
+    /// Enable separate audit entries for every matching field in a logical rule.
+    pub fn set_record_audit_messages(&mut self, enabled: bool) {
+        if enabled {
+            self.audit.get_or_insert_with(Default::default);
+        } else {
+            self.audit = None;
+        }
+    }
+
+    /// Matching fields grouped by completed rule, in evaluation order.
+    pub fn audit_messages(&self) -> &[Vec<RuleMessage>] {
+        self.audit.as_ref().map_or(&[], |audit| &audit.completed)
+    }
+
+    fn expand_rule_message(&self, actions: &[Action], id: &str) -> RuleMessage {
+        let (mut msg, mut logdata) = (None, None);
         for action in actions {
             match action {
-                Action::Metadata(MetadataAction::Id(value)) => id = Some(value),
                 Action::Metadata(MetadataAction::Msg(value)) => msg = Some(value),
                 Action::Metadata(MetadataAction::LogData(value)) => logdata = Some(value),
                 _ => {}
             }
         }
-        Some(RuleMessage {
-            rule_id: id?.to_string(),
+        RuleMessage {
+            rule_id: id.to_owned(),
             message: msg.map(|s| self.expand_macros_bytes(s).into_owned()),
             logdata: logdata.map(|s| self.expand_macros_bytes(s).into_owned()),
-        })
+        }
     }
 
     /// Set the client address, backing `REMOTE_ADDR` and `REMOTE_PORT`.
@@ -620,6 +642,7 @@ impl Transaction {
             && phase == Phase::RequestHeaders
             && self.tx.is_empty()
             && !self.record_setvar_effects
+            && self.audit.is_none()
             && !self.record_rule_messages
         {
             if let Some(defaults) = &ruleset.tx_defaults {
@@ -687,6 +710,11 @@ impl Transaction {
             // including children that carry no tag of their own.
             let starter_index = chain_start.unwrap_or(idx);
             let starter = &rules[starter_index];
+            if chain_start.is_none() {
+                if let Some(audit) = &mut self.audit {
+                    audit.pending.clear();
+                }
+            }
             let starter_dispatch = &dispatch[starter_index];
             let tag_actions = if starter_dispatch.target_removable_by_tag {
                 starter.actions.as_slice()
@@ -790,11 +818,25 @@ impl Transaction {
                         .push(&ruleset, RuleLocation::new(phase, starter_index));
                 }
 
-                if self.record_rule_messages {
-                    if let Some(message) =
-                        first_message.or_else(|| self.expand_rule_message(&starter.actions))
-                    {
+                if let Some(id) = starter.id.as_deref() {
+                    if self.record_rule_messages {
+                        let message = first_message
+                            .unwrap_or_else(|| self.expand_rule_message(&starter.actions, id));
                         self.rule_messages.push(message);
+                    }
+                    if self.audit.is_some() {
+                        // Coraza expands the starter's first entry again after its
+                        // last link so MATCHED_VAR and captures reflect the chain.
+                        let final_message = starter
+                            .is_chain
+                            .then(|| self.expand_rule_message(&starter.actions, id));
+                        let audit = self.audit.as_mut().expect("enabled above");
+                        if let (Some(first), Some(expanded)) =
+                            (audit.pending.first_mut(), final_message)
+                        {
+                            *first = expanded;
+                        }
+                        audit.completed.push(std::mem::take(&mut audit.pending));
                     }
                 }
 
@@ -1213,8 +1255,18 @@ impl Transaction {
                     .push((ByteValue::from("UNKNOWN"), ByteValue::default()));
             }
             tx.apply_match_actions(rule, dispatch, logical_id);
-            if first && chain_depth == 0 && !rule.is_chain && tx.record_rule_messages {
-                outcome.first_message = tx.expand_rule_message(&rule.actions);
+            if let Some(id) = logical_id {
+                if tx.audit.is_some() {
+                    let message = tx.expand_rule_message(&rule.actions, id);
+                    tx.audit
+                        .as_mut()
+                        .expect("enabled above")
+                        .pending
+                        .push(message);
+                }
+                if first && chain_depth == 0 && !rule.is_chain && tx.record_rule_messages {
+                    outcome.first_message = Some(tx.expand_rule_message(&rule.actions, id));
+                }
             }
             // Captures, MATCHED_VAR and setvar may all change a macro even
             // between two transformation stages of the same target value.
