@@ -50,6 +50,10 @@ const MAX_INCLUDES: usize = 100;
 /// Connector policy for loading rules from an alternate filesystem and handling
 /// directives owned by the connector. Called only when compiling a ruleset.
 pub trait ParserHost: Send + Sync {
+    /// Observe the exact contents the parser will use, including nested includes.
+    /// A connector can retain rule source for its audit records without reopening files.
+    fn parsed_file(&self, _path: &Path, _contents: &str) {}
+
     /// Resolve one Include operand to readable files in evaluation order.
     /// The declaring file is absent for inline directives.
     fn includes(&self, declaring_file: Option<&Path>, operand: &Path) -> Result<Vec<PathBuf>>;
@@ -178,6 +182,9 @@ impl Parser {
             path: path.to_path_buf(),
             source: e,
         })?;
+        if let Some(host) = &self.host {
+            host.parsed_file(path, &content);
+        }
         self.parse_input(&content, Some(path))
     }
 
