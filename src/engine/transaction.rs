@@ -826,19 +826,19 @@ impl Transaction {
                             .unwrap_or_else(|| self.expand_rule_message(&starter.actions, id));
                         self.rule_messages.push(message);
                     }
-                    if self.audit.is_some() {
+                    if let Some(mut audit) = self.audit.take() {
                         // Coraza expands the starter's first entry again after its
                         // last link so MATCHED_VAR and captures reflect the chain.
                         let final_message = starter
                             .is_chain
                             .then(|| self.expand_rule_message(&starter.actions, id));
-                        let audit = self.audit.as_mut().expect("enabled above");
                         if let (Some(first), Some(expanded)) =
                             (audit.pending.first_mut(), final_message)
                         {
                             *first = expanded;
                         }
                         audit.completed.push(std::mem::take(&mut audit.pending));
+                        self.audit = Some(audit);
                     }
                 }
 
@@ -1258,13 +1258,11 @@ impl Transaction {
             }
             tx.apply_match_actions(rule, dispatch, logical_id);
             if let Some(id) = logical_id {
-                if tx.audit.is_some() {
-                    let message = tx.expand_rule_message(&rule.actions, id);
-                    tx.audit
-                        .as_mut()
-                        .expect("enabled above")
+                if let Some(mut audit) = tx.audit.take() {
+                    audit
                         .pending
-                        .push(message);
+                        .push(tx.expand_rule_message(&rule.actions, id));
+                    tx.audit = Some(audit);
                 }
                 if first && chain_depth == 0 && !rule.is_chain && tx.record_rule_messages {
                     outcome.first_message = Some(tx.expand_rule_message(&rule.actions, id));
