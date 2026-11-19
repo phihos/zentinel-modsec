@@ -49,3 +49,20 @@ fn coraza_compiles_regex_operands_literally() {
         }
     ));
 }
+
+#[test]
+fn coraza_accepts_literal_braces_alongside_regex_syntax() {
+    let tagged = CompileOptions::CORAZA_SPOA;
+    for (pattern, value) in [
+        ("^G[E]T{ok}$", "GET{ok}"),
+        ("^c{01}$", "c{01}"),
+        ("^cat{z$", "cat{z"),
+        (r"^\x{41}{field}$", "A{field}"),
+        ("^[{}]$", "{"),
+        ("^c{2,3}$", "ccc"),
+        ("^cat{2,}$", "catt"),
+    ] {
+        assert!(run(pattern, value, tagged), "{pattern}");
+    }
+    assert!(!run("^c{2,3}$", "c", tagged));
+}

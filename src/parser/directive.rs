@@ -28,6 +28,8 @@ pub enum Directive {
     SecDataset(String, Vec<String>),
     /// SecDefaultAction directive - default actions for rules.
     SecDefaultAction(Vec<Action>),
+    /// Component name and version recorded in audit logs.
+    SecComponentSignature(String),
     /// SecRuleRemoveById directive - remove rules by ID or ID range.
     SecRuleRemoveById(Vec<RuleIdSelector>),
     /// Remove previously declared rules carrying this exact tag.

@@ -257,7 +257,29 @@ impl<'a> VariableResolver<'a> {
         use VariableName::*;
         let bytes: &[u8] = match name {
             UniqueId => request.unique_id().as_bytes(),
-            RequestUri | RequestUriRaw => request.uri_bytes(),
+            Time | TimeEpoch | TimeDay | TimeHour | TimeMin | TimeSec | TimeWday | TimeMon
+            | TimeYear => {
+                use chrono::{DateTime, Datelike, Local, Timelike};
+                // Coraza snapshots the transaction start, including for later response phases.
+                let t = DateTime::<Local>::from(request.started);
+                let value = match name {
+                    Time => format!("{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second()),
+                    TimeEpoch => t.timestamp().to_string(),
+                    TimeDay => t.day().to_string(),
+                    TimeHour => format!("{:02}", t.hour()),
+                    TimeMin => format!("{:02}", t.minute()),
+                    TimeSec => format!("{:02}", t.second()),
+                    TimeWday => t.weekday().num_days_from_sunday().to_string(),
+                    TimeMon => t.month().to_string(),
+                    TimeYear => t.year().to_string(),
+                    _ => unreachable!(),
+                };
+                return Some(Cow::Owned(value.into_bytes()));
+            }
+            // Coraza v3.8.1 initializes DURATION to zero and does not update it.
+            Duration => b"0",
+            RequestUri => request.request_uri_bytes(),
+            RequestUriRaw => request.uri_bytes(),
             RequestFilename => request.path_bytes(),
             QueryString => request.query_bytes(),
             RequestMethod => request.method_bytes(),

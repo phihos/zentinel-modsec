@@ -328,6 +328,16 @@ impl VariableName {
             | VariableName::RequestFilename
             | VariableName::RequestBasename
             | VariableName::UniqueId
+            | VariableName::Time
+            | VariableName::TimeEpoch
+            | VariableName::TimeDay
+            | VariableName::TimeHour
+            | VariableName::TimeMin
+            | VariableName::TimeSec
+            | VariableName::TimeWday
+            | VariableName::TimeMon
+            | VariableName::TimeYear
+            | VariableName::Duration
             | VariableName::RequestLine
             | VariableName::RequestMethod
             | VariableName::RequestProtocol
@@ -393,18 +403,8 @@ impl VariableName {
             | VariableName::Resource
             | VariableName::User
             | VariableName::Geo
-            | VariableName::Time
-            | VariableName::TimeEpoch
-            | VariableName::TimeDay
-            | VariableName::TimeHour
-            | VariableName::TimeMin
-            | VariableName::TimeSec
-            | VariableName::TimeWday
-            | VariableName::TimeMon
-            | VariableName::TimeYear
             | VariableName::InboundAnomalyScore
             | VariableName::OutboundAnomalyScore
-            | VariableName::Duration
             | VariableName::MultipartBoundaryQuoted
             | VariableName::MultipartBoundaryWhitespace
             | VariableName::MultipartDataAfter

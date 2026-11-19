@@ -304,11 +304,18 @@ impl Parser {
                 Ok(Directive::SecResponseBodyMimeTypesClear)
             }
             "include" => self.parse_include(lexer),
-            // Recognized engine-config/metadata directives that have no effect on
-            // rule evaluation — skip quietly rather than warning.
             "seccomponentsignature" => {
-                self.skip_to_end_of_line(lexer);
-                Ok(Directive::Unknown(name.to_string()))
+                let mut signature = lexer.raw_remaining_argument();
+                if signature.len() >= 3 && signature.starts_with('"') && signature.ends_with('"') {
+                    signature = signature.trim_matches('"').to_owned();
+                }
+                if signature.is_empty() {
+                    return Err(Error::parse(
+                        "SecComponentSignature requires an argument",
+                        self.location.to_string(),
+                    ));
+                }
+                Ok(Directive::SecComponentSignature(signature))
             }
             _ => {
                 if let Some(host) = &self.host {
@@ -421,7 +428,19 @@ impl Parser {
 
     /// Parse a SecDefaultAction directive.
     fn parse_secdefaultaction(&mut self, lexer: &mut Lexer) -> Result<Directive> {
-        let actions_str = self.expect_quoted_argument(lexer, "SecDefaultAction")?;
+        lexer.skip_whitespace();
+        let actions_str = if matches!(lexer.peek(), Some('"' | '\'')) {
+            self.expect_quoted_argument(lexer, "SecDefaultAction")?
+        } else {
+            let argument = lexer.remaining_argument();
+            if argument.is_empty() {
+                return Err(Error::parse(
+                    "SecDefaultAction requires an argument",
+                    self.location.to_string(),
+                ));
+            }
+            argument
+        };
         let actions = action::parse_actions(&actions_str)?;
         self.set_default_actions(&actions);
         Ok(Directive::SecDefaultAction(actions))

@@ -118,6 +118,8 @@ pub struct CompileOptions {
     pub no_regex_multiline: bool,
     /// Treat macro-like text in regex operands as part of the regex.
     pub literal_regex_arguments: bool,
+    /// Validate rule defaults and expose normalized request URIs as Go Coraza does.
+    pub coraza_rule_semantics: bool,
 }
 
 impl CompileOptions {
@@ -126,6 +128,7 @@ impl CompileOptions {
         multiphase: true,
         no_regex_multiline: true,
         literal_regex_arguments: true,
+        coraza_rule_semantics: true,
     };
 }
 
@@ -168,6 +171,7 @@ pub struct CompiledRuleset {
     rule_count: usize,
     pub(super) multiphase: bool,
     pub(super) no_regex_multiline: bool,
+    pub(super) coraza_rule_semantics: bool,
     dispatch: [Vec<RuleDispatch>; Phase::ALL.len()],
     pub(super) header_slots: [Vec<Box<[u8]>>; Phase::ALL.len()],
     pub(super) width_sources: [super::target_indices::WidthSources; Phase::ALL.len()],

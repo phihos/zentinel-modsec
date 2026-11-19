@@ -18,6 +18,7 @@ struct PathArguments {
 pub struct RequestData {
     /// Generated on first access when the connector did not provide an ID.
     pub(crate) unique_id: OnceLock<String>,
+    pub(crate) started: std::time::SystemTime,
     argument_limit: usize,
     request_json_depth_limit: usize,
     /// A query or body processor dropped entries at its configured argument limit.
@@ -36,6 +37,7 @@ pub struct RequestData {
     pub protocol: String,
     /// Original URI bytes when the legacy text field cannot represent them.
     pub(crate) binary_uri: Option<ByteValue>,
+    normalized_uri: Option<ByteValue>,
     /// Decoded path bytes when percent decoding produces non-UTF-8 data.
     pub(crate) binary_path: Option<ByteValue>,
     /// Original query bytes when the legacy text field cannot represent them.
@@ -119,6 +121,7 @@ impl Default for RequestData {
     fn default() -> Self {
         Self {
             unique_id: OnceLock::new(),
+            started: std::time::SystemTime::now(),
             argument_limit: super::DEFAULT_ARGUMENT_LIMIT,
             request_json_depth_limit: super::json::DEFAULT_DEPTH_LIMIT,
             arguments_limit_reached: false,
@@ -129,6 +132,7 @@ impl Default for RequestData {
             query_string: Default::default(),
             protocol: Default::default(),
             binary_uri: Default::default(),
+            normalized_uri: None,
             binary_path: Default::default(),
             binary_query: Default::default(),
             binary_method: Default::default(),
@@ -236,6 +240,10 @@ impl RequestData {
 
     /// Set a request target without replacing invalid UTF-8 or decoded bytes.
     pub fn set_uri_bytes(&mut self, uri: &[u8]) {
+        self.set_request_target(uri, false);
+    }
+
+    pub(crate) fn set_request_target(&mut self, uri: &[u8], coraza: bool) {
         let (display, binary) = component_strings(uri);
         self.uri_raw = display.clone();
         self.uri = display;
@@ -254,7 +262,16 @@ impl RequestData {
         self.arguments_limit_reached |=
             parse_form_bytes(query, &mut self.args_get, self.argument_limit);
 
-        match String::from_utf8(decoded_request_path_bytes(raw_path)) {
+        let path = decoded_request_path_bytes(raw_path, coraza);
+        self.normalized_uri = if coraza {
+            coraza_request_uri(uri, raw_path, &path)
+        } else {
+            None
+        };
+        if let Some(normalized) = &self.normalized_uri {
+            normalized.display_text().clone_into(&mut self.uri);
+        }
+        match String::from_utf8(path) {
             Ok(path) => {
                 self.path = path;
                 self.binary_path = None;
@@ -274,6 +291,12 @@ impl RequestData {
             .as_ref()
             .map_or(self.uri_raw.as_bytes(), ByteValue::as_bytes)
     }
+    pub(crate) fn request_uri_bytes(&self) -> &[u8] {
+        self.normalized_uri
+            .as_ref()
+            .map_or_else(|| self.uri_bytes(), ByteValue::as_bytes)
+    }
+
     /// Decoded path bytes, including invalid UTF-8 created by percent decoding.
     pub fn path_bytes(&self) -> &[u8] {
         self.binary_path
@@ -529,21 +552,96 @@ fn component_strings(bytes: &[u8]) -> (String, Option<ByteValue>) {
     }
 }
 
-/// Decode the path after query and fragment splitting. Plus is literal here.
-fn decoded_request_path_bytes(input: &[u8]) -> Vec<u8> {
-    let mut path = input;
-    if input.first().is_some_and(u8::is_ascii_alphabetic) {
-        if let Some(colon) = memchr::memchr(b':', input) {
-            if let Some(authority) = input[colon + 1..].strip_prefix(b"//") {
-                if input[..colon]
-                    .iter()
-                    .all(|b| b.is_ascii_alphanumeric() || b"+-.".contains(b))
-                {
-                    path = &authority[memchr::memchr(b'/', authority).unwrap_or(authority.len())..];
-                }
+// Coraza first removes the fragment, then net/url preserves an already-valid
+// RawPath. If any path byte requires escaping, Go re-escapes the *decoded*
+// path as a unit. RawQuery is carried through without re-encoding.
+fn coraza_request_uri(raw: &[u8], raw_path: &[u8], decoded: &[u8]) -> Option<ByteValue> {
+    let target = &raw[..memchr::memchr(b'#', raw).unwrap_or(raw.len())];
+    let fallback = || (target.len() != raw.len()).then(|| ByteValue::from(target));
+    let (prefix, path) = if raw_path.starts_with(b"/") {
+        (&[][..], raw_path)
+    } else {
+        let Some(scheme_end) = scheme_end(raw_path) else {
+            return fallback();
+        };
+        let after_scheme = &raw_path[scheme_end + 1..];
+        let prefix_len = if let Some(authority) = after_scheme.strip_prefix(b"//") {
+            scheme_end + 3 + memchr::memchr(b'/', authority).unwrap_or(authority.len())
+        } else if after_scheme.starts_with(b"/") {
+            scheme_end + 1
+        } else {
+            // A rootless absolute request target is opaque to net/url.
+            raw_path.len()
+        };
+        raw_path.split_at(prefix_len)
+    };
+    let escape = path
+        .iter()
+        .any(|b| !(path_byte(*b) || b"!%'()*[]".contains(b)));
+    let lower_scheme = prefix
+        .split(|&b| b == b':')
+        .next()
+        .is_some_and(|p| p.iter().any(u8::is_ascii_uppercase));
+    if !escape && !lower_scheme {
+        return fallback();
+    }
+    if target.iter().any(u8::is_ascii_control)
+        || memchr::memchr_iter(b'%', path).any(|i| {
+            !path
+                .get(i + 1..i + 3)
+                .is_some_and(|pair| pair.iter().all(u8::is_ascii_hexdigit))
+        })
+    {
+        return fallback();
+    }
+    let mut out = Vec::with_capacity(target.len());
+    out.extend_from_slice(prefix);
+    if lower_scheme {
+        let end = memchr::memchr(b':', prefix).expect("absolute URI prefix");
+        out[..end].make_ascii_lowercase();
+    }
+    if escape {
+        const HEX: &[u8] = b"0123456789ABCDEF";
+        for &b in decoded {
+            if path_byte(b) {
+                out.push(b);
+            } else {
+                out.extend_from_slice(&[b'%', HEX[usize::from(b >> 4)], HEX[usize::from(b & 15)]]);
             }
         }
+    } else {
+        out.extend_from_slice(path);
     }
+    out.extend_from_slice(&target[raw_path.len()..]);
+    Some(ByteValue::from(out))
+}
+
+fn scheme_end(input: &[u8]) -> Option<usize> {
+    if !input.first().is_some_and(u8::is_ascii_alphabetic) {
+        return None;
+    }
+    let colon = memchr::memchr(b':', input)?;
+    (input[..colon]
+        .iter()
+        .all(|b| b.is_ascii_alphanumeric() || b"+-.".contains(b)))
+    .then_some(colon)
+}
+
+fn path_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b"-_.~$&+,/:;=@".contains(&b)
+}
+
+/// Decode the path after query and fragment splitting. Plus is literal here.
+fn decoded_request_path_bytes(input: &[u8], coraza: bool) -> Vec<u8> {
+    let path = match scheme_end(input).map(|colon| &input[colon + 1..]) {
+        Some(rest) if rest.starts_with(b"//") => {
+            let authority = &rest[2..];
+            &authority[memchr::memchr(b'/', authority).unwrap_or(authority.len())..]
+        }
+        Some(rest) if coraza && rest.starts_with(b"/") => rest,
+        Some(_) if coraza => &[],
+        _ => input,
+    };
 
     let mut escapes = memchr::memchr_iter(b'%', path);
     let Some(first) = escapes.next() else {

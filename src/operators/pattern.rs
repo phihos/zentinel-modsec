@@ -303,6 +303,55 @@ pub struct RxOperator {
     has_subgroups: bool,
 }
 
+// RE2 treats an opening brace as literal unless it starts a counted repeat.
+// Rust requires that literal to be escaped. Leave escapes (including Unicode
+// properties and hex code points) to the regex compiler.
+fn coraza_literal_braces(pattern: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    if !pattern.contains('{') {
+        return Cow::Borrowed(pattern);
+    }
+    let mut output = String::new();
+    let mut start = 0;
+    let mut chars = pattern.char_indices().peekable();
+    while let Some((offset, ch)) = chars.next() {
+        match ch {
+            '\\' => {
+                if let Some((_, 'p' | 'P' | 'x')) = chars.next() {
+                    chars.next_if(|&(_, next)| next == '{');
+                }
+            }
+            '{' if !starts_counted_repeat(&pattern[offset + 1..]) => {
+                output.push_str(&pattern[start..offset]);
+                output.push('\\');
+                start = offset;
+            }
+            _ => {}
+        }
+    }
+    if output.is_empty() {
+        return Cow::Borrowed(pattern);
+    }
+    output.push_str(&pattern[start..]);
+    Cow::Owned(output)
+}
+
+fn starts_counted_repeat(after_brace: &str) -> bool {
+    fn after_number(s: &str) -> Option<&str> {
+        let n = s.bytes().take_while(u8::is_ascii_digit).count();
+        (n != 0 && !(n > 1 && s.starts_with('0'))).then_some(&s[n..])
+    }
+    let Some(rest) = after_number(after_brace) else {
+        return false;
+    };
+    if rest.starts_with('}') || rest.starts_with(",}") {
+        return true;
+    }
+    rest.strip_prefix(',')
+        .and_then(after_number)
+        .is_some_and(|tail| tail.starts_with('}'))
+}
+
 impl RxOperator {
     /// Compile a regex or share the compiled object of an existing live rule.
     pub fn new(pattern: &str) -> Result<Self> {
@@ -310,29 +359,7 @@ impl RxOperator {
     }
 
     pub(crate) fn from_coraza_pattern(pattern: &str, no_multiline: bool) -> Result<Self> {
-        // Go RE2 accepts a non-numeric opening brace as literal text. Rust's
-        // parser requires an escape for the opening brace of a SecLang macro.
-        // Leave valid repetition counts (e.g. %{2}) and regex syntax inside
-        // macro-like text intact.
-        let mut normalized = String::new();
-        let mut start = 0;
-        for (offset, _) in pattern.match_indices("%{") {
-            if !pattern
-                .as_bytes()
-                .get(offset + 2)
-                .is_some_and(u8::is_ascii_alphabetic)
-            {
-                continue;
-            }
-            normalized.push_str(&pattern[start..offset + 1]);
-            normalized.push_str(r"\{");
-            start = offset + 2;
-        }
-        if start == 0 {
-            return Self::with_multiline(pattern, !no_multiline);
-        }
-        normalized.push_str(&pattern[start..]);
-        Self::with_multiline(&normalized, !no_multiline)
+        Self::with_multiline(&coraza_literal_braces(pattern), !no_multiline)
     }
 
     pub(crate) fn with_multiline(pattern: &str, multiline: bool) -> Result<Self> {
