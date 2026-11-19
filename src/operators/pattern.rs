@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn token_width_keeps_literal_and_character_class_separators() {
-        for separator in [b'.', b'/', b':'] {
+        for separator in *b"./:" {
             let value = [b'a', separator, b'z'];
             for pattern in [
                 format!(r"a\x{separator:02X}z"),

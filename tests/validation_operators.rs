@@ -8,7 +8,7 @@ use zentinel_modsec::ModSecurity;
 #[test]
 fn compiled_ranges_match_the_reference_at_every_byte_boundary() {
     for (spec, ranges) in [
-        ("0-255", vec![0..=255]),
+        ("0-255", std::iter::once(0..=255).collect()),
         (
             "0, 9, 32-126, 80-150, 255",
             vec![0..=0, 9..=9, 32..=150, 255..=255],
