@@ -337,9 +337,11 @@ fn next_boundary(
         if let Some(boundary) = boundary_at(body, delimiter, position) {
             let matching_prefix = style
                 .is_none_or(|crlf| !crlf || position == 0 || body[..position].ends_with(b"\r\n"));
-            let matching_suffix = style.is_none_or(|crlf| {
-                boundary.crlf == crlf || (boundary.closing && !boundary.terminated)
-            });
+            // Go adopts LF framing only on the first opening delimiter.
+            let matching_suffix = match style {
+                None => !boundary.closing || boundary.crlf || !boundary.terminated,
+                Some(crlf) => boundary.crlf == crlf || (boundary.closing && !boundary.terminated),
+            };
             if matching_prefix && matching_suffix {
                 return Some(boundary);
             }

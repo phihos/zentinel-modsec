@@ -435,3 +435,18 @@ SecRule MULTIPART_STRICT_ERROR "@eq 1" "id:200003,phase:2,pass""#,
         assert_eq!(tx.matched_rules(), ["200002", "200003"], "byte {control}");
     }
 }
+
+#[test]
+fn lf_framing_requires_an_opening_delimiter() {
+    for (body, invalid) in [
+        (b"--B--\n".as_slice(), true),
+        (b"--B--\r\n".as_slice(), false),
+        (b"--B--".as_slice(), false),
+        (
+            b"--B\nContent-Disposition: form-data; name=a\n\nx\n--B--\n".as_slice(),
+            false,
+        ),
+    ] {
+        assert_eq!(parsed(body).body_error.is_some(), invalid, "{body:?}");
+    }
+}

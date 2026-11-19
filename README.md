@@ -12,7 +12,7 @@
 <p align="center">A pure Rust ModSecurity (SecLang) rule engine that runs the OWASP Core Rule Set, for Rust applications that want a WAF without libmodsecurity.</p>
 
 <p align="center">
-  <a href="https://github.com/zentinelproxy/zentinel-modsec/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zentinelproxy/zentinel-modsec/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/haproxy-haptic/zentinel-modsec/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/haproxy-haptic/zentinel-modsec/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-9b4d8a?style=flat&labelColor=1f161e">
   <img alt="Rust" src="https://img.shields.io/badge/rust-1.94.1%2B-f68d31?style=flat&labelColor=1f161e&logo=rust&logoColor=white">
 </p>
@@ -22,6 +22,12 @@
   <a href="https://docs.zentinelproxy.io">Docs</a> &middot;
   <a href="https://github.com/zentinelproxy">All repositories</a>
 </p>
+
+HAPTIC maintains this distribution for the Coraza SPOA plugin. Its baseline is
+the [plugin engine revision](https://github.com/phihos/zentinel-modsec/commit/1e5f87615d7e87b6ba71ec5df60787fc4c625ddb)
+based on [upstream 0.6.0](https://github.com/zentinelproxy/zentinel-modsec/commit/f85a24022ca85eec0e1e502623f963e91eca07bc).
+Submit changes to `main` through pull requests. CI checks formatting, Clippy,
+unit tests, and the pinned CRS corpus with both detection backends.
 
 `zentinel-modsec` parses ModSecurity `.conf` rule files and evaluates them
 against requests and responses. The default build has no C or C++ dependency
@@ -554,7 +560,7 @@ figures are the re-measurement after #15, #17 and #18.
 cargo build
 SKIP_CRS_CONFORMANCE=1 cargo test --all-targets   # unit and integration tests
 cargo test --release --test crs_conformance        # needs test-rules/crs, see above
-cargo fmt --all --check
+cargo fmt --package zentinel-modsec --check
 cargo clippy --all-targets -- -D warnings
 ```
 

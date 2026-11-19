@@ -126,3 +126,17 @@ mod differential {
         assert_eq!(count, 167_646, "libinjection v4.0.2 upstream corpus size");
     }
 }
+
+#[test]
+fn namespace_declarations_match_the_entire_attribute_name() {
+    for (markup, expected) in [
+        (r#"<doc xmlns:meta="urn:example"/>"#, false),
+        (r#"<doc xmlns="urn:example"/>"#, true),
+        (
+            r#"<doc xmlns:meta="urn:example" style="color: red"/>"#,
+            true,
+        ),
+    ] {
+        assert_eq!(libinjection::is_xss(markup), expected, "{markup}");
+    }
+}

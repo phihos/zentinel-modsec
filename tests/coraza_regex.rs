@@ -66,3 +66,18 @@ fn coraza_accepts_literal_braces_alongside_regex_syntax() {
     }
     assert!(!run("^c{2,3}$", "c", tagged));
 }
+
+#[test]
+fn word_assertions_use_ascii_boundaries_in_unicode_patterns() {
+    let options = CompileOptions::CORAZA_SPOA;
+    for (pattern, value, expected) in [
+        (r"\bword\b", "éwordλ", true),
+        (r"\bword\b", "sword", false),
+        (r"\Bword", "éword", false),
+        (r"\Bword", "_word", true),
+        (r"^\p{Greek}+\bword$", "λword", true),
+        (r"^\\\\bword$", r"\bword", true),
+    ] {
+        assert_eq!(run(pattern, value, options), expected, "{pattern} {value}");
+    }
+}

@@ -189,9 +189,9 @@ impl XssDetector {
                 }
             }
 
-            // Check XMLNS and XLINK - use prefix matching like C (checks first 5 chars only)
-            if Self::cstrcasecmp_with_null_limited(b"XMLNS", attr_name, 5) 
-                || Self::cstrcasecmp_with_null_limited(b"XLINK", attr_name, 5) {
+            // Coraza compares the entire normalized attribute name.
+            if Self::cstrcasecmp_with_null(b"XMLNS", attr_name)
+                || Self::cstrcasecmp_with_null(b"XLINK", attr_name) {
                 return AttributeType::Black;
             }
         }

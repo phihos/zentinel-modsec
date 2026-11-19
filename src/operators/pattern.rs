@@ -184,6 +184,7 @@ impl RegexCache {
             .build()
             .parse(&expression)
             .map_err(|err| config_error(regex::Error::Syntax(err.to_string())))?;
+        let hir = ascii_word_boundaries(hir);
         // Use regex::bytes::RegexBuilder's byte matching and resource limits.
         // Building directly from HIR lets width analysis share the parse.
         let regex = Regex::builder()
@@ -218,6 +219,35 @@ impl RegexCache {
         });
         entries.insert(key, Arc::downgrade(&regex));
         Ok(regex)
+    }
+}
+
+// Coraza's RE2 word assertions are ASCII even in UTF-8 patterns. Work on
+// parsed assertions so literals, classes, case folding and captures are preserved.
+fn ascii_word_boundaries(hir: regex_syntax::hir::Hir) -> regex_syntax::hir::Hir {
+    use regex_syntax::hir::{Hir, HirKind, Look};
+    let looks = hir.properties().look_set();
+    if !looks.contains(Look::WordUnicode) && !looks.contains(Look::WordUnicodeNegate) {
+        return hir;
+    }
+    match hir.into_kind() {
+        HirKind::Look(Look::WordUnicode) => Hir::look(Look::WordAscii),
+        HirKind::Look(Look::WordUnicodeNegate) => Hir::look(Look::WordAsciiNegate),
+        HirKind::Repetition(mut rep) => {
+            rep.sub = Box::new(ascii_word_boundaries(*rep.sub));
+            Hir::repetition(rep)
+        }
+        HirKind::Capture(mut cap) => {
+            cap.sub = Box::new(ascii_word_boundaries(*cap.sub));
+            Hir::capture(cap)
+        }
+        HirKind::Concat(parts) => {
+            Hir::concat(parts.into_iter().map(ascii_word_boundaries).collect())
+        }
+        HirKind::Alternation(parts) => {
+            Hir::alternation(parts.into_iter().map(ascii_word_boundaries).collect())
+        }
+        _ => unreachable!("only word assertions and their parents reach this match"),
     }
 }
 

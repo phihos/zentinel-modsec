@@ -276,7 +276,15 @@ fn read_attributes(
                 {
                     position += 1;
                 }
-                decode_attribute(&raw[start..position], suppressed_entity)?
+                let unquoted = &raw[start..position];
+                // encoding/xml in non-strict mode accepts HTML name tokens here.
+                if !unquoted
+                    .iter()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b':' | b'-'))
+                {
+                    return Err("invalid unquoted XML attribute value".into());
+                }
+                decode_attribute(unquoted, suppressed_entity)?
             }
         } else {
             // encoding/xml.Strict=false represents a bare attribute by its

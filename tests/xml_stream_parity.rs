@@ -153,3 +153,16 @@ fn a_bare_ampersand_in_an_attribute_does_not_swallow_a_later_reference() {
         Some(vec!["a&bare &tail", "bool", ""])
     );
 }
+
+#[test]
+fn unquoted_attributes_accept_html_name_tokens() {
+    for (body, invalid) in [
+        (br#"<a x=\"1\">text</a>"#.as_slice(), true),
+        (br#"<a x="1">text</a>"#.as_slice(), false),
+        (b"<a x=valid-name>text</a>".as_slice(), false),
+    ] {
+        let (request, result) = parsed(body);
+        assert_eq!(result.is_err(), invalid);
+        assert_eq!(request.body_error.is_some(), invalid);
+    }
+}
