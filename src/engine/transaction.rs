@@ -452,7 +452,8 @@ impl Transaction {
     pub fn process_uri(&mut self, uri: &str, method: &str, protocol: &str) -> Result<()> {
         self.request_line.take();
         self.connector_metadata.request_line = true;
-        self.request.set_uri_bytes(uri.as_bytes());
+        self.request
+            .set_request_target(uri.as_bytes(), self.ruleset.coraza_rule_semantics);
         self.request.set_method(method);
         self.request.set_protocol(protocol);
         Ok(())
@@ -462,7 +463,8 @@ impl Transaction {
     pub fn process_uri_bytes(&mut self, uri: &[u8], method: &[u8], protocol: &[u8]) -> Result<()> {
         self.request_line.take();
         self.connector_metadata.request_line = true;
-        self.request.set_uri_bytes(uri);
+        self.request
+            .set_request_target(uri, self.ruleset.coraza_rule_semantics);
         self.request.set_method_bytes(method);
         self.request.set_protocol_bytes(protocol);
         Ok(())

@@ -41,9 +41,13 @@ impl CompiledRuleset {
         options: CompileOptions,
     ) -> Result<Self> {
         let mut order = options.multiphase.then(SourceOrder::default);
+        if options.coraza_rule_semantics {
+            validate_coraza_defaults(&directives)?;
+        }
         apply_rule_edits(&mut directives)?;
         let mut ruleset = Self {
             multiphase: options.multiphase,
+            coraza_rule_semantics: options.coraza_rule_semantics,
             ..Self::default()
         };
         let mut pending_chain: Option<(Phase, usize)> = None;
@@ -56,7 +60,7 @@ impl CompiledRuleset {
         let mut regex = RegexOptions {
             multiline: !options.no_regex_multiline,
             // The Go connector defaults to Off unless the rule file enables it.
-            prefilter: !options.literal_regex_arguments,
+            prefilter: !options.coraza_rule_semantics,
         };
         for directive in directives {
             let directive = match directive {
@@ -201,6 +205,50 @@ impl CompiledRuleset {
             }
         }
     }
+}
+
+// Go validates accumulated defaults the next time it parses a rule.
+fn validate_coraza_defaults(directives: &[Directive]) -> Result<()> {
+    let Some(last_rule) = directives
+        .iter()
+        .rposition(|d| matches!(d, Directive::SecRule(_) | Directive::SecAction(_)))
+    else {
+        return Ok(());
+    };
+    let mut defined = [false; 6];
+    let invalid = |reason: &str| crate::error::Error::Config {
+        message: format!("SecDefaultAction {reason}"),
+    };
+    for directive in &directives[..last_rule] {
+        let Directive::SecDefaultAction(actions) = directive else {
+            continue;
+        };
+        let mut phase = 0;
+        let mut disruptive = false;
+        for action in actions {
+            match action {
+                Action::Metadata(MetadataAction::Phase(p)) => phase = usize::from(*p),
+                Action::Metadata(MetadataAction::LogData(_) | MetadataAction::Status(_)) => {}
+                Action::Metadata(_) => return Err(invalid("must not contain metadata actions")),
+                Action::Transformation(_) => {
+                    return Err(invalid("must not contain transformation actions"))
+                }
+                Action::Disruptive(_) => disruptive = true,
+                _ => {}
+            }
+        }
+        if !(1..=5).contains(&phase) {
+            return Err(invalid("must contain a phase between 1 and 5"));
+        }
+        if !disruptive {
+            return Err(invalid("must contain a disruptive action"));
+        }
+        if defined[phase] {
+            return Err(invalid("already defined for this phase"));
+        }
+        defined[phase] = true;
+    }
+    Ok(())
 }
 
 impl Rules {

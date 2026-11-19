@@ -52,6 +52,14 @@ impl<'a> Lexer<'a> {
 
     /// Read a directive whose full argument is one literal, including unquoted spaces.
     pub(super) fn remaining_argument(&mut self) -> String {
+        let text = self.raw_remaining_argument();
+        text.strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(&text)
+            .to_owned()
+    }
+
+    pub(super) fn raw_remaining_argument(&mut self) -> String {
         let mut text = String::new();
         let mut continued = false;
         loop {
@@ -73,11 +81,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
-        let text = text.trim();
-        text.strip_prefix('"')
-            .and_then(|s| s.strip_suffix('"'))
-            .unwrap_or(text)
-            .to_owned()
+        text
     }
 
     /// A trailing backtick opens a line-oriented block. Blank and comment

@@ -281,8 +281,9 @@ fn an_unimplemented_variable_is_classified_as_such() {
     // XML selectors read independent text/attribute collections.
     assert!(VariableName::Xml.is_implemented());
     assert!(VariableName::FilesCombinedSize.is_implemented());
+    assert!(VariableName::TimeYear.is_implemented());
     // Still unimplemented; selecting this variable produces a load warning.
-    assert!(!VariableName::TimeYear.is_implemented());
+    assert!(!VariableName::RemoteUser.is_implemented());
 }
 
 // These positive body fixtures explicitly request inspection; the engine's

@@ -85,6 +85,40 @@ mod tests {
     use crate::parser::parse_single_variable;
 
     #[test]
+    fn transaction_clock_uses_local_calendar_and_coraza_formatting() {
+        use chrono::{Local, TimeZone};
+
+        let local = Local
+            .with_ymd_and_hms(2025, 2, 3, 4, 5, 6)
+            .single()
+            .unwrap();
+        let mut request = RequestData::new();
+        request.started = local.into();
+        let response = ResponseData::new();
+        let tx = TxCollection::new();
+        let resolver = VariableResolver::new(&request, &response, &tx, None, &[], &[]);
+        let epoch = local.timestamp().to_string();
+        for (name, expected) in [
+            ("TIME", "04:05:06"),
+            ("TIME_HOUR", "04"),
+            ("TIME_MIN", "05"),
+            ("TIME_SEC", "06"),
+            ("TIME_YEAR", "2025"),
+            ("TIME_MON", "2"),
+            ("TIME_DAY", "3"),
+            ("TIME_WDAY", "1"),
+            ("TIME_EPOCH", &epoch),
+            ("DURATION", "0"),
+        ] {
+            assert_eq!(
+                resolver.resolve(&parse_single_variable(name).unwrap())[0].1,
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
     fn request_line_cache_retains_only_complete_lines_within_its_bound() {
         let response = ResponseData::new();
         let tx = TxCollection::new();

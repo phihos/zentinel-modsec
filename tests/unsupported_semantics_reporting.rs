@@ -138,9 +138,10 @@ SecRule ARGS "@contains attack" "id:106,phase:2,pass"
 
 #[test]
 fn mixed_supported_and_unsupported_targets_do_not_hide_the_gap() {
-    let (_, log) = load_logs(r#"SecRule ARGS|TIME_EPOCH "@contains attack" "id:107,phase:2,pass""#);
+    let (_, log) =
+        load_logs(r#"SecRule ARGS|REMOTE_USER "@contains attack" "id:107,phase:2,pass""#);
     assert!(
-        log.contains("TimeEpoch") && log.contains("rule_ids=107"),
+        log.contains("RemoteUser") && log.contains("rule_ids=107"),
         "{log}"
     );
 }

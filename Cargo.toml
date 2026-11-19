@@ -28,6 +28,9 @@ libinjectionrs = { package = "barbacane-libinjection", version = "=0.1.3" }
 # Private request body spool files
 tempfile = "3"
 
+# Transaction-local calendar fields follow the process time zone.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
 # Transaction IDs
 rand = "0.10"
 

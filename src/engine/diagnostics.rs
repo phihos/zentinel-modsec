@@ -63,7 +63,7 @@ pub(super) fn report(
                 Some(&rule.operator),
             ),
             Directive::SecAction(rule) => (&rule.actions, &[][..], None),
-            Directive::Unknown(name) if !name.eq_ignore_ascii_case("SecComponentSignature") => {
+            Directive::Unknown(name) => {
                 record(
                     &mut found,
                     "directive",
