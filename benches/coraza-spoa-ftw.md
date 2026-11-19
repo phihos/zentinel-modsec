@@ -44,3 +44,18 @@ cmp "$run/go.log.failed" "$run/rust.log.failed"
 | `b206f2f/worker/Cargo.toml` | `8fda42c1966cbb3705420ccc80a68367ad182689a81ff0123d28a13e000539a0` |
 | `b206f2f/worker/Cargo.lock` | `27082f5d28b44650ae72ef454f663a3dd3647e80776c3e17e2ec26ab8b3f32cd` |
 | Rust CRS configuration | `9ddeb44d69c61e2d29771ab1aba96a58ff9881d84edee74ba21ae428206e176d` |
+
+## HAPTIC policy and audit revision
+
+The engine at `1e5f87615d7e87b6ba71ec5df60787fc4c625ddb` reproduced both stage-list hashes above against a fresh tagged Go run on November 19, 2026. Each backend passed 4,649 stages and failed the same 23. The client again rejected `921140-1` before sending the request. The comparison normalized the ephemeral loopback port in that error. All other error text matched.
+
+Both runs used the adapter sources and stock CRS 4.25.0 configuration listed above, with `TZ=Europe/Berlin`. All 183 registry packages in the pure-Rust worker matched the connector lockfile by version and checksum. The frozen source, worker, logs, stage lists and exit codes are in `zentinel-eval/results/tagged-ftw-WgKj4q/1e5f876`. The release-lock run uses `worker-release-lock` and `rust-release-lock.log`.
+
+| SHA-256 input or artifact | Digest |
+| --- | --- |
+| Connector Cargo.lock | `64411f019b0b5b9156fb05da796686474984ed21301b9d15b9abdc86f7daa85e` |
+| Worker Cargo.lock | `74f02cfbbfba941c582238d9e444f355243f97fb74e6a144e33629157a07d293` |
+| Rust worker executable | `7ae044793919fe4f8f02cb34c33efaf55d55707a3c174d3b47b8eade32785daa` |
+| Tagged Go harness executable | `47c1f107a8db61668e4ccf7ab435ed0455f39b6a217a4392319062ba778e97ff` |
+
+The engine's own test suite used its CI corpus at `30cb436b261a9f5ec32a5a0677e17f3cfa1a8739`. It passed 799 tests with one ignored doctest. Formatting, all-target Clippy with warnings denied, and bench and example test targets also passed.
