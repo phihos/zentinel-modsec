@@ -150,7 +150,7 @@ impl TransformationPipeline {
         self.apply_byte_stages(input)
     }
 
-    fn apply_byte_stages<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
+    pub(crate) fn apply_byte_stages<'a>(&self, input: &'a [u8]) -> Result<Cow<'a, [u8]>> {
         if let [only] = self.transformations.as_slice() {
             return only.transform_bytes(input);
         }
@@ -237,7 +237,7 @@ impl TransformationPipeline {
     }
 
     #[inline]
-    fn input_is_unchanged(&self, input: &[u8]) -> bool {
+    pub(crate) fn input_is_unchanged(&self, input: &[u8]) -> bool {
         // Above a short header or argument, the stages' vectorized searches
         // are faster than scanning a byte classification table.
         self.transformations.is_empty()
@@ -262,6 +262,17 @@ impl TransformationPipeline {
     // Path normalization can turn a single slash into two.
     pub(crate) fn preserves_token_width_bounds(&self) -> bool {
         self.is_empty() || self.byte_triggers.is_some_and(|flags| flags & PATH == 0)
+    }
+
+    /// Only pure, built-in byte transformations qualify for cross-rule reuse.
+    pub(crate) fn cache_signature(&self) -> Option<Vec<&'static str>> {
+        self.byte_triggers?;
+        (self.len() >= 2).then(|| {
+            self.transformations
+                .iter()
+                .map(|stage| stage.name())
+                .collect()
+        })
     }
 
     /// Check if the pipeline is empty.

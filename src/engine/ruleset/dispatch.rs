@@ -31,6 +31,8 @@ pub(in crate::engine) struct CompiledSetVar {
 pub(in crate::engine) struct RuleDispatch {
     /// A rule with no variables available in this phase still occupies a skip position.
     pub inactive: bool,
+    pub numeric_id: Option<u64>,
+    pub transform_group: Option<usize>,
     /// This chain can be evaluated in multiple phases.
     pub multiphase_chain: bool,
     pub targets: target_indices::TargetIndices,
@@ -102,6 +104,7 @@ impl RuleDispatch {
             [0; 3]
         };
         let mut dispatch = Self {
+            numeric_id: rule.id.as_deref().and_then(|id| id.trim().parse().ok()),
             targets: target_indices::TargetIndices::compile(&rule.variables, minimum),
             selections: rule
                 .variables
@@ -343,6 +346,21 @@ impl CompiledRuleset {
                     plan
                 })
                 .collect();
+            // Only repeated pipelines share a cache entry. The first rule's
+            // phase-local position uniquely identifies the ordered stages.
+            let mut groups = HashMap::<_, Vec<usize>>::new();
+            for (index, (rule, plan)) in rules.iter().zip(dispatch.iter()).enumerate() {
+                if !plan.inactive && !plan.multi_match && !plan.dynamic {
+                    if let Some(signature) = rule.transformations.cache_signature() {
+                        groups.entry(signature).or_default().push(index);
+                    }
+                }
+            }
+            for group in groups.values().filter(|v| v.len() > 1) {
+                for &index in group {
+                    dispatch[index].transform_group = Some(group[0]);
+                }
+            }
             RuleDispatch::assign_numeric_tx_slots(dispatch);
             self.header_slots[phase.index()] = RuleDispatch::assign_header_slots(rules, dispatch);
             let sources = &mut self.width_sources[phase.index()];

@@ -576,7 +576,11 @@ impl TransactionControls {
         if self.removed_rules.is_empty() {
             return false;
         }
-        let Some(id) = rule_id.and_then(|id| id.trim().parse::<u64>().ok()) else {
+        self.is_numeric_rule_removed(rule_id.and_then(|id| id.trim().parse().ok()))
+    }
+
+    pub(super) fn is_numeric_rule_removed(&self, id: Option<u64>) -> bool {
+        let Some(id) = id else {
             return false;
         };
         let index = self.removed_rules.partition_point(|r| r.end < id);

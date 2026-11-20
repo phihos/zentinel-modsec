@@ -3,6 +3,8 @@
 mod actions;
 mod body;
 mod multiphase;
+mod transform_cache;
+use transform_cache::TransformCache;
 
 use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
@@ -98,6 +100,12 @@ struct ResolvedTarget {
     remaining: Vec<(ByteValue, Vec<u8>)>,
 }
 
+#[derive(Clone, Copy)]
+struct RemovalScope<'a> {
+    id: Option<&'a str>,
+    tags: &'a [Action],
+}
+
 struct StaticSearch<'a> {
     rule: &'a CompiledRule,
     within: Option<&'a [u8]>,
@@ -105,10 +113,16 @@ struct StaticSearch<'a> {
     regex: Option<&'a crate::operators::RxOperator>,
     capture: bool,
     multi_match: bool,
+    transform_group: Option<usize>,
 }
 
 impl StaticSearch<'_> {
-    fn first_match(&self, raw: &[u8], mut record: impl FnMut(PreparedStage)) -> Result<()> {
+    fn first_match(
+        &self,
+        raw: &[u8],
+        cache: &mut TransformCache,
+        mut record: impl FnMut(PreparedStage),
+    ) -> Result<()> {
         let execute = |value: &[u8]| -> Result<Option<ByteOperatorResult>> {
             let whole_input = self
                 .numeric
@@ -162,7 +176,7 @@ impl StaticSearch<'_> {
                     }))
                 })?;
         } else {
-            let transformed = self.rule.transformations.apply_bytes(raw)?;
+            let transformed = cache.apply(self.transform_group, &self.rule.transformations, raw)?;
             if let Some(result) = execute(&transformed)? {
                 record(PreparedStage {
                     value: ByteValue::from(transformed),
@@ -627,7 +641,7 @@ impl Transaction {
         let mut markers = ruleset.phase_markers(phase);
         let mut idx = 0;
         if let Some(marker) = &self.pending_marker {
-            if self.controls.is_rule_removed(Some("0")) {
+            if self.controls.is_numeric_rule_removed(Some(0)) {
                 return Ok(());
             }
             let Some(destination) = markers.skip_after(marker) else {
@@ -647,6 +661,7 @@ impl Transaction {
             ruleset.width_sources[phase.index()],
             &ruleset.header_slots[phase.index()],
         );
+        let mut transforms = TransformCache::default();
         let mut chain_start = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
@@ -680,7 +695,7 @@ impl Transaction {
             }
 
             let marker_count = markers.take_through(idx);
-            if marker_count != 0 && !self.controls.is_rule_removed(Some("0")) {
+            if marker_count != 0 && !self.controls.is_numeric_rule_removed(Some(0)) {
                 if marker_count > skip_count as usize {
                     self.matched_vars.clear();
                     self.matched_vars
@@ -707,7 +722,9 @@ impl Transaction {
             // Likewise a removal fired by the starter cannot cancel its own
             // chain while it is still executing.
             if chain_start.is_none() {
-                let removed = self.controls.is_rule_removed(rule.id.as_deref())
+                let removed = self
+                    .controls
+                    .is_numeric_rule_removed(dispatch[idx].numeric_id)
                     || (dispatch[idx].removable_by_tag
                         && self.controls.is_tag_removed(&rule.actions));
                 if removed || skip_count > 0 {
@@ -761,10 +778,13 @@ impl Transaction {
                 self.evaluate_rule(
                     rule,
                     &dispatch[idx],
-                    link_rule_id,
-                    tag_actions,
+                    RemovalScope {
+                        id: link_rule_id,
+                        tags: tag_actions,
+                    },
                     idx - starter_index,
                     targets,
+                    &mut transforms,
                 )?
             } else {
                 None
@@ -869,7 +889,7 @@ impl Transaction {
                             else {
                                 unreachable!("compiled skipAfter action")
                             };
-                            skip_after = if self.controls.is_rule_removed(Some("0")) {
+                            skip_after = if self.controls.is_numeric_rule_removed(Some(0)) {
                                 None
                             } else {
                                 markers.skip_after(marker)
@@ -1031,17 +1051,17 @@ impl Transaction {
         &self,
         spec: &VariableSpec,
         selection: &crate::variables::TargetSelection,
-        logical_id: Option<&str>,
-        tag_actions: &[Action],
+        scope: RemovalScope<'_>,
         search: Option<&StaticSearch<'_>>,
+        transforms: &mut TransformCache,
         target: &mut ResolvedTarget,
     ) -> Result<()> {
         let resolver = self.variable_resolver();
-        let by_id = self.controls.has_target_removals(logical_id);
-        let by_tag = if tag_actions.is_empty() {
+        let by_id = self.controls.has_target_removals(scope.id);
+        let by_tag = if scope.tags.is_empty() {
             TagTargetRemoval::None
         } else {
-            self.controls.tag_target_removal(tag_actions, spec)
+            self.controls.tag_target_removal(scope.tags, spec)
         };
         let match_name = |prefix: &str, member: Option<&[u8]>| {
             selection
@@ -1054,9 +1074,9 @@ impl Transaction {
         let mut count = 0usize;
         if by_tag != TagTargetRemoval::All {
             resolver.visit_values(spec, selection, |prefix, member, value| {
-                if (by_id && self.controls.removed_member(logical_id, spec, member))
+                if (by_id && self.controls.removed_member(scope.id, spec, member))
                     || (by_tag == TagTargetRemoval::Members
-                        && self.controls.removed_tag_member(tag_actions, spec, member))
+                        && self.controls.removed_tag_member(scope.tags, spec, member))
                 {
                     return;
                 }
@@ -1068,7 +1088,7 @@ impl Transaction {
                     return;
                 }
                 if let Some(search) = search.filter(|_| target.first.is_none()) {
-                    if let Err(e) = search.first_match(value, |stage| {
+                    if let Err(e) = search.first_match(value, transforms, |stage| {
                         target.first = Some((match_name(prefix, member), stage));
                     }) {
                         error = Some(e);
@@ -1097,7 +1117,9 @@ impl Transaction {
                 _ => Cow::Owned(count.to_string().into_bytes()),
             };
             if let Some(search) = search {
-                search.first_match(&value, |stage| target.first = Some((name.clone(), stage)))?;
+                search.first_match(&value, transforms, |stage| {
+                    target.first = Some((name.clone(), stage))
+                })?;
             } else {
                 target.remaining.push((name.clone(), value.into_owned()));
             }
@@ -1123,10 +1145,10 @@ impl Transaction {
         &mut self,
         rule: &CompiledRule,
         dispatch: &RuleDispatch,
-        logical_id: Option<&str>,
-        tag_actions: &[Action],
+        scope: RemovalScope<'_>,
         chain_depth: usize,
         targets: ActiveTargets,
+        transforms: &mut TransformCache,
     ) -> Result<Option<RuleOutcome>> {
         let mut outcome: Option<RuleOutcome> = None;
         let mut bound_operator = None;
@@ -1147,6 +1169,7 @@ impl Transaction {
             rule,
             capture,
             multi_match,
+            transform_group: dispatch.transform_group,
         };
         let mut evaluate = |tx: &mut Self,
                             variable: Option<VariableName>,
@@ -1238,7 +1261,7 @@ impl Transaction {
                 }
             }
             if dispatch.multiphase_chain {
-                if let Some(id) = logical_id {
+                if let Some(id) = scope.id {
                     let field = (variable, matched_value.clone().unwrap_or_default());
                     if !tx
                         .chain_history
@@ -1275,8 +1298,8 @@ impl Transaction {
                 tx.matched_vars
                     .push((ByteValue::from("UNKNOWN"), ByteValue::default()));
             }
-            tx.apply_match_actions(rule, dispatch, logical_id);
-            if let Some(id) = logical_id {
+            tx.apply_match_actions(rule, dispatch, scope.id);
+            if let Some(id) = scope.id {
                 if let Some(mut audit) = tx.audit.take() {
                     audit.pending.push(tx.expand_rule_message(dispatch, id));
                     tx.audit = Some(audit);
@@ -1292,8 +1315,8 @@ impl Transaction {
         };
 
         if dispatch.single_tx_numeric
-            && tag_actions.is_empty()
-            && !self.controls.has_target_removals(logical_id)
+            && scope.tags.is_empty()
+            && !self.controls.has_target_removals(scope.id)
         {
             let selection = &dispatch.selections[0];
             let crate::variables::MemberSelector::Key(key) = &selection.member else {
@@ -1353,9 +1376,9 @@ impl Transaction {
             self.resolve_rule_target(
                 spec,
                 selection,
-                logical_id,
-                tag_actions,
+                scope,
                 search.as_ref(),
+                transforms,
                 &mut target,
             )?;
             if let Some((name, stage)) = target.first {
@@ -1767,8 +1790,10 @@ SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
                 .evaluate_rule(
                     &rule,
                     &rules.dispatch_for_phase(Phase::RequestHeaders)[0],
-                    Some("77"),
-                    &rule.actions,
+                    RemovalScope {
+                        id: Some("77"),
+                        tags: &rule.actions,
+                    },
                     0,
                     rules.dispatch_for_phase(Phase::RequestHeaders)[0]
                         .targets
@@ -1777,6 +1802,7 @@ SecAction "id:77,phase:1,pass,setvar:tx.done=1""#;
                             Default::default(),
                             &[],
                         )),
+                    &mut TransformCache::default(),
                 )
                 .err()
                 .unwrap();
