@@ -11,13 +11,13 @@
 | [#73](https://github.com/zentinelproxy/zentinel-modsec/pull/73) | Accept quoted numeric rule IDs. Merged. |
 | [#74](https://github.com/zentinelproxy/zentinel-modsec/pull/74) | Match IPv4-mapped addresses against masked networks. Merged. |
 | [#75](https://github.com/zentinelproxy/zentinel-modsec/pull/75) | Borrow compiled phase rules during request evaluation. Merged. |
-| [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes as given, then beside the declaring file, and roll back the whole append on error. |
-| [#77](https://github.com/zentinelproxy/zentinel-modsec/pull/77) | Apply `SecRuleRemoveByTag` and `SecRuleRemoveByMsg` to the whole ruleset. |
+| [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes as given, then beside the declaring file, and roll back the whole append on error. Merged. |
+| [#77](https://github.com/zentinelproxy/zentinel-modsec/pull/77) | Apply `SecRuleRemoveByTag` and `SecRuleRemoveByMsg` to the whole ruleset. Merged. |
 | [#78](https://github.com/zentinelproxy/zentinel-modsec/pull/78) | Preserve literal TX assignments and skip `setvar` into unimplemented collections with a warning. |
 | [#79](https://github.com/zentinelproxy/zentinel-modsec/pull/79) | Keep loading past form feeds, Unicode spaces and line terminators. |
 | [#80](https://github.com/zentinelproxy/zentinel-modsec/pull/80) | Convert empty and non-numeric operands to zero in numeric operators. |
-| [#81](https://github.com/zentinelproxy/zentinel-modsec/pull/81) | Keep TX score variables set by rules when a phase ends. |
-| [#82](https://github.com/zentinelproxy/zentinel-modsec/pull/82) | Wrap `setvar` arithmetic at the signed 64-bit boundary. |
+| [#81](https://github.com/zentinelproxy/zentinel-modsec/pull/81) | Keep TX score variables set by rules when a phase ends. Merged. |
+| [#82](https://github.com/zentinelproxy/zentinel-modsec/pull/82) | Saturate `setvar` arithmetic at the signed 64-bit boundary. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 
