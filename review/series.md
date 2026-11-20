@@ -6,16 +6,26 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 
 | Upstream PR | Scope |
 |---|---|
-| [#69](https://github.com/zentinelproxy/zentinel-modsec/pull/69) | Benchmark GET, form POST and nested JSON POST on OWASP CRS 4.25.0. |
+| [#69](https://github.com/zentinelproxy/zentinel-modsec/pull/69) | Benchmark GET, form POST and nested JSON POST on OWASP CRS 4.25.0. Merged. |
 | [#70](https://github.com/zentinelproxy/zentinel-modsec/pull/70) | Return forward slashes from Windows path normalization. |
 | [#71](https://github.com/zentinelproxy/zentinel-modsec/pull/71) | Fold full-width ASCII in `urlDecodeUni`. |
 | [#72](https://github.com/zentinelproxy/zentinel-modsec/pull/72) | Encode non-ASCII code points in `utf8toUnicode`. |
 | [#73](https://github.com/zentinelproxy/zentinel-modsec/pull/73) | Accept quoted numeric rule IDs. |
 | [#74](https://github.com/zentinelproxy/zentinel-modsec/pull/74) | Match IPv4-mapped addresses against masked networks. |
 | [#75](https://github.com/zentinelproxy/zentinel-modsec/pull/75) | Borrow compiled phase rules during request evaluation. |
-| [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes in the declaring file and roll back the whole append on error. |
+| [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes as given, then beside the declaring file, and roll back the whole append on error. |
+| [#77](https://github.com/zentinelproxy/zentinel-modsec/pull/77) | Apply `SecRuleRemoveByTag` and `SecRuleRemoveByMsg` to the whole ruleset. |
+| [#78](https://github.com/zentinelproxy/zentinel-modsec/pull/78) | Preserve literal TX assignments and skip `setvar` into unimplemented collections with a warning. |
+| [#79](https://github.com/zentinelproxy/zentinel-modsec/pull/79) | Keep loading past form feeds, Unicode spaces and line terminators. |
+| [#80](https://github.com/zentinelproxy/zentinel-modsec/pull/80) | Convert empty and non-numeric operands to zero in numeric operators. |
+| [#81](https://github.com/zentinelproxy/zentinel-modsec/pull/81) | Keep TX score variables set by rules when a phase ends. |
+| [#82](https://github.com/zentinelproxy/zentinel-modsec/pull/82) | Wrap `setvar` arithmetic at the signed 64-bit boundary. |
 
 ## Queued on the fork
+
+Following review, the filed PRs keep ModSecurity v3 semantics where v3 and Coraza differ, and warn instead of failing the load for unsupported features. The groups below were built for Coraza 3.8.1 parity and will be adapted the same way when filed. #80–82 are the first extractions from these groups.
+
+Since the snapshot, the fork added transaction-local body policy, JSON schema validation, a connector profile that selects Coraza behavior, and further request-path optimizations. That work is on [`fix/haptic-plugin-sync`](https://github.com/phihos/zentinel-modsec/compare/9fa45f6061ff305568a63b61714beb70bfef4c8b...fix/haptic-plugin-sync) and is not yet grouped.
 
 The 146 implementation commits beyond #70–75 are covered by #76 and the 18 groups below. Each link shows the changes since the preceding group. As prerequisites merge upstream, each group can be filed against its merged base with the same focused diff. The starting point combines #69–75 and the configuration changes filed in [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76).
 

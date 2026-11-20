@@ -1,0 +1,195 @@
+{
+  "harness": {
+    "before": {
+      "engine": "bd1a5ba244ae27f11ab458eb3098c595511f6168",
+      "executable": "68e6692631d713a53e974da9053d301d2f55c4775eada43bd4e1238bedffd831"
+    },
+    "after": {
+      "engine": "3d1fd5cee22e6db14f209cc5d58c352c816bf8f3",
+      "executable": "8ee91014c9aa4e63279873ba9e788f218c1d51805f1b4c673c42b79961a1f695",
+      "benchmark": "e4aa89d2132e87621750e7d787468d87ae049592"
+    }
+  },
+  "driver": "74dcfe71f650a6d893c1d75d22361885dea38dba5e4d2759d3ca3af20e713d52",
+  "cpu": 14,
+  "samples_per_workload": 24,
+  "crs_commit": "aabf675fcfc5e489b424b844e6c9f1b39802df69",
+  "toolchain": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 21.1.8",
+  "runs": [
+    {
+      "round": 0,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 822.4136331523274,
+          "raw_sha256": "caf7c97c7e74305ed605fc2f076a8a64f97c268b9160d2e965862267daf349a2"
+        },
+        "form": {
+          "mean_us": 936.3929174327329,
+          "raw_sha256": "8ee3b553b925f670b52a6d7157f8ec7a55648196bd46be8959328032af676f3e"
+        },
+        "json": {
+          "mean_us": 974.7183331926585,
+          "raw_sha256": "5cd12377fa09ad88693f5ebd2ebbadeee7dd53cca6a02bac6aa721e97bf66089"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 0,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 37.91422258950406,
+          "raw_sha256": "70d02217c63eeb02c4fe45eab047f7f4c12e090dc0431ce55cba10a57272592e"
+        },
+        "form": {
+          "mean_us": 49.67543342258729,
+          "raw_sha256": "9f0f9044459c501658b33a3dea8ff3243f6451dba06cb4cac43d14b5b84e8c88"
+        },
+        "json": {
+          "mean_us": 56.56571924694194,
+          "raw_sha256": "1f11279c684a7bebfbf4d10cefadc0d677d69bea451504f8dcf9724d6a51d1eb"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 1,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 39.77521609585387,
+          "raw_sha256": "26d896f6bbb37e5497efa569c2afd3f5178f43c5dddb17e27d852ff0d2b9dd00"
+        },
+        "form": {
+          "mean_us": 48.72073940554191,
+          "raw_sha256": "b0e8643628082086775f1d941a2fd8c55f77aba10bc0ecfd7dc24e94d1b868c2"
+        },
+        "json": {
+          "mean_us": 58.22383184723946,
+          "raw_sha256": "002b47bfb2734394f04a9bf749bea0ce82ed0d8b04af8b923844d8b1c5646811"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 1,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 854.5292612491153,
+          "raw_sha256": "43940a45224ef5f5617bc4fa237edb81c61e722a11ef1369aa90d89a4dfda593"
+        },
+        "form": {
+          "mean_us": 997.3694859525945,
+          "raw_sha256": "3570381f514dba5a4a6f22a0ebf9ea0f5adec16606d57b3c6ed7ce582d43169a"
+        },
+        "json": {
+          "mean_us": 991.8046431512145,
+          "raw_sha256": "88854eec705501189f89f096523e3a2f5819257cc7ab63bb00bac8b84d587379"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 2,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 39.27248007293592,
+          "raw_sha256": "d5250ba0118c2106e90b3b407bd9a2ccd65bbeb96f80f0936bc180649ccff683"
+        },
+        "form": {
+          "mean_us": 49.05122728179033,
+          "raw_sha256": "e0dc6142c9c344a3278a7d5f7630d8d19af3af6aa570ec27c56198d761028f73"
+        },
+        "json": {
+          "mean_us": 57.14425792335558,
+          "raw_sha256": "fda458bbe2e1f3bb6a46cb927f76aa5937f86653b416659364f193bb38eb6090"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 2,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 827.4502977808799,
+          "raw_sha256": "93eef6a0fa87d28175e2d772b769cb7ad48cffdef48fa5e3153100536cb30d69"
+        },
+        "form": {
+          "mean_us": 949.1467595865726,
+          "raw_sha256": "d2abcb49d4c7af056bfa144d92d62ff5dd6ef6097a47d325a10c6d4af2926e7b"
+        },
+        "json": {
+          "mean_us": 986.9259513337302,
+          "raw_sha256": "dcc9273393fc5cf70a623f65bc7b97bb4e730af213d13a4f41729f7a563ed4bb"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 3,
+      "side": "before",
+      "results": {
+        "get": {
+          "mean_us": 836.3778024261218,
+          "raw_sha256": "4e4dc24d39f9844fb3838663377041cda0dc00794803f039081a3f79515c26e3"
+        },
+        "form": {
+          "mean_us": 937.8377097029023,
+          "raw_sha256": "3f3383d6f2924704b76327401e93b9446a7ccd223c525aeac505207c3fc54c12"
+        },
+        "json": {
+          "mean_us": 984.1883045201939,
+          "raw_sha256": "b02884e4be068a6d23eb05370e6c429ef4215373c5965a9f983611948e965c9f"
+        }
+      },
+      "exit": 0
+    },
+    {
+      "round": 3,
+      "side": "after",
+      "results": {
+        "get": {
+          "mean_us": 43.05477239629051,
+          "raw_sha256": "eaa26e01ec990f42979aa8066b79bf864e92591b806f7092472ad9b1ecfbd00a"
+        },
+        "form": {
+          "mean_us": 54.87180366061441,
+          "raw_sha256": "f7d172bacf786486e845180103d72b67f315c0c34173b82400c2c69fd860f90c"
+        },
+        "json": {
+          "mean_us": 62.730318762149544,
+          "raw_sha256": "c1413abb181efa7959ee695098bb59722765ebacacba6cb0e21c8f9a58576bdf"
+        }
+      },
+      "exit": 0
+    }
+  ],
+  "compiled_rules": 698,
+  "summary": {
+    "get": {
+      "before_us": 831.9140501035008,
+      "after_us": 39.5238480843949,
+      "paired_change_pct": -95.29958055915682,
+      "wins": 4
+    },
+    "form": {
+      "before_us": 943.4922346447374,
+      "after_us": 49.36333035218881,
+      "paired_change_pct": -94.76354693545184,
+      "wins": 4
+    },
+    "json": {
+      "before_us": 985.557127926962,
+      "after_us": 57.684044885297524,
+      "paired_change_pct": -94.16310864266087,
+      "wins": 4
+    }
+  },
+  "samples_archive_sha256": "15d82206c92f3d0d30a7d2aca6694c76681b548baafc51b15290a46b56280248",
+  "note": "An earlier run on the same binaries was discarded because unrelated builds were running on the host."
+}
