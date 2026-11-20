@@ -17,7 +17,7 @@ use super::target_indices::{ActiveTargets, RequestCollections};
 use crate::actions::rule_metadata;
 use crate::error::Result;
 use crate::operators::{compile_bound_operator, ByteOperatorResult, Operator};
-use crate::parser::{Action, DisruptiveAction, MetadataAction, VariableName, VariableSpec};
+use crate::parser::{Action, DisruptiveAction, VariableName, VariableSpec};
 use crate::variables::{
     ByteCollection, ByteValue, ConnectorMetadata, RequestData, ResponseData, TxCollection,
     VariableResolver,
@@ -351,19 +351,17 @@ impl Transaction {
         self.audit.as_ref().map_or(&[], |audit| &audit.completed)
     }
 
-    fn expand_rule_message(&self, actions: &[Action], id: &str) -> RuleMessage {
-        let (mut msg, mut logdata) = (None, None);
-        for action in actions {
-            match action {
-                Action::Metadata(MetadataAction::Msg(value)) => msg = Some(value),
-                Action::Metadata(MetadataAction::LogData(value)) => logdata = Some(value),
-                _ => {}
-            }
-        }
+    fn expand_rule_message(&self, dispatch: &RuleDispatch, id: &str) -> RuleMessage {
         RuleMessage {
             rule_id: id.to_owned(),
-            message: msg.map(|s| self.expand_macros_bytes(s).into_owned()),
-            logdata: logdata.map(|s| self.expand_macros_bytes(s).into_owned()),
+            message: dispatch
+                .message
+                .as_ref()
+                .map(|arg| arg.expand(self).into_owned()),
+            logdata: dispatch
+                .logdata
+                .as_ref()
+                .map(|arg| arg.expand(self).into_owned()),
         }
     }
 
@@ -402,7 +400,18 @@ impl Transaction {
     /// Call before processing starts. The selector may discard or shorten a
     /// displayed variable name. Matching values are never copied into this log.
     pub fn record_matched_fields(&mut self, limit: usize, select: fn(&str) -> Option<&str>) {
+        self.record_filtered_matched_fields(limit, |_| true, select);
+    }
+
+    /// Reject unwanted field names using their original bytes before formatting for display.
+    pub fn record_filtered_matched_fields(
+        &mut self,
+        limit: usize,
+        accepts: fn(&[u8]) -> bool,
+        select: fn(&str) -> Option<&str>,
+    ) {
         self.matched_fields = Some(Box::new(MatchedFields {
+            accepts,
             select,
             limit,
             records: Vec::new(),
@@ -528,7 +537,12 @@ impl Transaction {
 
     /// Get matched rule IDs.
     pub fn matched_rules(&self) -> &[String] {
-        self.matched_rules.as_slice(&self.ruleset, self.phase)
+        self.matched_rules.as_slice(&self.ruleset)
+    }
+
+    /// Borrow matched rule IDs in evaluation order without materializing the audit strings.
+    pub fn matched_rule_ids(&self) -> impl Iterator<Item = &str> {
+        self.matched_rules.ids(&self.ruleset)
     }
 
     /// Read the current legacy `TX:anomaly_score` value, or zero if absent.
@@ -823,7 +837,7 @@ impl Transaction {
                 if let Some(id) = starter.id.as_deref() {
                     if self.record_rule_messages {
                         let message = first_message
-                            .unwrap_or_else(|| self.expand_rule_message(&starter.actions, id));
+                            .unwrap_or_else(|| self.expand_rule_message(starter_dispatch, id));
                         self.rule_messages.push(message);
                     }
                     if let Some(mut audit) = self.audit.take() {
@@ -831,7 +845,7 @@ impl Transaction {
                         // last link so MATCHED_VAR and captures reflect the chain.
                         let final_message = starter
                             .is_chain
-                            .then(|| self.expand_rule_message(&starter.actions, id));
+                            .then(|| self.expand_rule_message(starter_dispatch, id));
                         if let (Some(first), Some(expanded)) =
                             (audit.pending.first_mut(), final_message)
                         {
@@ -974,7 +988,7 @@ impl Transaction {
                         .match_name
                         .as_ref()
                         .unwrap();
-                    if let Some(name) = (fields.select)(name.display_text()) {
+                    if let Some(name) = fields.selected(name) {
                         fields.records.push((
                             RuleLocation::new(phase, usize::from(index)),
                             name.to_owned(),
@@ -995,7 +1009,7 @@ impl Transaction {
         }
     }
 
-    fn variable_resolver(&self) -> VariableResolver<'_> {
+    pub(super) fn variable_resolver(&self) -> VariableResolver<'_> {
         let mut resolver = VariableResolver::new_bytes(
             &self.request,
             &self.response,
@@ -1150,7 +1164,11 @@ impl Transaction {
             } else {
                 let operator: &dyn Operator = if dynamic {
                     if bound_operator.is_none() {
-                        let expanded = tx.expand_macros_bytes(&rule.operator_spec.argument);
+                        let expanded = dispatch
+                            .operand
+                            .as_ref()
+                            .expect("compiled dynamic operand")
+                            .expand(tx);
                         bound_operator = Some(compile_bound_operator(
                             &rule.operator_spec,
                             &expanded,
@@ -1259,13 +1277,11 @@ impl Transaction {
             tx.apply_match_actions(rule, dispatch, logical_id);
             if let Some(id) = logical_id {
                 if let Some(mut audit) = tx.audit.take() {
-                    audit
-                        .pending
-                        .push(tx.expand_rule_message(&rule.actions, id));
+                    audit.pending.push(tx.expand_rule_message(dispatch, id));
                     tx.audit = Some(audit);
                 }
                 if first && chain_depth == 0 && !rule.is_chain && tx.record_rule_messages {
-                    outcome.first_message = Some(tx.expand_rule_message(&rule.actions, id));
+                    outcome.first_message = Some(tx.expand_rule_message(dispatch, id));
                 }
             }
             // Captures, MATCHED_VAR and setvar may all change a macro even
@@ -1373,51 +1389,6 @@ impl Transaction {
         }
         Ok(outcome)
     }
-
-    /// Expand against current transaction state. Literal text and standalone
-    /// macro values can be borrowed until the caller needs to store a snapshot.
-    fn expand_macros_bytes<'a>(&'a self, arg: &'a str) -> Cow<'a, [u8]> {
-        let mut output = Vec::new();
-        let mut rest = arg;
-        while let Some((prefix, name, suffix)) = super::split_operator_macro(rest) {
-            let value = self.macro_value_bytes(name);
-            if prefix.is_empty() && output.is_empty() && suffix.is_empty() {
-                return value;
-            }
-            output.reserve(prefix.len() + value.len());
-            output.extend_from_slice(prefix.as_bytes());
-            output.extend_from_slice(&value);
-            rest = suffix;
-        }
-        if output.is_empty() {
-            Cow::Borrowed(rest.as_bytes())
-        } else {
-            output.extend_from_slice(rest.as_bytes());
-            Cow::Owned(output)
-        }
-    }
-
-    fn macro_value_bytes<'a>(&'a self, name: &'a str) -> Cow<'a, [u8]> {
-        let (collection, key) = name.split_once('.').unwrap_or((name, ""));
-        let key = key.as_bytes();
-        // TX is the most frequent operand in CRS and needs no variable-name lookup.
-        if collection.eq_ignore_ascii_case("tx") {
-            return Cow::Borrowed(self.tx.first_value_bytes(key).unwrap_or(name.as_bytes()));
-        }
-        let Some(variable) = VariableName::from_str(collection) else {
-            // Legacy bare placeholders can address TX variables directly.
-            return Cow::Borrowed(if collection == name {
-                self.tx
-                    .first_value_bytes(name.as_bytes())
-                    .unwrap_or_default()
-            } else {
-                b""
-            });
-        };
-
-        self.variable_resolver()
-            .macro_value(variable, key, name.as_bytes())
-    }
 }
 
 impl std::fmt::Debug for Transaction {
@@ -1477,30 +1448,62 @@ SecAction "id:4,phase:4,pass,ctl:responseBodyLimit=1""#).unwrap();
             ("%{unknown.foo} and %{matched_var}", b" and "),
             ("%{x}%{x}", b"valuevalue"),
         ] {
-            assert_eq!(tx.expand_macros_bytes(template).as_ref(), expected);
+            assert_eq!(
+                crate::engine::macro_template::MacroTemplate::compile(template)
+                    .expand(&tx)
+                    .as_ref(),
+                expected
+            );
         }
+    }
+
+    #[test]
+    fn borrowed_rule_ids_match_owned_view_across_phases() {
+        let rules = make_ruleset(
+            r#"SecAction "id:1,phase:1,pass"
+SecAction "id:2,phase:1,pass"
+SecAction "id:3,phase:2,pass"
+"#,
+        );
+        let mut tx = Transaction::new(rules, 403);
+        tx.process_request_headers().unwrap();
+        assert!(tx.matched_rule_ids().eq(["1", "2"]));
+        assert_eq!(tx.matched_rules(), ["1", "2"]);
+        tx.process_request_body().unwrap();
+        assert!(tx.matched_rule_ids().eq(["1", "2", "3"]));
+        assert_eq!(tx.matched_rules(), ["1", "2", "3"]);
     }
 
     #[test]
     fn scalar_macros_borrow_available_bytes_and_own_uncached_lines() {
         let mut tx = Transaction::new(make_ruleset(""), 403);
-        assert_eq!(tx.expand_macros_bytes("%{REQUEST_LINE}").as_ref(), b"");
+        assert_eq!(
+            crate::engine::macro_template::MacroTemplate::compile("%{REQUEST_LINE}")
+                .expand(&tx)
+                .as_ref(),
+            b""
+        );
         tx.process_uri("", "", "").unwrap();
-        assert_eq!(tx.expand_macros_bytes("%{REQUEST_LINE}").as_ref(), b"  ");
+        assert_eq!(
+            crate::engine::macro_template::MacroTemplate::compile("%{REQUEST_LINE}")
+                .expand(&tx)
+                .as_ref(),
+            b"  "
+        );
         tx.process_uri("/short", "GET", "HTTP/1.1").unwrap();
         assert!(matches!(
-            tx.expand_macros_bytes("%{REQUEST_METHOD}"),
+            crate::engine::macro_template::MacroTemplate::compile("%{REQUEST_METHOD}").expand(&tx),
             Cow::Borrowed(b"GET")
         ));
         assert!(matches!(
-            tx.expand_macros_bytes("%{REQUEST_LINE}"),
+            crate::engine::macro_template::MacroTemplate::compile("%{REQUEST_LINE}").expand(&tx),
             Cow::Borrowed(b"GET /short HTTP/1.1")
         ));
         let path = format!("/{}", "x".repeat(5000));
         tx.process_uri(&path, "GET", "HTTP/1.1").unwrap();
         let line = format!("GET {path} HTTP/1.1");
         assert!(
-            matches!(tx.expand_macros_bytes("%{REQUEST_LINE}"), Cow::Owned(bytes) if bytes == line.as_bytes())
+            matches!(crate::engine::macro_template::MacroTemplate::compile("%{REQUEST_LINE}").expand(&tx), Cow::Owned(bytes) if bytes == line.as_bytes())
         );
         assert!(tx.request_line.get().is_none());
     }

@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{CompiledRule, CompiledRuleset, Rules};
+use crate::engine::macro_template::MacroTemplate;
 use crate::engine::{
     control::CtlDirective, initialization::TxDefaults, phase::Phase, split_operator_macro,
     target_indices,
@@ -17,6 +18,8 @@ pub(in crate::engine) const NUMERIC_TX_SLOTS: usize = 4;
 
 pub(in crate::engine) struct CompiledSetVar {
     pub action_index: usize,
+    pub key_template: Option<MacroTemplate>,
+    pub value_template: Option<MacroTemplate>,
     /// Literal TX keys can be folded once, when configuration updates are final.
     pub key: Option<ByteValue>,
     pub value: Option<ByteValue>,
@@ -40,6 +43,9 @@ pub(in crate::engine) struct RuleDispatch {
     pub single_tx_numeric: bool,
     pub numeric_tx_slot: Option<u8>,
     pub dynamic: bool,
+    pub operand: Option<MacroTemplate>,
+    pub message: Option<MacroTemplate>,
+    pub logdata: Option<MacroTemplate>,
     pub within_tx_key: Option<Box<[u8]>>,
     pub capture: bool,
     pub multi_match: bool,
@@ -110,6 +116,7 @@ impl RuleDispatch {
             controls_from: rule.actions.len(),
             disruptive: rule.actions.len(),
             dynamic,
+            operand: dynamic.then(|| MacroTemplate::compile(&rule.operator_spec.argument)),
             within_tx_key: if dynamic && rule.operator_spec.name == OperatorName::Within {
                 split_operator_macro(&rule.operator_spec.argument).and_then(
                     |(prefix, name, suffix)| {
@@ -147,6 +154,14 @@ impl RuleDispatch {
                 Action::Data(DataAction::SetVar(op)) => {
                     setvars.push(CompiledSetVar {
                         action_index: index,
+                        key_template: op
+                            .key
+                            .contains("%{")
+                            .then(|| MacroTemplate::compile(&op.key)),
+                        value_template: match &op.value {
+                            SetVarValue::Macro(raw) => Some(MacroTemplate::compile(raw)),
+                            _ => None,
+                        },
                         value: match &op.value {
                             SetVarValue::Int(n) => Some(ByteValue::decimal(*n)),
                             SetVarValue::String(text) => Some(text.as_str().into()),
@@ -158,6 +173,12 @@ impl RuleDispatch {
                 }
                 Action::Control(_) => {
                     dispatch.controls_from = dispatch.controls_from.min(index);
+                }
+                Action::Metadata(MetadataAction::Msg(text)) => {
+                    dispatch.message = Some(MacroTemplate::compile(text))
+                }
+                Action::Metadata(MetadataAction::LogData(text)) => {
+                    dispatch.logdata = Some(MacroTemplate::compile(text))
                 }
                 Action::Metadata(MetadataAction::Tag(tag)) => {
                     dispatch.removable_by_tag |= removed_tags.contains(tag.as_str());

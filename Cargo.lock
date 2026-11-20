@@ -1932,6 +1932,7 @@ dependencies = [
 name = "zentinel-modsec"
 version = "0.6.0"
 dependencies = [
+ "ahash",
  "aho-corasick",
  "barbacane-libinjection",
  "base64",

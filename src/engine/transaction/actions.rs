@@ -63,7 +63,11 @@ impl Transaction {
         let (key, audit_key) = match &prepared.key {
             Some(key) => (key.clone(), record.map(|_| op.key.clone())),
             None => {
-                let expanded = self.expand_macros_bytes(&op.key);
+                let expanded = prepared
+                    .key_template
+                    .as_ref()
+                    .expect("compiled dynamic key")
+                    .expand(self);
                 let key = ByteValue::from(crate::variables::folded_key(&expanded));
                 (
                     key,
@@ -79,10 +83,10 @@ impl Transaction {
             }
             SetVarValue::Unresolved => return,
             value => {
-                let expanded = match value {
-                    SetVarValue::Macro(raw) => Some(self.expand_macros_bytes(raw)),
-                    _ => None,
-                };
+                let expanded = prepared
+                    .value_template
+                    .as_ref()
+                    .map(|operand| operand.expand(self));
                 let operation = match (value, expanded.as_deref()) {
                     (_, Some(bytes)) => SetVarOperand::parse(bytes),
                     (SetVarValue::Increment(n), _) => SetVarOperand::Add(*n),

@@ -6,6 +6,7 @@ pub mod control;
 mod diagnostics;
 mod initialization;
 pub mod intervention;
+mod macro_template;
 mod match_log;
 pub mod phase;
 pub mod ruleset;

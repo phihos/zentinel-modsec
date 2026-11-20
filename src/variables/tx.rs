@@ -16,7 +16,7 @@ use std::borrow::Cow;
 /// engine goes through this type.
 #[derive(Debug, Clone, Default)]
 pub struct TxCollection {
-    data: IndexMap<ByteValue, ByteValue>,
+    data: IndexMap<ByteValue, ByteValue, ahash::RandomState>,
     // Upper bound on occupied single-digit keys, including values written by callers.
     capture_limit: u8,
 }

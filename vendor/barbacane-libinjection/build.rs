@@ -141,6 +141,7 @@ fn process_sqlparse_data(out_dir: &str) -> io::Result<()> {
                 'F' => "b'F'", // Fingerprint
                 _ => "b'n'",
             };
+            assert!(keyword.len() <= 32, "keyword exceeds lookup buffer");
             writeln!(f, "    Keyword {{ word: \"{}\", token_type: {} }},", 
                      keyword, token_type)?;
         }
@@ -154,8 +155,11 @@ fn process_sqlparse_data(out_dir: &str) -> io::Result<()> {
         // the bareword type. Word merging keys off presence, matching the C
         // library's CHAR_NULL check.
         writeln!(f, "pub fn lookup_word_type(word: &str) -> Option<TokenType> {{")?;
-        writeln!(f, "    let upper = word.to_ascii_uppercase();")?;
-        writeln!(f, "    let idx = SQL_KEYWORDS.binary_search_by(|k| k.word.cmp(&upper)).ok()?;")?;
+        writeln!(f, "    let mut buffer = [0u8; 32];")?;
+        writeln!(f, "    let upper = buffer.get_mut(..word.len())?;")?;
+        writeln!(f, "    upper.copy_from_slice(word.as_bytes());")?;
+        writeln!(f, "    upper.make_ascii_uppercase();")?;
+        writeln!(f, "    let idx = SQL_KEYWORDS.binary_search_by(|k| k.word.as_bytes().cmp(upper)).ok()?;")?;
         writeln!(f, "    Some(match SQL_KEYWORDS[idx].token_type {{")?;
         writeln!(f, "        b'k' => TokenType::Keyword,")?;
         writeln!(f, "        b'f' => TokenType::Function,")?;

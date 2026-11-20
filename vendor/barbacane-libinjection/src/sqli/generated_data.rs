@@ -9633,8 +9633,11 @@ use crate::sqli::TokenType;
 /// type, so this distinction is what lets a multi-word keyword fold one word at
 /// a time.
 pub fn lookup_word_type(word: &str) -> Option<TokenType> {
-    let upper = word.to_ascii_uppercase();
-    let idx = SQL_KEYWORDS.binary_search_by(|k| k.word.cmp(&upper)).ok()?;
+    let mut buffer = [0u8; 32];
+    let upper = buffer.get_mut(..word.len())?;
+    upper.copy_from_slice(word.as_bytes());
+    upper.make_ascii_uppercase();
+    let idx = SQL_KEYWORDS.binary_search_by(|k| k.word.as_bytes().cmp(upper)).ok()?;
     Some(match SQL_KEYWORDS[idx].token_type {
         b'k' => TokenType::Keyword,
         b'f' => TokenType::Function,

@@ -39,17 +39,26 @@ impl RuleLocation {
 /// Connector-selected names for matched logical rules. Values remain in the link audit.
 pub(super) struct MatchedFields {
     pub select: fn(&str) -> Option<&str>,
+    pub accepts: fn(&[u8]) -> bool,
     pub limit: usize,
     pub records: Vec<(RuleLocation, String)>,
 }
 
 impl MatchedFields {
+    pub fn selected<'a>(&self, name: &'a ByteValue) -> Option<&'a str> {
+        if (self.accepts)(name.as_bytes()) {
+            (self.select)(name.display_text())
+        } else {
+            None
+        }
+    }
+
     pub fn collect(&self, pending: &mut Vec<String>, matches: &[(ByteValue, ByteValue)]) {
         for (name, _) in matches {
             if pending.len() == self.limit {
                 break;
             }
-            if let Some(name) = (self.select)(name.display_text()) {
+            if let Some(name) = self.selected(name) {
                 if !pending.iter().any(|prev| prev == name) {
                     pending.push(name.to_owned());
                 }
@@ -134,7 +143,11 @@ pub(super) enum MatchedRules {
     #[default]
     Empty,
     One(RuleLocation),
-    Many(MatchLog<RuleLocation>),
+    Many {
+        defaults: bool,
+        locations: Vec<RuleLocation>,
+        published: OnceLock<Vec<String>>,
+    },
 }
 
 impl MatchedRules {
@@ -145,7 +158,11 @@ impl MatchedRules {
                 Phase::RequestHeaders,
                 usize::from(*index),
             )),
-            _ => Self::Many(MatchLog::with_default_prefix(true)),
+            _ => Self::Many {
+                defaults: true,
+                locations: Vec::new(),
+                published: OnceLock::new(),
+            },
         }
     }
 
@@ -153,19 +170,50 @@ impl MatchedRules {
         match self {
             Self::Empty => *self = Self::One(next),
             Self::One(first) => {
-                let mut records = MatchLog::default();
-                records.extend(ruleset, [*first, next]);
-                *self = Self::Many(records);
+                *self = Self::Many {
+                    defaults: false,
+                    locations: vec![*first, next],
+                    published: OnceLock::new(),
+                }
             }
-            Self::Many(records) => records.extend(ruleset, std::iter::once(next)),
+            Self::Many {
+                locations,
+                published,
+                ..
+            } => {
+                locations.push(next);
+                if let Some(ids) = published.get_mut() {
+                    ids.push(next.publish(ruleset));
+                }
+            }
         }
     }
 
-    pub fn as_slice<'a>(&'a self, ruleset: &'a CompiledRuleset, phase: Phase) -> &'a [String] {
+    pub fn ids<'a>(&'a self, ruleset: &'a CompiledRuleset) -> impl Iterator<Item = &'a str> {
+        let (prefix, locations): (bool, &[RuleLocation]) = match self {
+            Self::Empty => (false, &[]),
+            Self::One(loc) => (false, std::slice::from_ref(loc)),
+            Self::Many {
+                defaults,
+                locations,
+                ..
+            } => (*defaults, locations),
+        };
+        prefix
+            .then(|| RuleLocation::phase_defaults(ruleset))
+            .into_iter()
+            .flatten()
+            .chain(locations.iter().copied())
+            .map(move |loc| loc.id(ruleset).expect("named match"))
+    }
+
+    pub fn as_slice<'a>(&'a self, ruleset: &'a CompiledRuleset) -> &'a [String] {
         match self {
             Self::Empty => &[],
             Self::One(loc) => loc.rule(ruleset).id.as_slice(),
-            Self::Many(records) => records.as_slice(ruleset, phase),
+            Self::Many { published, .. } => {
+                published.get_or_init(|| self.ids(ruleset).map(str::to_owned).collect())
+            }
         }
     }
 }

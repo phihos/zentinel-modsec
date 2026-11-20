@@ -67,7 +67,7 @@ pub struct Rules {
     /// phase's rule list. A marker separates rules in every phase, not only in
     /// the phase of the rules written around it, so a phase-2 `skipAfter` must
     /// be able to resume at the phase-2 position of the same marker.
-    markers: HashMap<String, Vec<usize>>,
+    markers: HashMap<String, Vec<usize>, ahash::RandomState>,
     marker_positions: [Vec<usize>; Phase::ALL.len()],
 }
 
@@ -136,7 +136,7 @@ impl CompileOptions {
 /// their source order even when several markers share one rule position.
 pub(super) struct PhaseMarkers<'a> {
     positions: &'a [usize],
-    by_name: &'a HashMap<String, Vec<usize>>,
+    by_name: &'a HashMap<String, Vec<usize>, ahash::RandomState>,
     cursor: usize,
 }
 
