@@ -5,12 +5,12 @@
 | Upstream PR | Scope |
 |---|---|
 | [#69](https://github.com/zentinelproxy/zentinel-modsec/pull/69) | Benchmark GET, form POST and nested JSON POST on OWASP CRS 4.25.0. Merged. |
-| [#70](https://github.com/zentinelproxy/zentinel-modsec/pull/70) | Return forward slashes from Windows path normalization. |
-| [#71](https://github.com/zentinelproxy/zentinel-modsec/pull/71) | Fold full-width ASCII in `urlDecodeUni`. |
-| [#72](https://github.com/zentinelproxy/zentinel-modsec/pull/72) | Encode non-ASCII code points in `utf8toUnicode`. |
-| [#73](https://github.com/zentinelproxy/zentinel-modsec/pull/73) | Accept quoted numeric rule IDs. |
-| [#74](https://github.com/zentinelproxy/zentinel-modsec/pull/74) | Match IPv4-mapped addresses against masked networks. |
-| [#75](https://github.com/zentinelproxy/zentinel-modsec/pull/75) | Borrow compiled phase rules during request evaluation. |
+| [#70](https://github.com/zentinelproxy/zentinel-modsec/pull/70) | Return forward slashes from Windows path normalization. Merged. |
+| [#71](https://github.com/zentinelproxy/zentinel-modsec/pull/71) | Fold full-width ASCII in `urlDecodeUni`. Merged. |
+| [#72](https://github.com/zentinelproxy/zentinel-modsec/pull/72) | Encode non-ASCII code points in `utf8toUnicode`. Merged. |
+| [#73](https://github.com/zentinelproxy/zentinel-modsec/pull/73) | Accept quoted numeric rule IDs. Merged. |
+| [#74](https://github.com/zentinelproxy/zentinel-modsec/pull/74) | Match IPv4-mapped addresses against masked networks. Merged. |
+| [#75](https://github.com/zentinelproxy/zentinel-modsec/pull/75) | Borrow compiled phase rules during request evaluation. Merged. |
 | [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes as given, then beside the declaring file, and roll back the whole append on error. |
 | [#77](https://github.com/zentinelproxy/zentinel-modsec/pull/77) | Apply `SecRuleRemoveByTag` and `SecRuleRemoveByMsg` to the whole ruleset. |
 | [#78](https://github.com/zentinelproxy/zentinel-modsec/pull/78) | Preserve literal TX assignments and skip `setvar` into unimplemented collections with a warning. |
