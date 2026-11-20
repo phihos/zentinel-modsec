@@ -248,7 +248,11 @@ impl<T: MatchRecord> MatchLog<T> {
         if let Some(view) = self.published.get_mut() {
             view.extend(matches.into_iter().map(|item| item.publish(ruleset)));
         } else {
-            self.raw.get_mut().unwrap().extend(matches);
+            let raw = self.raw.get_mut().unwrap();
+            if raw.capacity() == 0 {
+                raw.reserve(ruleset.initial_matches);
+            }
+            raw.extend(matches);
         }
     }
 

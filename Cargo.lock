@@ -1962,6 +1962,7 @@ dependencies = [
  "serde_yaml",
  "sha1",
  "sha2",
+ "smallvec",
  "tempfile",
  "thiserror",
  "tracing",

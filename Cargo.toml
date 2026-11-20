@@ -87,6 +87,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 # part of the result (MATCHED_VAR, captures), so it must not depend on a hash
 # seed (#53).
 indexmap = "2"
+smallvec = "1"
 ahash = "0.8"
 
 # Lazy initialization

@@ -91,6 +91,13 @@ impl TxCollection {
         self.lookup(key).map(ByteValue::as_bytes)
     }
 
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: IndexMap::with_capacity_and_hasher(capacity, Default::default()),
+            capture_limit: 0,
+        }
+    }
+
     /// Create a new TX collection.
     pub fn new() -> Self {
         Self::default()

@@ -68,9 +68,11 @@ impl MacroTemplate {
             [] => Cow::Borrowed(b""),
             [single] => value(single),
             parts => {
-                let mut bytes = Vec::new();
-                for part in parts {
-                    bytes.extend_from_slice(&value(part));
+                // Read each transaction variable once (some produce owned bytes or time values).
+                let pieces: smallvec::SmallVec<[_; 4]> = parts.iter().map(value).collect();
+                let mut bytes = Vec::with_capacity(pieces.iter().map(|piece| piece.len()).sum());
+                for piece in pieces {
+                    bytes.extend_from_slice(&piece);
                 }
                 Cow::Owned(bytes)
             }

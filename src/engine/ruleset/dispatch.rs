@@ -368,6 +368,31 @@ impl CompiledRuleset {
                 };
             }
         }
+        // Unconditional header actions predict startup work without reserving for every CRS rule.
+        let eager = self
+            .rules_for_phase(Phase::RequestHeaders)
+            .iter()
+            .zip(self.dispatch_for_phase(Phase::RequestHeaders))
+            .filter(|(rule, plan)| {
+                !plan.inactive
+                    && rule.variables.is_empty()
+                    && rule.operator_spec.name == OperatorName::UnconditionalMatch
+            });
+        let mut keys = HashSet::new();
+        let mut matches = 0;
+        for (_, plan) in eager {
+            matches += 1;
+            if keys.len() < 96 {
+                keys.extend(
+                    plan.setvars
+                        .iter()
+                        .filter_map(|op| op.key.as_ref().map(ByteValue::as_bytes))
+                        .take(96),
+                );
+            }
+        }
+        self.initial_tx_keys = keys.len().min(96);
+        self.initial_matches = matches.min(32);
         // Replaying past a tagged marker would reorder changes to MATCHED_VAR.
         let header_rules = self.rules_for_phase(Phase::RequestHeaders);
         let prefix = self

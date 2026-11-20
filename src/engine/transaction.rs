@@ -266,6 +266,7 @@ pub struct SetVarEffect {
 impl Transaction {
     /// Create a new transaction.
     pub fn new(ruleset: Arc<CompiledRuleset>, default_status: u16) -> Self {
+        let tx = TxCollection::with_capacity(ruleset.initial_tx_keys);
         Self {
             request: RequestData::with_limits(
                 ruleset.body_config().argument_limit,
@@ -277,7 +278,7 @@ impl Transaction {
             request_line: OnceLock::new(),
             connector_metadata: ConnectorMetadata::default(),
             response: ResponseData::new(),
-            tx: TxCollection::new(),
+            tx,
             numeric_tx_indices: [usize::MAX; super::ruleset::NUMERIC_TX_SLOTS],
             phase: Phase::RequestHeaders,
             intervention: None,

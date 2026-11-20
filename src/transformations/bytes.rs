@@ -371,7 +371,15 @@ pub(super) fn apply<'a>(
                     .iter()
                     .map(|&b| if b == 0 { b' ' } else { b })
                     .collect(),
-                "removeWhitespace" => input.iter().copied().filter(|&b| !space(b)).collect(),
+                "removeWhitespace" => {
+                    let Some(first) = input.iter().position(|&b| space(b)) else {
+                        return Ok(Cow::Borrowed(input));
+                    };
+                    let mut out = Vec::with_capacity(input.len());
+                    out.extend_from_slice(&input[..first]);
+                    out.extend(input[first..].iter().copied().filter(|&b| !space(b)));
+                    out
+                }
                 "trim" | "trimLeft" | "trimRight" => {
                     let mut start = 0;
                     let mut end = input.len();
@@ -389,8 +397,11 @@ pub(super) fn apply<'a>(
                 }
                 "cmdLine" => return Ok(cmd_line(input)),
                 "removeComments" | "replaceComments" => {
-                    let mut out = Vec::new();
-                    let mut i = 0;
+                    let Some(mut i) = memchr::memmem::find(input, b"/*") else {
+                        return Ok(Cow::Borrowed(input));
+                    };
+                    let mut out = Vec::with_capacity(input.len());
+                    out.extend_from_slice(&input[..i]);
                     while i < input.len() {
                         if input[i..].starts_with(b"/*") {
                             i += 2;

@@ -169,6 +169,8 @@ pub struct CompiledRuleset {
     /// Compiled rules.
     rules: Rules,
     rule_count: usize,
+    pub(super) initial_tx_keys: usize,
+    pub(super) initial_matches: usize,
     pub(super) multiphase: bool,
     pub(super) coraza_rule_semantics: bool,
     dispatch: [Vec<RuleDispatch>; Phase::ALL.len()],

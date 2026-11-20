@@ -130,12 +130,13 @@ impl Transformation for RemoveWhitespace {
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        let result: String = input.chars().filter(|c| !c.is_whitespace()).collect();
-        if result == input {
-            Cow::Borrowed(input)
-        } else {
-            Cow::Owned(result)
-        }
+        let Some(first) = input.find(char::is_whitespace) else {
+            return Cow::Borrowed(input);
+        };
+        let mut result = String::with_capacity(input.len());
+        result.push_str(&input[..first]);
+        result.extend(input[first..].chars().filter(|c| !c.is_whitespace()));
+        Cow::Owned(result)
     }
 
     fn name(&self) -> &'static str {
@@ -389,32 +390,22 @@ impl Transformation for ReplaceComments {
     }
 
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
-        let mut result = String::new();
-        let mut in_comment = false;
-        let mut chars = input.chars().peekable();
-        let mut modified = false;
-
-        while let Some(c) = chars.next() {
-            if in_comment {
-                if c == '*' && chars.peek() == Some(&'/') {
-                    chars.next();
-                    in_comment = false;
-                    result.push(' '); // Replace comment with space
-                }
-            } else if c == '/' && chars.peek() == Some(&'*') {
-                chars.next();
-                in_comment = true;
-                modified = true;
+        let Some((prefix, mut comment)) = input.split_once("/*") else {
+            return Cow::Borrowed(input);
+        };
+        let mut result = String::with_capacity(input.len());
+        result.push_str(prefix);
+        while let Some((_, suffix)) = comment.split_once("*/") {
+            result.push(' ');
+            if let Some((literal, next)) = suffix.split_once("/*") {
+                result.push_str(literal);
+                comment = next;
             } else {
-                result.push(c);
+                result.push_str(suffix);
+                break;
             }
         }
-
-        if modified {
-            Cow::Owned(result)
-        } else {
-            Cow::Borrowed(input)
-        }
+        Cow::Owned(result)
     }
 
     fn name(&self) -> &'static str {
