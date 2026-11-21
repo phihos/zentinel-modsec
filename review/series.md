@@ -15,7 +15,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#75](https://github.com/zentinelproxy/zentinel-modsec/pull/75) | Borrow compiled phase rules during request evaluation. Merged. |
 | [#76](https://github.com/zentinelproxy/zentinel-modsec/pull/76) | Resolve includes as given, then beside the declaring file, and roll back the whole append on error. Merged. |
 | [#77](https://github.com/zentinelproxy/zentinel-modsec/pull/77) | Apply `SecRuleRemoveByTag` and `SecRuleRemoveByMsg` to the whole ruleset. Merged. |
-| [#78](https://github.com/zentinelproxy/zentinel-modsec/pull/78) | Preserve literal TX assignments and skip `setvar` into unimplemented collections with a warning. |
+| [#78](https://github.com/zentinelproxy/zentinel-modsec/pull/78) | Preserve literal TX assignments and skip `setvar` into unimplemented collections with a warning. Merged. |
 | [#79](https://github.com/zentinelproxy/zentinel-modsec/pull/79) | Keep loading past form feeds, Unicode spaces and line terminators. |
 | [#80](https://github.com/zentinelproxy/zentinel-modsec/pull/80) | Convert empty and non-numeric operands to zero in numeric operators. |
 | [#81](https://github.com/zentinelproxy/zentinel-modsec/pull/81) | Keep TX score variables set by rules when a phase ends. Merged. |
