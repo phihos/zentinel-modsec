@@ -28,6 +28,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#97](https://github.com/zentinelproxy/zentinel-modsec/pull/97) | Resume after a `skipAfter` marker that directly follows the rule. Merged. |
 | [#98](https://github.com/zentinelproxy/zentinel-modsec/pull/98) | Read collections in place when resolving targets and expanding macros. Merged. |
 | [#100](https://github.com/zentinelproxy/zentinel-modsec/pull/100) | Prepare rule tags and `skipAfter` positions at load. Merged. |
+| [#103](https://github.com/zentinelproxy/zentinel-modsec/pull/103) | Prepare what a rule's match does at load. |
 
 ## Queued on the fork
 
