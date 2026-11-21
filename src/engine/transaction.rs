@@ -945,12 +945,32 @@ impl Transaction {
         let dynamic_operator;
         let operator: &dyn Operator = if !rule.operand_unresolvable && rule.operand_has_macro {
             let expanded = self.expand_operator_macros(&rule.operator_spec.argument);
-            dynamic_operator = compile_operator(&OperatorSpec {
+            match compile_operator(&OperatorSpec {
                 negated: rule.operator_spec.negated,
                 name: rule.operator_spec.name,
                 argument: expanded,
-            })?;
-            dynamic_operator.as_ref()
+            }) {
+                Ok(compiled) => {
+                    dynamic_operator = compiled;
+                    dynamic_operator.as_ref()
+                }
+                // An expanded argument can come from the request
+                // (`@rx %{request_headers.x}`), so it may not compile.
+                // ModSecurity v3 treats that as neither a match nor a
+                // mismatch: the rule does not fire, negated or not, and
+                // evaluation goes on (operators/rx.cc,
+                // owasp-modsecurity/ModSecurity#3123). Returning the error
+                // instead would end the phase, and the rules after this one,
+                // the blocking evaluation among them, would never run.
+                Err(err) => {
+                    tracing::debug!(
+                        rule_id = rule.id.as_deref().unwrap_or("-"),
+                        error = %err,
+                        "expanded operator argument does not compile; the rule does not match"
+                    );
+                    return Ok(RuleOutcome::no_match());
+                }
+            }
         } else {
             rule.operator.as_ref()
         };
@@ -958,8 +978,26 @@ impl Transaction {
         // Apply transformations and match every value
         let mut matches = Vec::new();
         for (name, value) in all_values {
-            let transformed = rule.transformations.apply(&value);
-            let result = operator.execute(&transformed);
+            // multiMatch: the operator at every stage of the pipeline, the
+            // first stage that matches being the match (CRS 930110 finds
+            // `..\` before t:cmdLine deletes the backslash)
+            let (transformed, result) = if rule.multi_match {
+                let stages = rule.transformations.stages(&value);
+                let last = stages.len() - 1;
+                let mut found = None;
+                for (i, stage) in stages.into_iter().enumerate() {
+                    let result = operator.execute(&stage);
+                    if result.matched != rule.operator_negated || i == last {
+                        found = Some((std::borrow::Cow::Owned(stage), result));
+                        break;
+                    }
+                }
+                found.expect("the last stage is always taken")
+            } else {
+                let transformed = rule.transformations.apply(&value);
+                let result = operator.execute(&transformed);
+                (transformed, result)
+            };
 
             let final_match = if rule.operator_negated {
                 !result.matched

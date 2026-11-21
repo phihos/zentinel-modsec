@@ -9,9 +9,17 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
-CRS conformance: 4,969 to 4,971 of 5,184 runnable cases.
+CRS conformance: 4,969 to 4,975 of 5,184 runnable cases.
 
 ### Behavior changes
+
+- **`multiMatch` runs the operator at every stage of the transformation
+  pipeline**, as ModSecurity does: on the value before any transformation and
+  after each transformation that changed it. It was parsed and ignored, so the
+  operator saw only the last stage. CRS 930110 finds `..\` before `t:cmdLine`
+  removes the backslash, and 934100 finds `new Function (` before
+  `t:base64Decode` turns it into bytes. The flag is
+  collected at load (`CompiledRule::multi_match`, a new public field).
 
 - **`@detectXSS` gives libinjection's verdict.** It used to be a set of
   regular expressions and keyword lists. Those flagged text that libinjection
@@ -43,6 +51,20 @@ CRS conformance: 4,969 to 4,971 of 5,184 runnable cases.
 - `Transformation` gains `leaves_unchanged`, the scan described above. It has
   a default that returns `false`, so an existing implementation compiles and
   runs as before. (#110)
+
+### Fixed
+
+- **An operator argument with a macro that does not compile after expansion
+  no longer ends the phase.** `@rx %{request_headers.x}` with a value that is
+  not a valid pattern returned an error, and the rules after it in the phase
+  did not run. As in ModSecurity v3 (`operators/rx.cc`), it is now neither a
+  match nor a mismatch: the rule does not fire, negated or not, and evaluation
+  continues.
+- **`!@rx %{...}` keeps its negation.** The argument was also compiled once as
+  written at load; `%{...}` is often not a valid pattern, so the rule was
+  treated like an invalid fixed pattern, which drops the negation and logs an
+  error. The expanded pattern then ran without it. Arguments with a macro are
+  no longer judged at load.
 
 ## [0.10.0] - 2026-11-21
 

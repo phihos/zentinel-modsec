@@ -67,7 +67,9 @@ use zentinel_modsec::ModSecurity;
 /// reading it as a regression.
 /// 4969: regex selections compare keys case-insensitively (922110, 17 cases).
 /// 4971: `@detectXSS` ported from libinjection (941100 tests 2 and 3).
-const MIN_PASSING: u32 = 4971;
+/// 4975: multiMatch runs the operator at every transformation stage (930110,
+/// 3 cases; 934100, 1).
+const MIN_PASSING: u32 = 4975;
 
 /// Corpus stages that cannot be driven from here: an `encoded_request` payload,
 /// or an expectation that is not about rule IDs (`status`, `match_regex`).
