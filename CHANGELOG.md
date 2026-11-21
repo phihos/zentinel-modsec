@@ -13,7 +13,7 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 - What a match does (`setvar`, `ctl:`, flow and disruptive action) is
   worked out per rule at load and read in place, and a `setvar` no longer
-  copies its collection, name and operation before it is applied. (#NN)
+  copies its collection, name and operation before it is applied. (#103)
 
 ## [0.9.0] - 2026-11-21
 
