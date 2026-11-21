@@ -556,15 +556,17 @@ impl Transaction {
             // Handle skipAfter
             if let Some(ref marker) = skip_after {
                 if let Some(marker_idx) = self.ruleset.marker(marker, phase) {
-                    if marker_idx > idx {
+                    // `idx` is already the rule after the one that jumped, so
+                    // a marker directly behind that rule sits exactly here.
+                    if marker_idx >= idx {
                         idx = marker_idx;
                         skip_after = None;
                         continue;
                     }
                 }
-                // The marker is unknown, or sits at or behind the current
-                // position: ModSecurity does not jump backwards, so the rest of
-                // the phase is skipped.
+                // The marker is unknown, or sits behind the rule that jumped:
+                // ModSecurity does not jump backwards, so the rest of the
+                // phase is skipped.
                 idx += 1;
                 continue;
             }

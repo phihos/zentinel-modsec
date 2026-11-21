@@ -16,6 +16,21 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   `iter_regex`, which hand out what `all`, `get` and `get_regex` used to
   collect into a list first. (#98)
 
+## [0.8.1] - 2026-11-21
+
+A security fix: with the OWASP CRS at blocking paranoia level 3, attacks were
+not blocked. Upgrade if you run level 3; levels 1, 2 and 4 are not affected.
+
+### Fixed
+
+- **`skipAfter` to a marker directly after the rule skips nothing.** It used
+  to skip the rest of the phase, as for a marker that is not ahead. CRS rule
+  files end with their paranoia-level gates directly before the file's end
+  marker, and at paranoia level 3 those gates fire in the files without
+  level-4 rules, so from `REQUEST-911` on nothing was evaluated, including
+  the blocking evaluation: a level-3 deployment did not block. Levels 1, 2
+  and 4 were not affected. (#97)
+
 ## [0.8.0] - 2026-11-21
 
 CRS conformance: 4,949 to 4,969 of 5,184 runnable cases.
@@ -169,6 +184,7 @@ upgrading.
 0.1.2 through 0.6.0 are tagged in Git (`v0.1.2` ... `v0.6.0`); see the tags
 and the commit history for what each contains.
 
-[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.6.0...v0.7.0
