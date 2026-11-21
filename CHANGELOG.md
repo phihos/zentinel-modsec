@@ -9,6 +9,12 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- A rule's tags and the position its `skipAfter` resumes at are prepared
+  at load, so `ctl:ruleRemoveTargetByTag` no longer scans the actions of
+  every later rule and a jump no longer looks its marker up by name. (#NN)
+
 ## [0.8.1] - 2026-11-21
 
 A security fix: with the OWASP CRS at blocking paranoia level 3, attacks were

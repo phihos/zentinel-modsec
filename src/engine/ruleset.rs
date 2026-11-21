@@ -40,6 +40,15 @@ pub struct CompiledRule {
     pub transformations: TransformationPipeline,
     /// Actions to execute on match.
     pub actions: Vec<Action>,
+    /// The `tag:` values among `actions`, in the order they were written.
+    /// Collected at load time: once a `ctl:ruleRemoveTargetByTag` has fired,
+    /// every rule evaluated after it is asked for its tags.
+    pub tags: Vec<String>,
+    /// Where a match of this rule resumes when its last flow action is
+    /// `skipAfter`: the marker's position in the rule's phase, or `None` for a
+    /// marker that does not exist. Resolved once every marker is known, so a
+    /// jump does not look the name up.
+    pub skip_after_index: Option<usize>,
     /// Whether this rule is part of a chain.
     pub is_chain: bool,
     /// Index of next rule in chain (if any).
@@ -48,15 +57,8 @@ pub struct CompiledRule {
 
 impl CompiledRule {
     /// The rule's `tag:` values, in the order they were written.
-    ///
-    /// Read from the actions rather than cached: only `ctl:ruleRemoveByTag`
-    /// and `ctl:ruleRemoveTargetByTag` need them during evaluation, and the
-    /// transaction only asks once one of those has fired.
     pub fn tags(&self) -> impl Iterator<Item = &str> + Clone {
-        self.actions.iter().filter_map(|action| match action {
-            Action::Metadata(MetadataAction::Tag(tag)) => Some(tag.as_str()),
-            _ => None,
-        })
+        self.tags.iter().map(String::as_str)
     }
 }
 
@@ -122,6 +124,24 @@ impl Rules {
     /// Get total rule count.
     pub fn count(&self) -> usize {
         self.by_phase.values().map(|v| v.len()).sum()
+    }
+
+    /// Set every rule's [`CompiledRule::skip_after_index`] from the markers
+    /// recorded so far.
+    ///
+    /// Called once the whole ruleset is compiled: a marker is declared after
+    /// the rules that jump to it, and a name declared twice resolves to its
+    /// last declaration, as [`marker`](Self::marker) answers at request time.
+    fn resolve_skip_targets(&mut self) {
+        let Self { by_phase, markers } = self;
+        for (phase, rules) in by_phase {
+            for rule in rules {
+                rule.skip_after_index = skip_after_marker(&rule.actions)
+                    .and_then(|name| markers.get(name))
+                    .and_then(|positions| positions.get(phase))
+                    .copied();
+            }
+        }
     }
 }
 
@@ -253,6 +273,8 @@ impl CompiledRuleset {
                         operand_has_macro: operator_spec.argument.contains("%{"),
                         operator_spec,
                         transformations,
+                        tags: extract_tags(&rule.actions),
+                        skip_after_index: None,
                         actions: rule.actions,
                         is_chain,
                         chain_next: None,
@@ -304,6 +326,8 @@ impl CompiledRuleset {
                         operand_has_macro: operator_spec.argument.contains("%{"),
                         operator_spec,
                         transformations,
+                        tags: extract_tags(&sec_action.actions),
+                        skip_after_index: None,
                         actions: sec_action.actions,
                         is_chain: false,
                         chain_next: None,
@@ -327,6 +351,7 @@ impl CompiledRuleset {
         }
 
         apply_target_updates(&mut ruleset, &target_updates);
+        ruleset.rules.resolve_skip_targets();
         report_unresolvable_operands(&unresolvable_operands);
 
         Ok(ruleset)
@@ -356,6 +381,33 @@ impl CompiledRuleset {
 impl Default for CompiledRuleset {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The `tag:` values of a rule's actions, in order.
+fn extract_tags(actions: &[Action]) -> Vec<String> {
+    actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Metadata(MetadataAction::Tag(tag)) => Some(tag.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The marker a match of these actions skips to, if any.
+///
+/// The last flow action of a rule decides what a match does next (see
+/// `execute_actions_without_metadata`), so an earlier `skipAfter` followed by
+/// `skip` or `chain` names no marker.
+fn skip_after_marker(actions: &[Action]) -> Option<&str> {
+    let last_flow = actions.iter().rev().find_map(|action| match action {
+        Action::Flow(flow) => Some(flow),
+        _ => None,
+    })?;
+    match last_flow {
+        FlowAction::SkipAfter(marker) => Some(marker),
+        _ => None,
     }
 }
 
@@ -767,6 +819,46 @@ mod tests {
 
         assert_eq!(ruleset.rules_for_phase(Phase::RequestHeaders).len(), 1);
         assert_eq!(ruleset.rules_for_phase(Phase::RequestBody).len(), 1);
+    }
+
+    #[test]
+    fn test_tags_are_collected_in_order() {
+        let rules = r#"
+            SecRule REQUEST_URI "@contains /admin" "id:1,phase:1,pass,tag:'b',msg:'m',tag:'a',chain"
+                SecRule REQUEST_METHOD "@streq GET" "tag:'link'"
+            SecAction "id:2,phase:1,pass"
+        "#;
+        let ruleset = CompiledRuleset::from_string(rules).unwrap();
+        let rules = ruleset.rules_for_phase(Phase::RequestHeaders);
+        assert_eq!(rules[0].tags().collect::<Vec<_>>(), ["b", "a"]);
+        assert_eq!(rules[1].tags().collect::<Vec<_>>(), ["link"]);
+        assert_eq!(rules[2].tags().count(), 0);
+    }
+
+    #[test]
+    fn test_skip_after_index_is_the_marker_position_in_the_rule_phase() {
+        let rules = r#"
+            SecAction "id:1,phase:1,pass,skipAfter:M"
+            SecAction "id:2,phase:2,pass,skipAfter:M"
+            SecAction "id:3,phase:2,pass,skipAfter:NOWHERE"
+            SecAction "id:4,phase:2,pass,skipAfter:M,skip:1"
+            SecAction "id:5,phase:2,pass"
+            SecMarker M
+        "#;
+        let ruleset = CompiledRuleset::from_string(rules).unwrap();
+        let phase1 = ruleset.rules_for_phase(Phase::RequestHeaders);
+        let phase2 = ruleset.rules_for_phase(Phase::RequestBody);
+        assert_eq!(phase1[0].skip_after_index, Some(1));
+        assert_eq!(phase2[0].skip_after_index, Some(4));
+        assert_eq!(
+            phase2[0].skip_after_index,
+            ruleset.marker("M", Phase::RequestBody)
+        );
+        // An unknown marker, a `skipAfter` that is not the last flow action,
+        // and a rule without one.
+        assert_eq!(phase2[1].skip_after_index, None);
+        assert_eq!(phase2[2].skip_after_index, None);
+        assert_eq!(phase2[3].skip_after_index, None);
     }
 
     #[test]

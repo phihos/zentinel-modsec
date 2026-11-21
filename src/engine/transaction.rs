@@ -542,7 +542,10 @@ impl Transaction {
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data: Vec<MatchedData> = Vec::new();
         let mut skip_count: u32 = 0;
-        let mut skip_after: Option<String> = None;
+        // Set by a matched `skipAfter`: where to resume, which is `None` when
+        // the marker does not exist. Resolved at load time
+        // (`CompiledRule::skip_after_index`).
+        let mut skip_after: Option<Option<usize>> = None;
 
         let mut idx = 0;
         while idx < rules.len() {
@@ -554,8 +557,8 @@ impl Transaction {
             }
 
             // Handle skipAfter
-            if let Some(ref marker) = skip_after {
-                if let Some(marker_idx) = self.ruleset.marker(marker, phase) {
+            if let Some(target) = skip_after {
+                if let Some(marker_idx) = target {
                     // `idx` is already the rule after the one that jumped, so
                     // a marker directly behind that rule sits exactly here.
                     if marker_idx >= idx {
@@ -742,8 +745,10 @@ impl Transaction {
                     FlowOutcome::Skip(n) => {
                         skip_count = n;
                     }
-                    FlowOutcome::SkipAfter(marker) => {
-                        skip_after = Some(marker);
+                    FlowOutcome::SkipAfter(_) => {
+                        // The flow outcome is the last flow action of the
+                        // rule it came from, which is the one resolved.
+                        skip_after = Some(metadata_rule.skip_after_index);
                     }
                     FlowOutcome::Continue => {}
                 }
