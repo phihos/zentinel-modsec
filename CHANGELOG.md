@@ -9,6 +9,16 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Behavior changes
+
+- **`skipAfter` to a marker directly after the rule skips nothing.** It used
+  to skip the rest of the phase, as for a marker that is not ahead. CRS rule
+  files end with their paranoia-level gates directly before the file's end
+  marker, and at paranoia level 3 those gates fire in the files without
+  level-4 rules, so from `REQUEST-911` on nothing was evaluated, including
+  the blocking evaluation: a level-3 deployment did not block. Levels 1, 2
+  and 4 were not affected. (#NN)
+
 ## [0.8.0] - 2026-11-21
 
 CRS conformance: 4,949 to 4,969 of 5,184 runnable cases.

@@ -497,3 +497,45 @@ fn stock_crs_blocks_attacks_and_passes_ordinary_traffic() {
         wrong.join("\n  ")
     );
 }
+
+/// The stock CRS blocks an attack at every blocking paranoia level.
+///
+/// The corpus above runs at one level and the test before this one at the
+/// default. Level 3 is the one where the gates directly before a rule file's
+/// end marker fire (see `tests/skip_after_adjacent_marker.rs`), which used to
+/// end the phase before the blocking evaluation.
+#[test]
+fn stock_crs_blocks_an_attack_at_every_paranoia_level() {
+    let Some(dir) = crs_dir() else { return };
+
+    for level in 1..=4 {
+        let m = load(
+            &dir,
+            &format!(
+                "SecAction \"id:900000,phase:1,pass,nolog,t:none,\
+                 setvar:tx.blocking_paranoia_level={level}\""
+            ),
+        );
+        let mut tx = m.new_transaction();
+        tx.process_uri(
+            "/u?id=1'+UNION+SELECT+password+FROM+users--+",
+            "GET",
+            "HTTP/1.1",
+        )
+        .unwrap();
+        tx.add_request_header("Host", "example.com").unwrap();
+        tx.add_request_header(
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64) Firefox/128.0",
+        )
+        .unwrap();
+        tx.add_request_header("Accept", "text/html,application/xhtml+xml")
+            .unwrap();
+        tx.process_request_headers().unwrap();
+        tx.process_request_body().unwrap();
+        assert!(
+            tx.has_intervention(),
+            "SQL injection not blocked at paranoia level {level}"
+        );
+    }
+}
