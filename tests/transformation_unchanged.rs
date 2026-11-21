@@ -69,6 +69,7 @@ const CHECKED: &[&str] = &[
     "none",
     "sqlHexDecode",
     "escapeSeqDecode",
+    "uppercase",
 ];
 
 /// Characters a transformation treats specially, and a few it does not.
@@ -206,13 +207,16 @@ fn leaves_unchanged_is_never_true_for_an_input_transform_changes() {
 fn checked_transformations_recognize_plain_input() {
     for name in CHECKED {
         let t = create_transformation(name).unwrap();
-        for input in ["", "abc123", "id", "en"] {
+        // Letters in the case the transformation keeps.
+        let words: [&str; 3] = if *name == "uppercase" {
+            ["ABC123", "ID", "EN"]
+        } else {
+            ["abc123", "id", "en"]
+        };
+        for input in [""].into_iter().chain(words) {
             assert!(t.leaves_unchanged(input), "{name} on {input:?}");
         }
     }
-    assert!(create_transformation("uppercase")
-        .unwrap()
-        .leaves_unchanged("ABC123"));
 }
 
 #[test]
@@ -262,5 +266,6 @@ fn pipeline_borrows_an_input_no_transformation_changes() {
         .map(|n| n.to_string())
         .collect();
     let pipeline = TransformationPipeline::from_names(&names).unwrap();
-    assert!(matches!(pipeline.apply("abc123"), Cow::Borrowed("abc123")));
+    // Digits only: `lowercase` and `uppercase` are both in the pipeline.
+    assert!(matches!(pipeline.apply("123"), Cow::Borrowed("123")));
 }
