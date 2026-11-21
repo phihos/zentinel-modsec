@@ -24,7 +24,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#91](https://github.com/zentinelproxy/zentinel-modsec/pull/91) | Answer non-matching `@rx` values without building capture slots. Merged. |
 | [#92](https://github.com/zentinelproxy/zentinel-modsec/pull/92) | Collect rule metadata only when a rule intervenes. Merged. |
 | [#93](https://github.com/zentinelproxy/zentinel-modsec/pull/93) | Expand operand macros without a regex and flag macro operands at load. Merged. |
-| [#94](https://github.com/zentinelproxy/zentinel-modsec/pull/94) | Resolve rule targets without copying names and values. |
+| [#94](https://github.com/zentinelproxy/zentinel-modsec/pull/94) | Resolve rule targets without copying names and values. Merged. |
 
 ## Queued on the fork
 
