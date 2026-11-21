@@ -19,8 +19,8 @@
 | [#81](https://github.com/zentinelproxy/zentinel-modsec/pull/81) | Keep TX score variables set by rules when a phase ends. Merged. |
 | [#82](https://github.com/zentinelproxy/zentinel-modsec/pull/82) | Saturate `setvar` arithmetic at the signed 64-bit boundary. Merged. |
 | [#87](https://github.com/zentinelproxy/zentinel-modsec/pull/87) | Leave numeric operators with a bare macro name unable to match. Merged. |
-| [#91](https://github.com/zentinelproxy/zentinel-modsec/pull/91) | Answer non-matching `@rx` values without building capture slots. |
-| [#92](https://github.com/zentinelproxy/zentinel-modsec/pull/92) | Collect rule metadata only when a rule intervenes. |
+| [#91](https://github.com/zentinelproxy/zentinel-modsec/pull/91) | Answer non-matching `@rx` values without building capture slots. Merged. |
+| [#92](https://github.com/zentinelproxy/zentinel-modsec/pull/92) | Collect rule metadata only when a rule intervenes. Merged. |
 | [#93](https://github.com/zentinelproxy/zentinel-modsec/pull/93) | Expand operand macros without a regex and flag macro operands at load. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
