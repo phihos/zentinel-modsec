@@ -1,5 +1,6 @@
 //! Compiled ruleset for efficient rule matching.
 
+use crate::actions::{execute_actions_without_metadata, ActionResult};
 use crate::error::Result;
 use crate::operators::{compile_operator, NoMatchOperator, Operator};
 use crate::parser::{
@@ -49,6 +50,10 @@ pub struct CompiledRule {
     /// marker that does not exist. Resolved once every marker is known, so a
     /// jump does not look the name up.
     pub skip_after_index: Option<usize>,
+    /// What a match does: `actions` as `execute_actions_without_metadata`
+    /// reads them. Worked out at load time, as the actions are fixed by then,
+    /// so a match copies neither its `setvar`s nor its `ctl:`s.
+    pub on_match: ActionResult,
     /// Whether this rule is part of a chain.
     pub is_chain: bool,
     /// Index of next rule in chain (if any).
@@ -275,6 +280,7 @@ impl CompiledRuleset {
                         transformations,
                         tags: extract_tags(&rule.actions),
                         skip_after_index: None,
+                        on_match: execute_actions_without_metadata(&rule.actions, None),
                         actions: rule.actions,
                         is_chain,
                         chain_next: None,
@@ -328,6 +334,7 @@ impl CompiledRuleset {
                         transformations,
                         tags: extract_tags(&sec_action.actions),
                         skip_after_index: None,
+                        on_match: execute_actions_without_metadata(&sec_action.actions, None),
                         actions: sec_action.actions,
                         is_chain: false,
                         chain_next: None,

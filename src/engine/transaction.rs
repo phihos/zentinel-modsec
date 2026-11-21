@@ -12,14 +12,14 @@ use super::phase::Phase;
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
 use super::scoring::ANOMALY_SCORE;
 use crate::actions::{
-    execute_actions_without_metadata, rule_metadata, ActionResult, DisruptiveOutcome, FlowOutcome,
-    SetVarOp as RuleSetVar, SetVarOperation,
+    rule_metadata, DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar, SetVarOperation,
 };
 use crate::error::Result;
 use crate::operators::{compile_operator, Operator};
-use crate::parser::{Action, DataAction, OperatorSpec, VariableName};
+use crate::parser::{Action, ControlAction, DataAction, OperatorSpec, VariableName};
 use crate::variables::{
-    Collection, RequestData, ResolvedName, ResponseData, TxCollection, VariableResolver,
+    Collection, MutableCollection, RequestData, ResolvedName, ResponseData, TxCollection,
+    VariableResolver,
 };
 
 /// Whether a lowercased Content-Type denotes a JSON body.
@@ -535,8 +535,9 @@ impl Transaction {
         let mut chain_state = ChainState::new();
         // A chain is one logical rule: the starter's actions fire only when
         // every link matches, so they are held here until the chain completes.
-        // Held with the starter itself, whose metadata an intervention reports.
-        let mut pending_chain_actions: Option<(ActionResult, &CompiledRule)> = None;
+        // Held as the starter itself, whose disruptive action, flow and
+        // metadata the chain takes, with the `ctl:` of every link so far.
+        let mut pending_chain_actions: Option<(&CompiledRule, Vec<&ControlAction>)> = None;
         let mut pending_chain_id: Option<String> = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
@@ -630,9 +631,8 @@ impl Transaction {
                 // rule would read the previous rule's matches.
                 self.matched_vars.clear();
 
-                // Execute actions
-                let mut action_result = execute_actions_without_metadata(&rule.actions, None);
-                let setvar_ops = std::mem::take(&mut action_result.setvar_ops);
+                // What a match does was worked out when the rules loaded.
+                let on_match = &rule.on_match;
                 let capture = rule
                     .actions
                     .iter()
@@ -678,7 +678,7 @@ impl Transaction {
                         let whole = m.matched_variable.as_ref().and_then(|v| v.portion.clone());
                         self.store_captures(whole, &m.captures);
                     }
-                    for op in &setvar_ops {
+                    for op in &on_match.setvar_ops {
                         self.apply_setvar(op, link_rule_id);
                     }
                 }
@@ -692,10 +692,10 @@ impl Transaction {
                     if !chain_state.in_chain {
                         chain_state.start_chain(idx);
                         pending_chain_id = rule.id.clone();
-                        pending_chain_actions = Some((action_result, rule));
-                    } else if let Some((held, _)) = pending_chain_actions.as_mut() {
+                        pending_chain_actions = Some((rule, on_match.control_ops.iter().collect()));
+                    } else if let Some((_, held_controls)) = pending_chain_actions.as_mut() {
                         // A middle link: its ctl runs with the chain.
-                        held.control_ops.extend(action_result.control_ops);
+                        held_controls.extend(&on_match.control_ops);
                     }
                     chain_state.continue_chain(true, &captures);
                     idx += 1;
@@ -706,36 +706,31 @@ impl Transaction {
                 // has now matched in full. A completed chain keeps the
                 // starter's disruptive action, flow and metadata, and runs the
                 // ctl of every link.
-                let (action_result, metadata_rule) = if chain_state.in_chain {
+                let (acting_rule, held_controls) = if chain_state.in_chain {
                     chain_state.reset();
                     if let Some(id) = pending_chain_id.take() {
                         self.matched_rules.push(id);
                     }
                     self.matched_data.append(&mut pending_chain_data);
-                    match pending_chain_actions.take() {
-                        Some((mut held, starter)) => {
-                            held.control_ops.extend(action_result.control_ops);
-                            (held, starter)
-                        }
-                        None => (action_result, rule),
-                    }
+                    pending_chain_actions.take().unwrap_or((rule, Vec::new()))
                 } else {
                     // Track matched rule
                     if let Some(ref id) = rule.id {
                         self.matched_rules.push(id.clone());
                     }
-                    (action_result, rule)
+                    (rule, Vec::new())
                 };
 
                 // Apply ctl: overrides before the disruptive action below, so
                 // that ctl:ruleEngine=DetectionOnly on the same rule governs
-                // whether that rule blocks.
-                for ctl in &action_result.control_ops {
+                // whether that rule blocks. The links' ctl held so far, then
+                // this rule's own.
+                for ctl in held_controls.into_iter().chain(&on_match.control_ops) {
                     self.controls.apply(CtlDirective::parse(ctl));
                 }
 
                 // Handle flow control
-                match action_result.flow {
+                match &acting_rule.on_match.flow {
                     FlowOutcome::Chain => {
                         if !chain_state.in_chain {
                             chain_state.start_chain(idx);
@@ -743,18 +738,18 @@ impl Transaction {
                         chain_state.continue_chain(true, &captures);
                     }
                     FlowOutcome::Skip(n) => {
-                        skip_count = n;
+                        skip_count = *n;
                     }
                     FlowOutcome::SkipAfter(_) => {
                         // The flow outcome is the last flow action of the
                         // rule it came from, which is the one resolved.
-                        skip_after = Some(metadata_rule.skip_after_index);
+                        skip_after = Some(acting_rule.skip_after_index);
                     }
                     FlowOutcome::Continue => {}
                 }
 
                 // Handle disruptive action
-                if let Some(outcome) = action_result.disruptive {
+                if let Some(outcome) = &acting_rule.on_match.disruptive {
                     // Only apply if not in detection-only mode
                     let should_block = self.engine_mode() == RuleEngineMode::On;
 
@@ -762,8 +757,8 @@ impl Transaction {
                         DisruptiveOutcome::Deny(status) => {
                             if should_block {
                                 let mut intervention =
-                                    Intervention::deny(status, phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&metadata_rule.actions));
+                                    Intervention::deny(*status, phase, rule.id.clone());
+                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -772,7 +767,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::deny(self.default_status, phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&metadata_rule.actions));
+                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -784,8 +779,8 @@ impl Transaction {
                         DisruptiveOutcome::Redirect(url) => {
                             if should_block {
                                 let mut intervention =
-                                    Intervention::redirect(url, phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&metadata_rule.actions));
+                                    Intervention::redirect(url.clone(), phase, rule.id.clone());
+                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -793,7 +788,7 @@ impl Transaction {
                         DisruptiveOutcome::Drop => {
                             if should_block {
                                 let mut intervention = Intervention::drop(phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&metadata_rule.actions));
+                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -1036,7 +1031,6 @@ impl Transaction {
     /// ruleset should depend on a leftover like that, so the stale read is
     /// closed here.
     fn store_captures(&mut self, whole: Option<String>, groups: &[String]) {
-        use crate::variables::MutableCollection;
         for i in 0..10 {
             self.tx.delete(&i.to_string());
         }
@@ -1054,48 +1048,44 @@ impl Transaction {
         // `tx.header_name_920450_%{tx.0}`, one variable per request header);
         // without expanding it every header would overwrite one variable.
         let name = if op.name.contains("%{") {
-            self.expand_operator_macros(&op.name)
+            Cow::Owned(self.expand_operator_macros(&op.name))
         } else {
-            op.name.clone()
+            Cow::Borrowed(op.name.as_str())
         };
         // A macro-bearing value (e.g. `+%{tx.critical_anomaly_score}`) is
         // resolved here, where TX state is available. Which operation it is
         // comes from the text as written, before any expansion.
-        let operation = if let SetVarOperation::Macro(raw) = &op.operation {
-            let (kind, operand) = split_setvar_rhs(raw);
-            let operand = self.expand_operator_macros(operand);
-            match kind {
-                SetVarKind::Set => SetVarOperation::Set(operand),
-                SetVarKind::Add => SetVarOperation::Increment(leading_int(&operand)),
-                SetVarKind::Subtract => SetVarOperation::Decrement(leading_int(&operand)),
+        let change = match &op.operation {
+            SetVarOperation::Macro(raw) => {
+                let (kind, operand) = split_setvar_rhs(raw);
+                let operand = self.expand_operator_macros(operand);
+                match kind {
+                    SetVarKind::Set => SetVarChange::Set(operand),
+                    SetVarKind::Add => SetVarChange::Increment(leading_int(&operand)),
+                    SetVarKind::Subtract => SetVarChange::Decrement(leading_int(&operand)),
+                }
             }
-        } else {
-            op.operation.clone()
+            SetVarOperation::Set(value) => SetVarChange::Set(value.clone()),
+            SetVarOperation::Increment(n) => SetVarChange::Increment(*n),
+            SetVarOperation::Decrement(n) => SetVarChange::Decrement(*n),
+            SetVarOperation::Delete => SetVarChange::Delete,
         };
-        let resolved = RuleSetVar {
-            collection: op.collection.clone(),
-            name,
-            operation,
-        };
-        crate::actions::apply_setvar(&mut self.tx, &resolved);
 
         if let Some(rule_id) = rule_id.filter(|_| self.record_setvar_effects) {
-            let effect_op = match &resolved.operation {
-                SetVarOperation::Set(v) => Some(SetVarChange::Set(v.clone())),
-                SetVarOperation::Increment(n) => Some(SetVarChange::Increment(*n)),
-                SetVarOperation::Decrement(n) => Some(SetVarChange::Decrement(*n)),
-                SetVarOperation::Delete => Some(SetVarChange::Delete),
-                // Resolved above; `apply_setvar` ignores it too.
-                SetVarOperation::Macro(_) => None,
-            };
-            if let Some(effect_op) = effect_op {
-                self.setvar_effects.push(SetVarEffect {
-                    rule_id: rule_id.to_string(),
-                    collection: resolved.collection.to_ascii_lowercase(),
-                    key: resolved.name.clone(),
-                    op: effect_op,
-                });
-            }
+            self.setvar_effects.push(SetVarEffect {
+                rule_id: rule_id.to_string(),
+                collection: op.collection.to_ascii_lowercase(),
+                key: name.to_string(),
+                op: change.clone(),
+            });
+        }
+
+        // The rule's own text is copied only where TX has to own it.
+        match change {
+            SetVarChange::Set(value) => self.tx.set(name.into_owned(), value),
+            SetVarChange::Increment(n) => self.tx.increment(&name, n),
+            SetVarChange::Decrement(n) => self.tx.decrement(&name, n),
+            SetVarChange::Delete => self.tx.delete(&name),
         }
     }
 }

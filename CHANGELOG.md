@@ -9,6 +9,12 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- What a match does (`setvar`, `ctl:`, flow and disruptive action) is
+  worked out per rule at load and read in place, and a `setvar` no longer
+  copies its collection, name and operation before it is applied. (#NN)
+
 ## [0.9.0] - 2026-11-21
 
 No change to what rules match. `CompiledRule` gains two public fields
