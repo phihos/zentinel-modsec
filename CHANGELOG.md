@@ -13,7 +13,7 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 - A rule's tags and the position its `skipAfter` resumes at are prepared
   at load, so `ctl:ruleRemoveTargetByTag` no longer scans the actions of
-  every later rule and a jump no longer looks its marker up by name. (#NN)
+  every later rule and a jump no longer looks its marker up by name. (#100)
 
 ## [0.8.1] - 2026-11-21
 
