@@ -31,6 +31,19 @@ CRS conformance: 4,969 to 4,971 of 5,184 runnable cases.
   against 660 ns). Input with neither `<` nor `=` cannot be XSS for
   libinjection and returns at once. (#105)
 
+- A transformation no longer runs on a value it cannot change. `lowercase`
+  built a lowercased copy and `urlDecodeUni`, `jsDecode`, `cssDecode`,
+  `cmdLine` and others rebuilt the value character by character, then found
+  the result equal and dropped it. Each now first scans for the bytes it
+  reacts to (`%`, `\`, `&`, an uppercase letter, ...) and the pipeline skips
+  it when there are none. (#NN)
+
+### API changes
+
+- `Transformation` gains `leaves_unchanged`, the scan described above. It has
+  a default that returns `false`, so an existing implementation compiles and
+  runs as before. (#NN)
+
 ## [0.10.0] - 2026-11-21
 
 ### Behavior changes

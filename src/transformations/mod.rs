@@ -19,6 +19,18 @@ pub trait Transformation: Send + Sync {
     /// Apply the transformation.
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str>;
 
+    /// Whether [`transform`](Self::transform) is known, without running it,
+    /// to return `input` as it is.
+    ///
+    /// `true` is a promise that `transform(input) == input`; the pipeline
+    /// then skips the transformation. `false` promises nothing, and is the
+    /// default: the transformation runs. An implementation is a cheap scan
+    /// for the bytes the transformation reacts to, so that the usual value
+    /// with none of them costs no allocation and no copy.
+    fn leaves_unchanged(&self, _input: &str) -> bool {
+        false
+    }
+
     /// Get the transformation name.
     fn name(&self) -> &'static str;
 }
@@ -88,6 +100,10 @@ pub struct None_;
 impl Transformation for None_ {
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         Cow::Borrowed(input)
+    }
+
+    fn leaves_unchanged(&self, _input: &str) -> bool {
+        true
     }
 
     fn name(&self) -> &'static str {

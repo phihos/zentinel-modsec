@@ -20,6 +20,11 @@ impl Transformation for UrlDecode {
         }
     }
 
+    // Only `%` starts a sequence `percent_decode_str` decodes.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'%')
+    }
+
     fn name(&self) -> &'static str {
         "urlDecode"
     }
@@ -87,6 +92,11 @@ impl Transformation for UrlDecodeUni {
         } else {
             Cow::Borrowed(input)
         }
+    }
+
+    // Every character but `%` is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'%')
     }
 
     fn name(&self) -> &'static str {
@@ -177,6 +187,11 @@ impl Transformation for HtmlEntityDecode {
         }
     }
 
+    // An entity starts with `&`.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'&')
+    }
+
     fn name(&self) -> &'static str {
         "htmlEntityDecode"
     }
@@ -257,6 +272,11 @@ impl Transformation for JsDecode {
         }
     }
 
+    // Every character but `\` is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'\\')
+    }
+
     fn name(&self) -> &'static str {
         "jsDecode"
     }
@@ -309,6 +329,11 @@ impl Transformation for CssDecode {
         } else {
             Cow::Borrowed(input)
         }
+    }
+
+    // Every character but `\` is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'\\')
     }
 
     fn name(&self) -> &'static str {

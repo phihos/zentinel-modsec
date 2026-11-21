@@ -3,6 +3,18 @@
 use super::Transformation;
 use std::borrow::Cow;
 
+/// Whether an ASCII byte is whitespace for `char::is_whitespace`, which the
+/// whitespace transformations use: tab, LF, VT, FF, CR and space.
+fn is_ascii_whitespace_char(b: u8) -> bool {
+    matches!(b, b'\t'..=b'\r' | b' ')
+}
+
+/// Whether two adjacent bytes of `input` are `pair`. A plain scan: the values
+/// are short, and `str::contains` first builds a searcher for the pattern.
+fn contains_pair(input: &str, pair: &[u8; 2]) -> bool {
+    input.as_bytes().windows(2).any(|w| w == pair)
+}
+
 /// Lowercase transformation.
 pub struct Lowercase;
 
@@ -14,6 +26,14 @@ impl Transformation for Lowercase {
         } else {
             Cow::Owned(lower)
         }
+    }
+
+    // ASCII lowercases byte for byte, and only `A-Z` change. Text with
+    // anything else in it goes through `to_lowercase`.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        input
+            .bytes()
+            .all(|b| b.is_ascii() && !b.is_ascii_uppercase())
     }
 
     fn name(&self) -> &'static str {
@@ -32,6 +52,13 @@ impl Transformation for Uppercase {
         } else {
             Cow::Owned(upper)
         }
+    }
+
+    // As for `lowercase`: in ASCII text only `a-z` change.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        input
+            .bytes()
+            .all(|b| b.is_ascii() && !b.is_ascii_lowercase())
     }
 
     fn name(&self) -> &'static str {
@@ -71,6 +98,18 @@ impl Transformation for CompressWhitespace {
         }
     }
 
+    // In ASCII text the result differs only where there is whitespace other
+    // than a space, or a space after a space.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        let mut after_space = false;
+        input.bytes().all(|b| {
+            let keeps =
+                (b.is_ascii() && !is_ascii_whitespace_char(b)) || (b == b' ' && !after_space);
+            after_space = b == b' ';
+            keeps
+        })
+    }
+
     fn name(&self) -> &'static str {
         "compressWhitespace"
     }
@@ -87,6 +126,13 @@ impl Transformation for RemoveWhitespace {
         } else {
             Cow::Owned(result)
         }
+    }
+
+    // ASCII text without whitespace has nothing to remove.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        input
+            .bytes()
+            .all(|b| b.is_ascii() && !is_ascii_whitespace_char(b))
     }
 
     fn name(&self) -> &'static str {
@@ -241,6 +287,14 @@ impl Transformation for NormalizePath {
         }
     }
 
+    // `transform` reports a change for a backslash, a repeated slash and a
+    // `.` or `..` component, and for nothing else.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'\\')
+            && !contains_pair(input, b"//")
+            && input.split('/').all(|part| part != "." && part != "..")
+    }
+
     fn name(&self) -> &'static str {
         "normalizePath"
     }
@@ -252,6 +306,10 @@ pub struct NormalizePathWin;
 impl Transformation for NormalizePathWin {
     fn transform<'a>(&self, input: &'a str) -> Cow<'a, str> {
         NormalizePath.transform(input)
+    }
+
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        NormalizePath.leaves_unchanged(input)
     }
 
     fn name(&self) -> &'static str {
@@ -287,6 +345,11 @@ impl Transformation for RemoveComments {
         } else {
             Cow::Owned(result)
         }
+    }
+
+    // A comment opens with `/*`; without one every character is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !contains_pair(input, b"/*")
     }
 
     fn name(&self) -> &'static str {
@@ -327,6 +390,11 @@ impl Transformation for ReplaceComments {
         }
     }
 
+    // A comment opens with `/*`; without one every character is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !contains_pair(input, b"/*")
+    }
+
     fn name(&self) -> &'static str {
         "replaceComments"
     }
@@ -349,6 +417,14 @@ impl Transformation for RemoveCommentsChar {
         } else {
             Cow::Owned(result)
         }
+    }
+
+    // None of the four replaced patterns occurs.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'#')
+            && !contains_pair(input, b"/*")
+            && !contains_pair(input, b"*/")
+            && !contains_pair(input, b"--")
     }
 
     fn name(&self) -> &'static str {
@@ -396,6 +472,11 @@ impl Transformation for SqlHexDecode {
         } else {
             Cow::Borrowed(input)
         }
+    }
+
+    // Decoding starts at `0x`; without one every character is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !contains_pair(input, b"0x")
     }
 
     fn name(&self) -> &'static str {
@@ -492,6 +573,22 @@ impl Transformation for CmdLine {
         }
     }
 
+    // The four steps of `transform`, as a test for ASCII text that none of
+    // them touches: no deleted character, no separator or whitespace other
+    // than a single space, no space before `/` or `(`, no uppercase letter.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        let mut after_space = false;
+        input.bytes().all(|b| {
+            let keeps = match b {
+                b'\\' | b'"' | b'\'' | b'^' | b',' | b';' => false,
+                b' ' | b'/' | b'(' => !after_space,
+                _ => b.is_ascii() && !is_ascii_whitespace_char(b) && !b.is_ascii_uppercase(),
+            };
+            after_space = b == b' ';
+            keeps
+        })
+    }
+
     fn name(&self) -> &'static str {
         "cmdLine"
     }
@@ -579,6 +676,11 @@ impl Transformation for EscapeSeqDecode {
         } else {
             Cow::Borrowed(input)
         }
+    }
+
+    // Every character but `\` is copied.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        !input.as_bytes().contains(&b'\\')
     }
 
     fn name(&self) -> &'static str {

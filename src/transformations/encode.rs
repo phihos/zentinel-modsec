@@ -45,6 +45,11 @@ impl Transformation for UrlEncode {
         }
     }
 
+    // `NON_ALPHANUMERIC` escapes everything but ASCII letters and digits.
+    fn leaves_unchanged(&self, input: &str) -> bool {
+        input.bytes().all(|b| b.is_ascii_alphanumeric())
+    }
+
     fn name(&self) -> &'static str {
         "urlEncode"
     }

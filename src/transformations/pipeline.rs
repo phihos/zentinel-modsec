@@ -51,6 +51,12 @@ impl TransformationPipeline {
         let mut current: Cow<str> = Cow::Borrowed(input);
 
         for t in &self.transformations {
+            // Most values contain nothing a given transformation reacts to.
+            // One that can tell so from a scan is not run: running it would
+            // build the same text again only to find it equal.
+            if t.leaves_unchanged(&current) {
+                continue;
+            }
             current = match current {
                 Cow::Borrowed(s) => t.transform(s),
                 Cow::Owned(s) => {
