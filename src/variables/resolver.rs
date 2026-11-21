@@ -1,6 +1,6 @@
 //! Variable resolution engine.
 
-use super::collection::{Collection, HashMapCollection};
+use super::collection::HashMapCollection;
 use super::{RequestData, ResponseData, TxCollection};
 use crate::parser::{Selection, VariableName, VariableSpec, XmlTarget};
 use once_cell::sync::Lazy;
@@ -196,7 +196,7 @@ impl<'a> VariableResolver<'a> {
             VariableName::ArgsCombinedSize => {
                 let size: usize = [&request.args_get, &request.args_post]
                     .iter()
-                    .flat_map(|c| c.all())
+                    .flat_map(|c| c.iter())
                     .map(|(name, value)| name.len() + value.len())
                     .sum();
                 scalar("ARGS_COMBINED_SIZE", size.to_string())
@@ -374,7 +374,9 @@ impl<'a> VariableResolver<'a> {
         prefix: &'static str,
         selection: &'s Option<Selection>,
     ) -> Vec<ResolvedValue<'s>> {
-        self.resolve_collection_inner(collection, prefix, selection, false)
+        let mut values = Vec::new();
+        self.resolve_collection_into(&mut values, collection, prefix, selection, false);
+        values
     }
 
     /// Resolve a collection where keys are matched case-insensitively (HTTP headers).
@@ -384,16 +386,21 @@ impl<'a> VariableResolver<'a> {
         prefix: &'static str,
         selection: &'s Option<Selection>,
     ) -> Vec<ResolvedValue<'s>> {
-        self.resolve_collection_inner(collection, prefix, selection, true)
+        let mut values = Vec::new();
+        self.resolve_collection_into(&mut values, collection, prefix, selection, true);
+        values
     }
 
-    fn resolve_collection_inner<'s>(
+    /// Append a collection's selected values to `values`, straight from the
+    /// collection: nothing is gathered in between.
+    fn resolve_collection_into<'s>(
         &self,
+        values: &mut Vec<ResolvedValue<'s>>,
         collection: &'s HashMapCollection,
         prefix: &'static str,
         selection: &'s Option<Selection>,
         lowercase_key: bool,
-    ) -> Vec<ResolvedValue<'s>> {
+    ) {
         match selection {
             Some(Selection::Key(key)) => {
                 let lookup = if lowercase_key && key.bytes().any(|b| b.is_ascii_uppercase()) {
@@ -401,23 +408,14 @@ impl<'a> VariableResolver<'a> {
                 } else {
                     Cow::Borrowed(key.as_str())
                 };
-                if let Some(values) = collection.get(&lookup) {
-                    values
-                        .into_iter()
-                        .map(|v| (ResolvedName::member(prefix, key.as_str()), Cow::Borrowed(v)))
-                        .collect()
-                } else {
-                    vec![]
-                }
+                values.extend(keyed(prefix, key, collection.values(&lookup)));
             }
             Some(Selection::Regex(pattern)) => {
                 if let Some(re) = cached_regex(pattern) {
-                    members(prefix, collection.get_regex(&re))
-                } else {
-                    vec![]
+                    values.extend(members(prefix, collection.iter_regex(&re)));
                 }
             }
-            None => members(prefix, collection.all()),
+            None => values.extend(members(prefix, collection.iter())),
         }
     }
 
@@ -442,8 +440,7 @@ impl<'a> VariableResolver<'a> {
         let request: &'a RequestData = self.request;
         request
             .args_post
-            .all()
-            .into_iter()
+            .iter()
             .filter_map(|(name, value)| {
                 let path = name.strip_prefix("xml.")?;
                 // An XML element name cannot begin with `@`, so `.@` only ever
@@ -473,8 +470,10 @@ impl<'a> VariableResolver<'a> {
         'a: 's,
     {
         let request: &'a RequestData = self.request;
-        let mut result = self.resolve_collection(&request.args_get, "ARGS", selection);
-        result.extend(self.resolve_collection(&request.args_post, "ARGS", selection));
+        let mut result = Vec::new();
+        for collection in [&request.args_get, &request.args_post] {
+            self.resolve_collection_into(&mut result, collection, "ARGS", selection, false);
+        }
         result
     }
 
@@ -487,14 +486,17 @@ impl<'a> VariableResolver<'a> {
         prefix: &'static str,
         selection: &Option<Selection>,
     ) -> Vec<ResolvedValue<'s>> {
+        // Looked up once for the selection, not once per key.
+        let regex = match selection {
+            Some(Selection::Regex(pattern)) => cached_regex(pattern),
+            _ => None,
+        };
         let mut result = Vec::new();
         for collection in collections {
-            for (key, _) in collection.all() {
+            for (key, _) in collection.iter() {
                 let selected = match selection {
                     Some(Selection::Key(sel)) => key.eq_ignore_ascii_case(sel),
-                    Some(Selection::Regex(pattern)) => cached_regex(pattern)
-                        .map(|re| re.is_match(key))
-                        .unwrap_or(false),
+                    Some(Selection::Regex(_)) => regex.as_ref().is_some_and(|re| re.is_match(key)),
                     None => true,
                 };
                 if selected {
@@ -512,34 +514,36 @@ impl<'a> VariableResolver<'a> {
     {
         let tx: &'a TxCollection = self.tx;
         match selection {
-            Some(Selection::Key(key)) => {
-                if let Some(values) = tx.get(key) {
-                    values
-                        .into_iter()
-                        .map(|v| (ResolvedName::member("TX", key.as_str()), Cow::Borrowed(v)))
-                        .collect()
-                } else {
-                    vec![]
-                }
-            }
+            Some(Selection::Key(key)) => keyed("TX", key, tx.values(key)).collect(),
             Some(Selection::Regex(pattern)) => {
                 if let Some(re) = cached_regex(pattern) {
-                    members("TX", tx.get_regex(&re))
+                    members("TX", tx.iter_regex(&re)).collect()
                 } else {
                     vec![]
                 }
             }
-            None => members("TX", tx.all()),
+            None => members("TX", tx.iter()).collect(),
         }
     }
 }
 
 /// Name every `(key, value)` of a collection as `PREFIX:key`.
-fn members<'s>(prefix: &'static str, entries: Vec<(&'s str, &'s str)>) -> Vec<ResolvedValue<'s>> {
-    entries
-        .into_iter()
-        .map(|(k, v)| (ResolvedName::member(prefix, k), Cow::Borrowed(v)))
-        .collect()
+fn members<'s>(
+    prefix: &'static str,
+    entries: impl Iterator<Item = (&'s str, &'s str)>,
+) -> impl Iterator<Item = ResolvedValue<'s>> {
+    entries.map(move |(k, v)| (ResolvedName::member(prefix, k), Cow::Borrowed(v)))
+}
+
+/// Name every value a `PREFIX:key` selection found as the rule wrote the key.
+fn keyed<'s>(
+    prefix: &'static str,
+    key: &'s str,
+    values: &'s [String],
+) -> impl Iterator<Item = ResolvedValue<'s>> {
+    values
+        .iter()
+        .map(move |v| (ResolvedName::member(prefix, key), Cow::Borrowed(v.as_str())))
 }
 
 /// Check whether a resolved variable key (e.g. `ARGS:password`) is excluded by

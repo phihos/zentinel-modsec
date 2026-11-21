@@ -38,6 +38,30 @@ impl TxCollection {
     pub fn clear(&mut self) {
         self.data.clear();
     }
+
+    /// Every `(key, value)` pair in insertion order, read in place. Keys are
+    /// the stored, lowercased ones.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.data.iter()
+    }
+
+    /// The values stored under `key`, matched case-insensitively. Empty when
+    /// the variable is not set.
+    pub fn values(&self, key: &str) -> &[String] {
+        self.data.values(&normalize(key))
+    }
+
+    /// The `(key, value)` pairs whose stored, lowercased key matches
+    /// `pattern`, read in place.
+    pub fn iter_regex<'a, 'r>(
+        &'a self,
+        pattern: &'r Regex,
+    ) -> impl Iterator<Item = (&'a str, &'a str)> + 'r
+    where
+        'a: 'r,
+    {
+        self.data.iter_regex(pattern)
+    }
 }
 
 impl Collection for TxCollection {
@@ -82,5 +106,42 @@ impl MutableCollection for TxCollection {
 
     fn decrement(&mut self, key: &str, amount: i64) {
         self.data.decrement(&normalize(key), amount);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> TxCollection {
+        let mut tx = TxCollection::new();
+        tx.set("Score".to_string(), "5".to_string());
+        tx.set("blocking_paranoia_level".to_string(), "1".to_string());
+        tx
+    }
+
+    #[test]
+    fn values_match_the_key_case_insensitively_like_get() {
+        let tx = sample();
+        for key in ["score", "SCORE", "Score"] {
+            assert_eq!(tx.values(key), ["5"]);
+            assert_eq!(tx.get(key), Some(vec!["5"]));
+        }
+        assert!(tx.values("missing").is_empty());
+        assert_eq!(tx.get("missing"), None);
+    }
+
+    #[test]
+    fn iter_and_iter_regex_read_the_stored_lowercased_keys() {
+        let tx = sample();
+        let pairs: Vec<_> = tx.iter().collect();
+        assert_eq!(pairs, [("score", "5"), ("blocking_paranoia_level", "1")]);
+        assert_eq!(pairs, tx.all());
+
+        let lower = Regex::new("^score$").unwrap();
+        assert_eq!(tx.iter_regex(&lower).collect::<Vec<_>>(), [("score", "5")]);
+        assert_eq!(tx.get_regex(&lower), [("score", "5")]);
+        let upper = Regex::new("^Score$").unwrap();
+        assert_eq!(tx.iter_regex(&upper).count(), 0);
     }
 }

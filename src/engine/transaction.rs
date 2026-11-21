@@ -1002,16 +1002,15 @@ impl Transaction {
                 .last()
                 .map(|(n, _)| n.clone())
                 .unwrap_or_default(),
-            OperandMacro::Tx(name) | OperandMacro::Bare(name) => self
-                .tx
-                .get(name)
-                .and_then(|v| v.first().map(|s| s.to_string()))
-                .unwrap_or_default(),
+            OperandMacro::Tx(name) | OperandMacro::Bare(name) => {
+                self.tx.values(name).first().cloned().unwrap_or_default()
+            }
             OperandMacro::RequestHeader(name) => self
                 .request
                 .headers
-                .get(&name.to_ascii_lowercase())
-                .and_then(|v| v.first().map(|s| s.to_string()))
+                .values(&name.to_ascii_lowercase())
+                .first()
+                .cloned()
                 .unwrap_or_default(),
         })
     }

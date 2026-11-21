@@ -69,6 +69,38 @@ impl HashMapCollection {
         self.data.clear();
     }
 
+    /// Every `(key, value)` pair in insertion order, read in place.
+    ///
+    /// What [`Collection::all`] returns, without collecting it.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.data
+            .iter()
+            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.as_str(), v.as_str())))
+    }
+
+    /// The values stored under `key`, in the order they were added. Empty
+    /// when the key is absent, where [`Collection::get`] returns `None`.
+    pub fn values(&self, key: &str) -> &[String] {
+        self.data.get(key).map_or(&[], Vec::as_slice)
+    }
+
+    /// The `(key, value)` pairs whose key matches `pattern`, in insertion
+    /// order, read in place.
+    ///
+    /// What [`Collection::get_regex`] returns, without collecting it.
+    pub fn iter_regex<'a, 'r>(
+        &'a self,
+        pattern: &'r Regex,
+    ) -> impl Iterator<Item = (&'a str, &'a str)> + 'r
+    where
+        'a: 'r,
+    {
+        self.data
+            .iter()
+            .filter(move |(k, _)| pattern.is_match(k))
+            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.as_str(), v.as_str())))
+    }
+
     /// The first value of a key as a number, or 0 when it is missing or not
     /// numeric.
     fn numeric(&self, key: &str) -> i64 {
@@ -82,10 +114,7 @@ impl HashMapCollection {
 
 impl Collection for HashMapCollection {
     fn all(&self) -> Vec<(&str, &str)> {
-        self.data
-            .iter()
-            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.as_str(), v.as_str())))
-            .collect()
+        self.iter().collect()
     }
 
     fn get(&self, key: &str) -> Option<Vec<&str>> {
@@ -95,11 +124,7 @@ impl Collection for HashMapCollection {
     }
 
     fn get_regex(&self, pattern: &Regex) -> Vec<(&str, &str)> {
-        self.data
-            .iter()
-            .filter(|(k, _)| pattern.is_match(k))
-            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.as_str(), v.as_str())))
-            .collect()
+        self.iter_regex(pattern).collect()
     }
 
     fn count(&self) -> usize {
@@ -135,5 +160,50 @@ impl MutableCollection for HashMapCollection {
         // negation.
         let difference = self.numeric(key).saturating_sub(amount);
         self.set(key.to_string(), difference.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> HashMapCollection {
+        let mut c = HashMapCollection::new();
+        c.add("b".to_string(), "1".to_string());
+        c.add("a".to_string(), "2".to_string());
+        c.add("b".to_string(), "3".to_string());
+        c.add("ab".to_string(), "".to_string());
+        c
+    }
+
+    #[test]
+    fn iter_reads_what_all_collects_in_insertion_order() {
+        let c = sample();
+        let pairs: Vec<_> = c.iter().collect();
+        assert_eq!(pairs, [("b", "1"), ("b", "3"), ("a", "2"), ("ab", "")]);
+        assert_eq!(pairs, c.all());
+        assert_eq!(HashMapCollection::new().iter().count(), 0);
+    }
+
+    #[test]
+    fn values_reads_what_get_collects() {
+        let c = sample();
+        assert_eq!(c.values("b"), ["1", "3"]);
+        assert_eq!(c.get("b"), Some(vec!["1", "3"]));
+        assert_eq!(c.values("ab"), [""]);
+        // Keys are case-sensitive, and a missing key has no values.
+        assert!(c.values("B").is_empty());
+        assert_eq!(c.get("B"), None);
+    }
+
+    #[test]
+    fn iter_regex_reads_what_get_regex_collects() {
+        let c = sample();
+        let pattern = Regex::new("^a").unwrap();
+        let pairs: Vec<_> = c.iter_regex(&pattern).collect();
+        assert_eq!(pairs, [("a", "2"), ("ab", "")]);
+        assert_eq!(pairs, c.get_regex(&pattern));
+        let none = Regex::new("^z").unwrap();
+        assert_eq!(c.iter_regex(&none).count(), 0);
     }
 }
