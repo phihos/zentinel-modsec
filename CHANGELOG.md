@@ -17,7 +17,7 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   marker, and at paranoia level 3 those gates fire in the files without
   level-4 rules, so from `REQUEST-911` on nothing was evaluated, including
   the blocking evaluation: a level-3 deployment did not block. Levels 1, 2
-  and 4 were not affected. (#NN)
+  and 4 were not affected. (#97)
 
 ## [0.8.0] - 2026-11-21
 
