@@ -25,6 +25,7 @@
 | [#94](https://github.com/zentinelproxy/zentinel-modsec/pull/94) | Resolve rule targets without copying names and values. Merged. |
 | [#97](https://github.com/zentinelproxy/zentinel-modsec/pull/97) | Resume after a `skipAfter` marker that directly follows the rule. Merged. |
 | [#98](https://github.com/zentinelproxy/zentinel-modsec/pull/98) | Read collections in place when resolving targets and expanding macros. |
+| [#100](https://github.com/zentinelproxy/zentinel-modsec/pull/100) | Prepare rule tags and `skipAfter` positions at load. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 
