@@ -1,7 +1,7 @@
 //! Collection trait and implementations.
 
+use super::KeyRegex;
 use indexmap::IndexMap;
-use regex::Regex;
 
 /// A collection of key-value pairs.
 pub trait Collection: Send + Sync {
@@ -12,7 +12,7 @@ pub trait Collection: Send + Sync {
     fn get(&self, key: &str) -> Option<Vec<&str>>;
 
     /// Get values matching a regex pattern.
-    fn get_regex(&self, pattern: &Regex) -> Vec<(&str, &str)>;
+    fn get_regex(&self, pattern: &KeyRegex) -> Vec<(&str, &str)>;
 
     /// Count items.
     fn count(&self) -> usize;
@@ -90,7 +90,7 @@ impl HashMapCollection {
     /// What [`Collection::get_regex`] returns, without collecting it.
     pub fn iter_regex<'a, 'r>(
         &'a self,
-        pattern: &'r Regex,
+        pattern: &'r KeyRegex,
     ) -> impl Iterator<Item = (&'a str, &'a str)> + 'r
     where
         'a: 'r,
@@ -123,7 +123,7 @@ impl Collection for HashMapCollection {
             .map(|vs| vs.iter().map(|s| s.as_str()).collect())
     }
 
-    fn get_regex(&self, pattern: &Regex) -> Vec<(&str, &str)> {
+    fn get_regex(&self, pattern: &KeyRegex) -> Vec<(&str, &str)> {
         self.iter_regex(pattern).collect()
     }
 
@@ -199,11 +199,11 @@ mod tests {
     #[test]
     fn iter_regex_reads_what_get_regex_collects() {
         let c = sample();
-        let pattern = Regex::new("^a").unwrap();
+        let pattern = KeyRegex::new("^a");
         let pairs: Vec<_> = c.iter_regex(&pattern).collect();
         assert_eq!(pairs, [("a", "2"), ("ab", "")]);
         assert_eq!(pairs, c.get_regex(&pattern));
-        let none = Regex::new("^z").unwrap();
+        let none = KeyRegex::new("^z");
         assert_eq!(c.iter_regex(&none).count(), 0);
     }
 }

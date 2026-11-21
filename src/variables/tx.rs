@@ -1,7 +1,7 @@
 //! TX (transaction) collection.
 
 use super::collection::{Collection, HashMapCollection, MutableCollection};
-use regex::Regex;
+use super::KeyRegex;
 use std::borrow::Cow;
 
 /// Transaction collection for storing intermediate values.
@@ -55,7 +55,7 @@ impl TxCollection {
     /// `pattern`, read in place.
     pub fn iter_regex<'a, 'r>(
         &'a self,
-        pattern: &'r Regex,
+        pattern: &'r KeyRegex,
     ) -> impl Iterator<Item = (&'a str, &'a str)> + 'r
     where
         'a: 'r,
@@ -75,7 +75,7 @@ impl Collection for TxCollection {
 
     /// Regex selection (`TX:/^foo/`) matches against the stored, lowercased
     /// key, so a pattern anchored on uppercase will not match.
-    fn get_regex(&self, pattern: &Regex) -> Vec<(&str, &str)> {
+    fn get_regex(&self, pattern: &KeyRegex) -> Vec<(&str, &str)> {
         self.data.get_regex(pattern)
     }
 
@@ -138,10 +138,12 @@ mod tests {
         assert_eq!(pairs, [("score", "5"), ("blocking_paranoia_level", "1")]);
         assert_eq!(pairs, tx.all());
 
-        let lower = Regex::new("^score$").unwrap();
+        let lower = KeyRegex::new("^score$");
         assert_eq!(tx.iter_regex(&lower).collect::<Vec<_>>(), [("score", "5")]);
         assert_eq!(tx.get_regex(&lower), [("score", "5")]);
-        let upper = Regex::new("^Score$").unwrap();
-        assert_eq!(tx.iter_regex(&upper).count(), 0);
+        // A selection's expression is caseless, as ModSecurity builds it
+        let upper = KeyRegex::new("^Score$");
+        assert_eq!(tx.iter_regex(&upper).collect::<Vec<_>>(), [("score", "5")]);
+        assert_eq!(tx.iter_regex(&KeyRegex::new("^scores$")).count(), 0);
     }
 }
