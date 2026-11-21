@@ -20,6 +20,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#80](https://github.com/zentinelproxy/zentinel-modsec/pull/80) | Convert empty and non-numeric operands to zero in numeric operators. Merged. |
 | [#81](https://github.com/zentinelproxy/zentinel-modsec/pull/81) | Keep TX score variables set by rules when a phase ends. Merged. |
 | [#82](https://github.com/zentinelproxy/zentinel-modsec/pull/82) | Saturate `setvar` arithmetic at the signed 64-bit boundary. Merged. |
+| [#87](https://github.com/zentinelproxy/zentinel-modsec/pull/87) | Leave numeric operators with a bare macro name unable to match. |
 
 ## Queued on the fork
 
