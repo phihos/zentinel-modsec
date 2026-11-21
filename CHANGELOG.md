@@ -36,13 +36,13 @@ CRS conformance: 4,969 to 4,971 of 5,184 runnable cases.
   `cmdLine` and others rebuilt the value character by character, then found
   the result equal and dropped it. Each now first scans for the bytes it
   reacts to (`%`, `\`, `&`, an uppercase letter, ...) and the pipeline skips
-  it when there are none. (#NN)
+  it when there are none. (#110)
 
 ### API changes
 
 - `Transformation` gains `leaves_unchanged`, the scan described above. It has
   a default that returns `false`, so an existing implementation compiles and
-  runs as before. (#NN)
+  runs as before. (#110)
 
 ## [0.10.0] - 2026-11-21
 
