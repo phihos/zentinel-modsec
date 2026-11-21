@@ -11,6 +11,10 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ### Performance
 
+- Rule targets and `%{...}` macros read collections in place:
+  `HashMapCollection` and `TxCollection` gain `iter`, `values` and
+  `iter_regex`, which hand out what `all`, `get` and `get_regex` used to
+  collect into a list first. (#98)
 - A rule's tags and the position its `skipAfter` resumes at are prepared
   at load, so `ctl:ruleRemoveTargetByTag` no longer scans the actions of
   every later rule and a jump no longer looks its marker up by name. (#100)
