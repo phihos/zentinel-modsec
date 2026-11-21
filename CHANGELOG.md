@@ -9,6 +9,13 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- Evaluating a rule no longer copies the values of its targets into one list
+  before testing them. Each target's values are tested from the list the
+  resolver returned, which removes an allocation, its regrowth and a copy of
+  every value for each rule evaluated. (#111)
+
 ## [0.11.0] - 2026-11-22
 
 CRS conformance: 4,969 to 4,975 of 5,184 runnable cases.

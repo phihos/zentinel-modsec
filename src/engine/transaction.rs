@@ -18,8 +18,8 @@ use crate::error::Result;
 use crate::operators::{compile_operator, Operator};
 use crate::parser::{Action, ControlAction, DataAction, OperatorSpec, VariableName};
 use crate::variables::{
-    Collection, MutableCollection, RequestData, ResolvedName, ResponseData, TxCollection,
-    VariableResolver,
+    Collection, MutableCollection, RequestData, ResolvedName, ResolvedValue, ResponseData,
+    TxCollection, VariableResolver,
 };
 
 /// Whether a lowercased Content-Type denotes a JSON body.
@@ -104,6 +104,14 @@ impl fmt::Display for TargetName<'_> {
             Self::Count(variable) => write!(f, "&{variable:?}"),
         }
     }
+}
+
+/// What one target of a rule resolved to, in the order the rule lists them.
+enum Target<'a> {
+    /// The values of a variable or collection; never empty.
+    Values(Vec<ResolvedValue<'a>>),
+    /// A `&VARIABLE` target: the variable and how many values it has.
+    Count(VariableName, usize),
 }
 
 /// One variable value a rule's operator matched.
@@ -857,7 +865,10 @@ impl Transaction {
         let filter_by_tag = self.controls.has_tag_target_removals(rule.tags());
         let filter_targets = filter_by_id || filter_by_tag;
 
-        let mut all_values: Vec<(TargetName<'_>, Cow<'_, str>)> = Vec::new();
+        // What each target resolved to, kept as the resolver returned it:
+        // one entry per target that has something to test, so the list is
+        // sized once and no value is copied into it.
+        let mut targets: Vec<Target<'_>> = Vec::new();
         let mut any_excluded = false;
         for spec in &rule.variables {
             let mut resolved = resolver.resolve_borrowed(spec);
@@ -878,31 +889,30 @@ impl Transaction {
                 });
                 any_excluded |= resolved.len() != before;
             }
-            if spec.count_mode {
+            let target = if spec.count_mode {
                 // An exclusion reduces the count, which is what a rule like
                 // `SecRule &ARGS:x "@eq 0"` is asking about.
-                all_values.push((
-                    TargetName::Count(spec.name),
-                    Cow::Owned(resolved.len().to_string()),
-                ));
+                Target::Count(spec.name, resolved.len())
+            } else if resolved.is_empty() {
+                continue;
             } else {
-                all_values.extend(
-                    resolved
-                        .into_iter()
-                        .map(|(name, value)| (TargetName::Value(name), value)),
-                );
+                Target::Values(resolved)
+            };
+            if targets.capacity() == 0 {
+                targets.reserve_exact(rule.variables.len());
             }
+            targets.push(target);
         }
 
         // Exclusions removed everything this rule had to test. Return before
         // the branch below: a rule stripped down to nothing is not the same as
         // a SecAction with no targets, and running the operator unconditionally
         // could match.
-        if any_excluded && all_values.is_empty() {
+        if any_excluded && targets.is_empty() {
             return Ok(RuleOutcome::no_match());
         }
 
-        if all_values.is_empty() {
+        if targets.is_empty() {
             // A rule with no variable specs at all (i.e. SecAction) runs its
             // operator unconditionally — this is how CRS sets up TX thresholds.
             if rule.variables.is_empty() {
@@ -977,7 +987,7 @@ impl Transaction {
 
         // Apply transformations and match every value
         let mut matches = Vec::new();
-        for (name, value) in all_values {
+        let mut test = |name: TargetName<'_>, value: Cow<'_, str>| {
             // multiMatch: the operator at every stage of the pipeline, the
             // first stage that matches being the match (CRS 930110 finds
             // `..\` before t:cmdLine deletes the backslash)
@@ -1019,6 +1029,18 @@ impl Transaction {
                     captures: result.captures,
                     matched_variable: Some(matched),
                 });
+            }
+        };
+        for target in targets {
+            match target {
+                Target::Values(values) => {
+                    for (name, value) in values {
+                        test(TargetName::Value(name), value);
+                    }
+                }
+                Target::Count(variable, count) => {
+                    test(TargetName::Count(variable), Cow::Owned(count.to_string()));
+                }
             }
         }
 
