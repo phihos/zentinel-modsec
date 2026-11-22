@@ -1108,15 +1108,21 @@ impl Transaction {
         // pay one comparison rather than a scan per variable.
         let filter_by_id = self.controls.has_target_removals(rule.id.as_deref());
         let filter_by_tag = self.controls.has_tag_target_removals(rule.tags());
-        let filter_targets = filter_by_id || filter_by_tag;
+        let rule_has_removals = filter_by_id || filter_by_tag;
 
         for spec in &rule.variables {
             // An exclusion reduces the count, which is what a rule like
             // `SecRule &ARGS:x "@eq 0"` is asking about.
             let mut count = 0usize;
+            // An exclusion names one variable, so it can only take values of
+            // a target with that variable: the others are not filtered.
+            let filter_targets = rule_has_removals
+                && self
+                    .controls
+                    .removes_from_variable(rule.id.as_deref(), rule.tags(), spec);
             resolver.visit(spec, |name, value| {
                 if filter_targets {
-                    // Rendered only for a rule a `ctl:` target exclusion names.
+                    // Rendered only for a target a `ctl:` exclusion can concern.
                     let name = &name.to_string();
                     let removed_by_id = filter_by_id
                         && self
