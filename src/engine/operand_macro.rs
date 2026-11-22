@@ -93,6 +93,15 @@ pub(super) fn expand(arg: &str, resolve: impl Fn(OperandMacro) -> String) -> Str
     expanded
 }
 
+/// Whether every macro in `text` is a `%{tx.<name>}`, so that [`expand`]
+/// reads nothing but TX for it.
+pub(super) fn reads_only_tx(text: &str) -> bool {
+    PATTERN.captures_iter(text).all(|caps| {
+        let (_, [inner]) = caps.extract();
+        matches!(OperandMacro::parse(inner), Some(OperandMacro::Tx(_)))
+    })
+}
+
 /// The macros in `arg` whose value in libmodsecurity [`expand`] cannot
 /// produce, as written: one on a collection it leaves empty
 /// (`%{env.MAX_LEN}`), or a bare name that is no variable it resolves.
