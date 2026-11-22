@@ -32,7 +32,7 @@
 | [#114](https://github.com/zentinelproxy/zentinel-modsec/pull/114) | Cover `uppercase` with the other checked transformations in the test. Merged. |
 | [#116](https://github.com/zentinelproxy/zentinel-modsec/pull/116) | Test each value of a rule's targets as the resolver produces it. Merged. |
 | [#117](https://github.com/zentinelproxy/zentinel-modsec/pull/117) | Record a match without copying its variable and value. Merged. |
-| [#119](https://github.com/zentinelproxy/zentinel-modsec/pull/119) | Rule a value out before running a regex it cannot match. |
+| [#119](https://github.com/zentinelproxy/zentinel-modsec/pull/119) | Rule a value out before running a regex it cannot match. Merged. |
 | [#120](https://github.com/zentinelproxy/zentinel-modsec/pull/120) | Name a target's values for a ctl removal only when one names its variable. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
