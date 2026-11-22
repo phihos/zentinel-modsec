@@ -30,7 +30,7 @@
 | [#110](https://github.com/zentinelproxy/zentinel-modsec/pull/110) | Skip a transformation when a scan shows the value cannot change. Merged. |
 | [#111](https://github.com/zentinelproxy/zentinel-modsec/pull/111) | Test a rule's values from the lists the resolver returned. Merged. |
 | [#114](https://github.com/zentinelproxy/zentinel-modsec/pull/114) | Cover `uppercase` with the other checked transformations in the test. Merged. |
-| [#116](https://github.com/zentinelproxy/zentinel-modsec/pull/116) | Test each value of a rule's targets as the resolver produces it. |
+| [#116](https://github.com/zentinelproxy/zentinel-modsec/pull/116) | Test each value of a rule's targets as the resolver produces it. Merged. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 
