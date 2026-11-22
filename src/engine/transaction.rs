@@ -116,16 +116,39 @@ struct RuleMatch {
 /// resolved. libmodsecurity runs the operator against every value and handles
 /// each match on its own (`capture`, `setvar`), so a rule over `REQUEST_HEADERS`
 /// acts once per matching header.
-struct RuleOutcome {
-    matches: Vec<RuleMatch>,
+///
+/// Most rules that match do so on one value, which is held without a list.
+#[derive(Default)]
+struct Matches {
+    first: Option<RuleMatch>,
+    rest: Vec<RuleMatch>,
 }
 
-impl RuleOutcome {
-    fn no_match() -> Self {
-        Self {
-            matches: Vec::new(),
+impl Matches {
+    fn push(&mut self, next: RuleMatch) {
+        if self.first.is_none() {
+            self.first = Some(next);
+        } else {
+            self.rest.push(next);
         }
     }
+
+    fn is_empty(&self) -> bool {
+        self.first.is_none()
+    }
+
+    fn into_iter(self) -> impl Iterator<Item = RuleMatch> {
+        self.first.into_iter().chain(self.rest)
+    }
+}
+
+/// Where the record of the rule that matched last is while its variable and
+/// value are still only in `matched_vars`: the last entry of the transaction's
+/// records, or of those held for a chain that has not completed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OpenRecord {
+    Recorded,
+    Held,
 }
 
 /// What a rule matched on.
@@ -534,6 +557,24 @@ impl Transaction {
 
     /// Run rules for a specific phase.
     fn run_phase(&mut self, phase: Phase) -> Result<()> {
+        let mut open_record = None;
+        let result = self.run_rules(phase, &mut open_record);
+        // The phase is over and its last match stays `MATCHED_VAR` for the
+        // next one, so this one record gets a copy.
+        if open_record == Some(OpenRecord::Recorded) {
+            if let (Some(record), Some((name, value))) =
+                (self.matched_data.last_mut(), self.matched_vars.first())
+            {
+                record.variable.clone_from(name);
+                record.value.clone_from(value);
+            }
+        }
+        result
+    }
+
+    /// Run the rules of a phase. `open_record` is set while the last record
+    /// still waits for its variable and value (see [`OpenRecord`]).
+    fn run_rules(&mut self, phase: Phase, open_record: &mut Option<OpenRecord>) -> Result<()> {
         if self.allowed || self.intervention.is_some() {
             return Ok(());
         }
@@ -615,6 +656,7 @@ impl Transaction {
                     pending_chain_actions = None;
                     pending_chain_id = None;
                     pending_chain_data.clear();
+                    open_record.take_if(|open| *open == OpenRecord::Held);
                     idx += 1;
                     while idx < rules.len() && rules[idx - 1].is_chain {
                         idx += 1;
@@ -636,19 +678,29 @@ impl Transaction {
             }
 
             // Evaluate rule
-            let outcome = self.evaluate_rule(rule)?;
-            let matched = !outcome.matches.is_empty();
+            let matches = self.evaluate_rule(rule)?;
+            let matched = !matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
-            let captures = outcome
-                .matches
-                .last()
-                .map(|m| m.captures.clone())
-                .unwrap_or_default();
+            let mut captures = Vec::new();
 
             if matched {
                 // MATCHED_VARS is scoped to the current rule in ModSecurity,
                 // so this replaces rather than appends -- otherwise a later
-                // rule would read the previous rule's matches.
+                // rule would read the previous rule's matches. The record of
+                // the rule before takes its variable and value from there
+                // now that no rule reads them any more.
+                if let Some(open) = open_record.take() {
+                    let record = match open {
+                        OpenRecord::Recorded => self.matched_data.last_mut(),
+                        OpenRecord::Held => pending_chain_data.last_mut(),
+                    };
+                    if let (Some(record), Some((name, value))) =
+                        (record, self.matched_vars.first_mut())
+                    {
+                        record.variable = std::mem::take(name);
+                        record.value = std::mem::take(value);
+                    }
+                }
                 self.matched_vars.clear();
 
                 // What a match does was worked out when the rules loaded.
@@ -671,36 +723,41 @@ impl Transaction {
                 // `setvar:tx.x=%{MATCHED_VAR}` is read by the links after it).
                 // Every other action waits for the whole chain. A continuation
                 // link has no id; its effects belong to the chain's starter.
-                for (n, m) in outcome.matches.iter().enumerate() {
-                    if let Some(var) = &m.matched_variable {
-                        self.matched_vars
-                            .push((var.name.clone(), var.value.clone()));
+                for (n, m) in matches.into_iter().enumerate() {
+                    let mut whole = None;
+                    if let Some(var) = m.matched_variable {
+                        whole = var.portion;
                         // The audit record keeps the first match only: one
-                        // entry per rule, however many values it hit.
+                        // entry per rule, however many values it hit. Its
+                        // variable and value stay in `matched_vars` until the
+                        // next match replaces them (`OpenRecord`).
                         // A chain link's entry waits for the chain to complete.
                         if n == 0 {
                             let entry = MatchedData {
                                 rule_id: link_rule_id.map(str::to_string),
-                                variable: var.name.clone(),
-                                value: var.value.clone(),
-                                matched_portion: var.portion.clone(),
+                                variable: String::new(),
+                                value: String::new(),
+                                matched_portion: if capture { whole.clone() } else { whole.take() },
                             };
                             if rule.is_chain || chain_state.in_chain {
                                 pending_chain_data.push(entry);
+                                *open_record = Some(OpenRecord::Held);
                             } else {
                                 self.matched_data.push(entry);
+                                *open_record = Some(OpenRecord::Recorded);
                             }
                         }
+                        self.matched_vars.push((var.name, var.value));
                     }
                     // TX:0 (the whole match) and TX:1..TX:9, before any setvar
                     // reads `%{tx.N}`.
                     if capture {
-                        let whole = m.matched_variable.as_ref().and_then(|v| v.portion.clone());
                         self.store_captures(whole, &m.captures);
                     }
                     for op in &on_match.setvar_ops {
                         self.apply_setvar(op, link_rule_id);
                     }
+                    captures = m.captures;
                 }
 
                 if rule.is_chain {
@@ -732,6 +789,9 @@ impl Transaction {
                         self.matched_rules.push(id);
                     }
                     self.matched_data.append(&mut pending_chain_data);
+                    if *open_record == Some(OpenRecord::Held) {
+                        *open_record = Some(OpenRecord::Recorded);
+                    }
                     pending_chain_actions.take().unwrap_or((rule, Vec::new()))
                 } else {
                     // Track matched rule
@@ -748,34 +808,48 @@ impl Transaction {
                 // intervention below carries the same text
                 let prepared = &acting_rule.metadata;
                 let logs = !prepared.nolog;
-                let metadata = (logs || acting_rule.on_match.disruptive.is_some()).then(|| {
-                    let mut meta = prepared.clone();
-                    let expand = |v: Option<String>| {
-                        v.map(|v| {
-                            if v.contains("%{") {
-                                self.expand_operator_macros(&v)
-                            } else {
-                                v
-                            }
-                        })
-                    };
-                    meta.msg = expand(meta.msg.take());
-                    meta.logdata = expand(meta.logdata.take());
-                    meta
-                });
-                if let Some(meta) = metadata.as_ref().filter(|_| logs) {
+                let disruptive = acting_rule.on_match.disruptive.is_some();
+                let expand = |text: &Option<String>| {
+                    text.as_ref().map(|text| {
+                        if text.contains("%{") {
+                            self.expand_operator_macros(text)
+                        } else {
+                            text.clone()
+                        }
+                    })
+                };
+                let mut texts = (logs || disruptive)
+                    .then(|| (expand(&prepared.msg), expand(&prepared.logdata)));
+                if logs {
+                    // The texts are copied only when an intervention may
+                    // carry them too.
+                    let (msg, data) = if disruptive {
+                        texts.clone()
+                    } else {
+                        texts.take()
+                    }
+                    .unwrap_or_default();
                     self.messages.push(RuleMessage {
-                        rule_id: meta.id.clone(),
-                        rev: meta.rev.clone(),
-                        msg: meta.msg.clone(),
-                        data: meta.logdata.clone(),
-                        severity: meta.severity,
-                        ver: meta.ver.clone(),
-                        maturity: meta.maturity,
-                        accuracy: meta.accuracy,
-                        tags: meta.tags.clone(),
+                        rule_id: prepared.id.clone(),
+                        rev: prepared.rev.clone(),
+                        msg,
+                        data,
+                        severity: prepared.severity,
+                        ver: prepared.ver.clone(),
+                        maturity: prepared.maturity,
+                        accuracy: prepared.accuracy,
+                        tags: prepared.tags.clone(),
                     });
                 }
+                // What an intervention carries, made only if there is one.
+                let metadata = move || {
+                    let mut meta = prepared.clone();
+                    if let Some((msg, logdata)) = texts {
+                        meta.msg = msg;
+                        meta.logdata = logdata;
+                    }
+                    meta
+                };
 
                 // Apply ctl: overrides before the disruptive action below, so
                 // that ctl:ruleEngine=DetectionOnly on the same rule governs
@@ -814,7 +888,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::deny(*status, phase, rule.id.clone());
-                                intervention.add_metadata(metadata.unwrap_or_default());
+                                intervention.add_metadata(metadata());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -823,7 +897,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::deny(self.default_status, phase, rule.id.clone());
-                                intervention.add_metadata(metadata.unwrap_or_default());
+                                intervention.add_metadata(metadata());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -836,7 +910,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::redirect(url.clone(), phase, rule.id.clone());
-                                intervention.add_metadata(metadata.unwrap_or_default());
+                                intervention.add_metadata(metadata());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -844,7 +918,7 @@ impl Transaction {
                         DisruptiveOutcome::Drop => {
                             if should_block {
                                 let mut intervention = Intervention::drop(phase, rule.id.clone());
-                                intervention.add_metadata(metadata.unwrap_or_default());
+                                intervention.add_metadata(metadata());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -864,6 +938,7 @@ impl Transaction {
                     pending_chain_actions = None;
                     pending_chain_id = None;
                     pending_chain_data.clear();
+                    open_record.take_if(|open| *open == OpenRecord::Held);
                     while idx < rules.len() && rules[idx].is_chain {
                         idx += 1;
                     }
@@ -884,7 +959,7 @@ impl Transaction {
     }
 
     /// Evaluate a single rule.
-    fn evaluate_rule(&self, rule: &CompiledRule) -> Result<RuleOutcome> {
+    fn evaluate_rule(&self, rule: &CompiledRule) -> Result<Matches> {
         let resolver = VariableResolver::new(
             &self.request,
             &self.response,
@@ -908,15 +983,14 @@ impl Transaction {
             };
             // A SecAction has no variable, so there is nothing to report
             // as the match target.
-            if !matched {
-                return Ok(RuleOutcome::no_match());
-            }
-            return Ok(RuleOutcome {
-                matches: vec![RuleMatch {
+            let mut matches = Matches::default();
+            if matched {
+                matches.push(RuleMatch {
                     captures: result.captures,
                     matched_variable: None,
-                }],
-            });
+                });
+            }
+            return Ok(matches);
         }
 
         // If the operator argument references runtime macros (e.g.
@@ -942,7 +1016,7 @@ impl Transaction {
         // denied all traffic. Absence is tested with `&VAR "@eq 0"`, which
         // always has a value, the count. The same holds for a rule whose
         // targets `ctl:` exclusions removed entirely.
-        let mut matches = Vec::new();
+        let mut matches = Matches::default();
         let mut test = |name: TargetName<'_>, value: Cow<'_, str>| {
             let operator: &dyn Operator = if expands_operand {
                 let compiled = dynamic_operator.get_or_insert_with(|| {
@@ -1067,7 +1141,7 @@ impl Transaction {
             }
         }
 
-        Ok(RuleOutcome { matches })
+        Ok(matches)
     }
 
     /// Expand `%{...}` macros in an operator argument, or a rule's message,
