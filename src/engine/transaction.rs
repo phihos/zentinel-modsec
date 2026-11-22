@@ -6,14 +6,12 @@ use std::sync::Arc;
 
 use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
-use super::intervention::Intervention;
+use super::intervention::{Intervention, RuleMessage};
 use super::operand_macro::{self, OperandMacro};
 use super::phase::Phase;
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
 use super::scoring::ANOMALY_SCORE;
-use crate::actions::{
-    rule_metadata, DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar, SetVarOperation,
-};
+use crate::actions::{DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar, SetVarOperation};
 use crate::error::Result;
 use crate::operators::{compile_operator, Operator};
 use crate::parser::{Action, ControlAction, DataAction, OperatorSpec, VariableName};
@@ -64,6 +62,8 @@ pub struct Transaction {
     allowed: bool,
     /// Matched variables for current rule evaluation.
     matched_vars: Vec<(String, String)>,
+    /// The messages of the rules that matched (`RuleMessage`).
+    messages: Vec<RuleMessage>,
     /// Regex captures from last match.
     captures: Vec<String>,
     /// Per-transaction `ctl:` overrides.
@@ -210,6 +210,7 @@ impl Transaction {
             matched_rules: Vec::new(),
             allowed: false,
             matched_vars: Vec::new(),
+            messages: Vec::new(),
             captures: Vec::new(),
             controls: TransactionControls::default(),
             matched_data: Vec::new(),
@@ -444,6 +445,13 @@ impl Transaction {
         }
     }
 
+    /// Set the response's status code and protocol (`RESPONSE_STATUS`,
+    /// `RESPONSE_PROTOCOL`), before `process_response_headers`.
+    pub fn set_response_status(&mut self, status: u16, protocol: &str) {
+        self.response.set_status(status);
+        self.response.set_protocol(protocol);
+    }
+
     /// Add a response header.
     pub fn add_response_header(&mut self, name: &str, value: &str) -> Result<()> {
         self.response.add_header(name, value);
@@ -485,6 +493,18 @@ impl Transaction {
     /// Check if there's an intervention.
     pub fn has_intervention(&self) -> bool {
         self.intervention.is_some()
+    }
+
+    /// The messages of the rules that matched, in order, as ModSecurity logs
+    /// them (`RuleMessage::log_line`).
+    pub fn messages(&self) -> &[RuleMessage] {
+        &self.messages
+    }
+
+    /// Why the request body processor could not process the body
+    /// (`REQBODY_ERROR_MSG`), if it could not.
+    pub fn request_body_error(&self) -> Option<&str> {
+        self.request.body_error.as_deref()
     }
 
     /// Get matched rule IDs.
@@ -729,6 +749,42 @@ impl Transaction {
                     (rule, Vec::new())
                 };
 
+                // The acting rule's metadata, prepared at load, with its
+                // message's macros expanded now, while MATCHED_VAR and TX:0 are
+                // this match's: for a match that logs (every rule but a nolog
+                // one, as v3's m_saveMessage) or intervenes, and the
+                // intervention below carries the same text
+                let prepared = &acting_rule.metadata;
+                let logs = !prepared.nolog;
+                let metadata = (logs || acting_rule.on_match.disruptive.is_some()).then(|| {
+                    let mut meta = prepared.clone();
+                    let expand = |v: Option<String>| {
+                        v.map(|v| {
+                            if v.contains("%{") {
+                                self.expand_operator_macros(&v)
+                            } else {
+                                v
+                            }
+                        })
+                    };
+                    meta.msg = expand(meta.msg.take());
+                    meta.logdata = expand(meta.logdata.take());
+                    meta
+                });
+                if let Some(meta) = metadata.as_ref().filter(|_| logs) {
+                    self.messages.push(RuleMessage {
+                        rule_id: meta.id.clone(),
+                        rev: meta.rev.clone(),
+                        msg: meta.msg.clone(),
+                        data: meta.logdata.clone(),
+                        severity: meta.severity,
+                        ver: meta.ver.clone(),
+                        maturity: meta.maturity,
+                        accuracy: meta.accuracy,
+                        tags: meta.tags.clone(),
+                    });
+                }
+
                 // Apply ctl: overrides before the disruptive action below, so
                 // that ctl:ruleEngine=DetectionOnly on the same rule governs
                 // whether that rule blocks. The links' ctl held so far, then
@@ -766,7 +822,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::deny(*status, phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
+                                intervention.add_metadata(metadata.unwrap_or_default());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -775,7 +831,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::deny(self.default_status, phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
+                                intervention.add_metadata(metadata.unwrap_or_default());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -788,7 +844,7 @@ impl Transaction {
                             if should_block {
                                 let mut intervention =
                                     Intervention::redirect(url.clone(), phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
+                                intervention.add_metadata(metadata.unwrap_or_default());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }
@@ -796,7 +852,7 @@ impl Transaction {
                         DisruptiveOutcome::Drop => {
                             if should_block {
                                 let mut intervention = Intervention::drop(phase, rule.id.clone());
-                                intervention.add_metadata(rule_metadata(&acting_rule.actions));
+                                intervention.add_metadata(metadata.unwrap_or_default());
                                 self.intervention = Some(intervention);
                                 return Ok(());
                             }

@@ -9,6 +9,13 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Behavior changes
+
+- **An intervention's `msg` and `logdata` have their macros expanded** at
+  the match, as ModSecurity logs them: `Inbound Anomaly Score Exceeded (Total
+  Score: %{TX.BLOCKING_INBOUND_ANOMALY_SCORE})` reads with its score.
+  `nolog` is recorded (`RuleMetadata::nolog`). (#108)
+
 ### Added
 
 - A key selection whose regular expression does not compile is reported at
@@ -19,12 +26,36 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   distinct directive). It still matches no key, as in ModSecurity v3.
   `KeyRegex::error` gives the reason. (#115)
 
+- `Transaction::messages()`: a `RuleMessage` for each matched rule that logs
+  (every rule but a `nolog` one, as v3's `m_saveMessage`), with its id, `rev`,
+  `msg`, `logdata`, severity, `ver`, maturity, accuracy and tags, its macros
+  expanded at the match. `RuleMessage::log_line()` renders it as v3's
+  `RuleMessage::_details` does (`rule_message.cc`): `msg` as written, `data`
+  cut at 200 bytes (`limitTo`) and, with `rev`, `ver` and the tags, escaped
+  by `toHexIfNeeded` with `"` and `\` as `\xHH`; then the line through
+  `toHexIfNeeded` as `RuleMessage::log` does. The file, line, hostname, URI,
+  unique id and reference fields are the embedding application's. (#108)
+
+- `Transaction::request_body_error()`: `REQBODY_ERROR_MSG`. (#108)
+
+- `Transaction::set_response_status(status, protocol)`: `RESPONSE_STATUS` and
+  `RESPONSE_PROTOCOL`, for an application that runs the response phases.
+  (#108)
+
 ### Performance
 
 - Evaluating a rule no longer copies the values of its targets into one list
   before testing them. Each target's values are tested from the list the
   resolver returned, which removes an allocation, its regrowth and a copy of
   every value for each rule evaluated. (#111)
+
+### API changes
+
+- `CompiledRule` gains a public `metadata` field (what a match reports,
+  prepared at load), which breaks code that builds one with a struct literal.
+  (#108)
+
+- `RuleMetadata` gains a public `nolog` field. (#108)
 
 ## [0.11.0] - 2026-11-22
 

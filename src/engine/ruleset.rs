@@ -1,6 +1,6 @@
 //! Compiled ruleset for efficient rule matching.
 
-use crate::actions::{execute_actions_without_metadata, ActionResult};
+use crate::actions::{execute_actions_without_metadata, rule_metadata, ActionResult, RuleMetadata};
 use crate::error::Result;
 use crate::operators::{compile_operator, NoMatchOperator, Operator};
 use crate::parser::{
@@ -58,6 +58,11 @@ pub struct CompiledRule {
     /// reads them. Worked out at load time, as the actions are fixed by then,
     /// so a match copies neither its `setvar`s nor its `ctl:`s.
     pub on_match: ActionResult,
+    /// What a match reports: `actions` as `rule_metadata` reads them, its
+    /// `msg` and `logdata` with their macros unexpanded, which a match
+    /// expands. Worked out at load time, so a match that logs nothing and
+    /// does not intervene reads no metadata at all.
+    pub metadata: RuleMetadata,
     /// Whether this rule is part of a chain.
     pub is_chain: bool,
     /// Index of next rule in chain (if any).
@@ -302,6 +307,7 @@ impl CompiledRuleset {
                         multi_match: has_multi_match(&rule.actions),
                         skip_after_index: None,
                         on_match: execute_actions_without_metadata(&rule.actions, None),
+                        metadata: rule_metadata(&rule.actions),
                         actions: rule.actions,
                         is_chain,
                         chain_next: None,
@@ -357,6 +363,7 @@ impl CompiledRuleset {
                         multi_match: has_multi_match(&sec_action.actions),
                         skip_after_index: None,
                         on_match: execute_actions_without_metadata(&sec_action.actions, None),
+                        metadata: rule_metadata(&sec_action.actions),
                         actions: sec_action.actions,
                         is_chain: false,
                         chain_next: None,
