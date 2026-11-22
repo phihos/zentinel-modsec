@@ -32,6 +32,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#110](https://github.com/zentinelproxy/zentinel-modsec/pull/110) | Skip a transformation when a scan shows the value cannot change. Merged. |
 | [#111](https://github.com/zentinelproxy/zentinel-modsec/pull/111) | Test a rule's values from the lists the resolver returned. Merged. |
 | [#114](https://github.com/zentinelproxy/zentinel-modsec/pull/114) | Cover `uppercase` with the other checked transformations in the test. Merged. |
+| [#116](https://github.com/zentinelproxy/zentinel-modsec/pull/116) | Test each value of a rule's targets as the resolver produces it. |
 
 ## Queued on the fork
 
