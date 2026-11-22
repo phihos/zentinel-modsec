@@ -2,6 +2,7 @@
 //!
 //! Optimized with lazy regex compilation for fast rule parsing.
 
+use super::requirements::MatchRequirements;
 use super::traits::{Operator, OperatorResult};
 use crate::error::{Error, Result};
 use aho_corasick::AhoCorasick;
@@ -23,6 +24,10 @@ pub struct RxOperator {
     /// that passes syntax validation but cannot be built (an oversized
     /// program, say) is reported once rather than retried per request.
     compiled: OnceCell<Option<Regex>>,
+    /// What the pattern says every match needs, checked before the regex
+    /// runs. A value it rules out never reaches the regex, so a pattern that
+    /// cannot be built is reported at the first value that does.
+    requirements: MatchRequirements,
 }
 
 impl RxOperator {
@@ -41,16 +46,17 @@ impl RxOperator {
             });
         }
 
-        if let Err(e) = regex_syntax::Parser::new().parse(pattern) {
-            return Err(Error::RegexCompile {
+        let hir = regex_syntax::Parser::new()
+            .parse(pattern)
+            .map_err(|e| Error::RegexCompile {
                 pattern: pattern.to_string(),
                 source: regex::Error::Syntax(e.to_string()),
-            });
-        }
+            })?;
 
         Ok(Self {
             pattern_str: pattern.to_string(),
             compiled: OnceCell::new(),
+            requirements: MatchRequirements::of(&hir),
         })
     }
 
@@ -80,6 +86,10 @@ impl RxOperator {
 
 impl Operator for RxOperator {
     fn execute(&self, value: &str) -> OperatorResult {
+        if self.requirements.rule_out(value.as_bytes()) {
+            return OperatorResult::no_match();
+        }
+
         let Some(regex) = self.get_regex() else {
             return OperatorResult::no_match();
         };

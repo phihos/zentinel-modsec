@@ -9,6 +9,16 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- `@rx` rules a value out before running the regex when the pattern's syntax
+  shows it cannot match: the value is shorter than the shortest match, it is
+  made only of letters, digits and `-./:_` while every match that short needs
+  another byte, or it lacks a byte every match contains. Each check is a
+  necessary condition read off the parsed pattern, so no result changes. A
+  pattern that passes validation but cannot be built is now reported at the
+  first value that reaches the regex. (#119)
+
 ## [0.12.0] - 2026-11-22
 
 CRS conformance: 4,975 to 4,979 of 5,184 runnable cases.
