@@ -48,9 +48,13 @@ impl fmt::Display for ResolvedName<'_> {
 /// the response or TX already hold it.
 pub type ResolvedValue<'a> = (ResolvedName<'a>, Cow<'a, str>);
 
-/// A scalar variable's single value.
-fn scalar<'a>(name: &'static str, value: impl Into<Cow<'a, str>>) -> Vec<ResolvedValue<'a>> {
-    vec![(ResolvedName::scalar(name), value.into())]
+/// Hand a scalar variable's single value to `visit`.
+fn scalar<'s>(
+    visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    name: &'static str,
+    value: impl Into<Cow<'s, str>>,
+) {
+    visit(ResolvedName::scalar(name), value.into());
 }
 
 /// Variable resolver for transaction context.
@@ -98,45 +102,63 @@ impl<'a> VariableResolver<'a> {
     ///
     /// The values borrow from the request, the response and TX; the names
     /// borrow member keys from those and from `spec`. Nothing is formatted or
-    /// cloned for a value until a caller asks for it, which rule evaluation
-    /// does only for the values that match.
+    /// cloned for a value until a caller asks for it.
     pub fn resolve_borrowed<'s>(&self, spec: &'s VariableSpec) -> Vec<ResolvedValue<'s>>
     where
         'a: 's,
     {
-        let mut values = self.resolve_variable(spec.name, &spec.selection);
-
-        // Apply exclusions
-        if !spec.exclusions.is_empty() {
-            values.retain(|(name, _)| {
-                !spec
-                    .exclusions
-                    .iter()
-                    .any(|e| e.matches(name.collection, name.member.as_deref()))
-            });
-        }
+        let mut values = Vec::new();
+        self.visit(spec, |name, value| values.push((name, value)));
         values
     }
 
-    /// Resolve a variable by name.
-    fn resolve_variable<'s>(
+    /// Hand every value of a variable specification to `visit`, in the order
+    /// [`resolve_borrowed`](Self::resolve_borrowed) lists them, without
+    /// gathering them first.
+    ///
+    /// Rule evaluation tests each value as it arrives, so a rule allocates
+    /// nothing for the values it only looks at.
+    pub fn visit<'s>(
+        &self,
+        spec: &'s VariableSpec,
+        mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
+        if spec.exclusions.is_empty() {
+            self.visit_variable(spec.name, &spec.selection, &mut visit);
+        } else {
+            self.visit_variable(spec.name, &spec.selection, &mut |name, value| {
+                let excluded = spec
+                    .exclusions
+                    .iter()
+                    .any(|e| e.matches(name.collection, name.member.as_deref()));
+                if !excluded {
+                    visit(name, value);
+                }
+            });
+        }
+    }
+
+    /// Visit a variable's values by name.
+    fn visit_variable<'s>(
         &self,
         name: VariableName,
         selection: &'s Option<Selection>,
-    ) -> Vec<ResolvedValue<'s>>
-    where
+        visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
         'a: 's,
     {
         let request: &'a RequestData = self.request;
         let response: &'a ResponseData = self.response;
         match name {
             // Request variables
-            VariableName::RequestUri => scalar("REQUEST_URI", &request.uri),
-            VariableName::RequestUriRaw => scalar("REQUEST_URI_RAW", &request.uri_raw),
-            VariableName::RequestMethod => scalar("REQUEST_METHOD", &request.method),
-            VariableName::RequestProtocol => scalar("REQUEST_PROTOCOL", &request.protocol),
-            VariableName::QueryString => scalar("QUERY_STRING", &request.query_string),
-            VariableName::RequestFilename => scalar("REQUEST_FILENAME", &request.path),
+            VariableName::RequestUri => scalar(visit, "REQUEST_URI", &request.uri),
+            VariableName::RequestUriRaw => scalar(visit, "REQUEST_URI_RAW", &request.uri_raw),
+            VariableName::RequestMethod => scalar(visit, "REQUEST_METHOD", &request.method),
+            VariableName::RequestProtocol => scalar(visit, "REQUEST_PROTOCOL", &request.protocol),
+            VariableName::QueryString => scalar(visit, "QUERY_STRING", &request.query_string),
+            VariableName::RequestFilename => scalar(visit, "REQUEST_FILENAME", &request.path),
             VariableName::RequestLine => {
                 // The request line as it arrived. CRS 920100 tests this with a
                 // negated regex, so leaving it unresolved made that rule match
@@ -147,6 +169,7 @@ impl<'a> VariableResolver<'a> {
                     &request.uri_raw
                 };
                 scalar(
+                    visit,
                     "REQUEST_LINE",
                     format!("{} {} {}", request.method, uri, request.protocol),
                 )
@@ -155,7 +178,7 @@ impl<'a> VariableResolver<'a> {
                 // Final path segment. ModSecurity splits on both separators, so
                 // a Windows-style path does not hide the basename.
                 let basename = self.request.path.rsplit(['/', '\\']).next().unwrap_or("");
-                scalar("REQUEST_BASENAME", basename)
+                scalar(visit, "REQUEST_BASENAME", basename)
             }
             VariableName::ArgsCombinedSize => {
                 let size: usize = [&request.args_get, &request.args_post]
@@ -163,84 +186,91 @@ impl<'a> VariableResolver<'a> {
                     .flat_map(|c| c.iter())
                     .map(|(name, value)| name.len() + value.len())
                     .sum();
-                scalar("ARGS_COMBINED_SIZE", size.to_string())
+                scalar(visit, "ARGS_COMBINED_SIZE", size.to_string())
             }
             // The raw body, always, whichever body processor ran or none.
             // This is why ctl:forceRequestBodyVariable is accepted as a no-op.
-            VariableName::RequestBody => scalar("REQUEST_BODY", request.body_str()),
-            VariableName::RequestBodyLength => {
-                scalar("REQUEST_BODY_LENGTH", request.body_length().to_string())
-            }
+            VariableName::RequestBody => scalar(visit, "REQUEST_BODY", request.body_str()),
+            VariableName::RequestBodyLength => scalar(
+                visit,
+                "REQUEST_BODY_LENGTH",
+                request.body_length().to_string(),
+            ),
 
             // Collections
-            VariableName::Args => self.resolve_collection_from_all_args(selection),
+            VariableName::Args => {
+                for collection in [&request.args_get, &request.args_post] {
+                    visit_collection(visit, collection, "ARGS", selection, false);
+                }
+            }
             VariableName::ArgsGet => {
-                self.resolve_collection(&request.args_get, "ARGS_GET", selection)
+                visit_collection(visit, &request.args_get, "ARGS_GET", selection, false)
             }
             VariableName::ArgsPost => {
-                self.resolve_collection(&request.args_post, "ARGS_POST", selection)
+                visit_collection(visit, &request.args_post, "ARGS_POST", selection, false)
             }
-            VariableName::ArgsNames => self.resolve_collection_names(
+            VariableName::ArgsNames => visit_names(
+                visit,
                 &[&request.args_get, &request.args_post],
                 "ARGS_NAMES",
                 selection,
             ),
             VariableName::ArgsGetNames => {
-                self.resolve_collection_names(&[&request.args_get], "ARGS_GET_NAMES", selection)
+                visit_names(visit, &[&request.args_get], "ARGS_GET_NAMES", selection)
             }
             VariableName::ArgsPostNames => {
-                self.resolve_collection_names(&[&request.args_post], "ARGS_POST_NAMES", selection)
+                visit_names(visit, &[&request.args_post], "ARGS_POST_NAMES", selection)
             }
             VariableName::RequestHeaders => {
-                self.resolve_collection_ci(&request.headers, "REQUEST_HEADERS", selection)
+                visit_collection(visit, &request.headers, "REQUEST_HEADERS", selection, true)
             }
-            VariableName::RequestHeadersNames => self.resolve_collection_names(
+            VariableName::RequestHeadersNames => visit_names(
+                visit,
                 &[&request.headers],
                 "REQUEST_HEADERS_NAMES",
                 selection,
             ),
             VariableName::RequestCookies => {
-                self.resolve_collection(&request.cookies, "REQUEST_COOKIES", selection)
+                visit_collection(visit, &request.cookies, "REQUEST_COOKIES", selection, false)
             }
-            VariableName::RequestCookiesNames => self.resolve_collection_names(
+            VariableName::RequestCookiesNames => visit_names(
+                visit,
                 &[&request.cookies],
                 "REQUEST_COOKIES_NAMES",
                 selection,
             ),
 
             // Multipart body processor results
-            VariableName::MultipartPartHeaders => self.resolve_collection(
+            VariableName::MultipartPartHeaders => visit_collection(
+                visit,
                 &request.multipart_part_headers,
                 "MULTIPART_PART_HEADERS",
                 selection,
+                false,
             ),
-            VariableName::Files => self.resolve_collection(&request.files, "FILES", selection),
+            VariableName::Files => {
+                visit_collection(visit, &request.files, "FILES", selection, false)
+            }
             VariableName::FilesNames => {
-                self.resolve_collection_names(&[&request.files], "FILES_NAMES", selection)
+                visit_names(visit, &[&request.files], "FILES_NAMES", selection)
             }
             VariableName::FilesSizes => {
-                self.resolve_collection(&request.files_sizes, "FILES_SIZES", selection)
+                visit_collection(visit, &request.files_sizes, "FILES_SIZES", selection, false)
             }
             // Always present -- "0" without uploads -- so a rule comparing the
             // total against a limit, or against 0, finds a value, as in
             // ModSecurity.
             VariableName::FilesCombinedSize => scalar(
+                visit,
                 "FILES_COMBINED_SIZE",
                 request.files_combined_size.to_string(),
             ),
-            VariableName::UniqueId => {
-                if request.unique_id.is_empty() {
-                    vec![]
-                } else {
-                    scalar("UNIQUE_ID", &request.unique_id)
-                }
+            // Absent while empty, like the default arm.
+            VariableName::UniqueId if !request.unique_id.is_empty() => {
+                scalar(visit, "UNIQUE_ID", &request.unique_id)
             }
-            VariableName::ReqBodyProcessor => {
-                if request.body_processor.is_empty() {
-                    vec![]
-                } else {
-                    scalar("REQBODY_PROCESSOR", &request.body_processor)
-                }
+            VariableName::ReqBodyProcessor if !request.body_processor.is_empty() => {
+                scalar(visit, "REQBODY_PROCESSOR", &request.body_processor)
             }
 
             // A body the processor could not handle. These resolved to nothing
@@ -258,131 +288,87 @@ impl<'a> VariableResolver<'a> {
                 } else {
                     "0"
                 };
-                scalar("REQBODY_ERROR", flag)
+                scalar(visit, "REQBODY_ERROR", flag)
             }
             VariableName::ReqBodyErrorMsg | VariableName::ReqBodyProcessorErrorMsg => {
-                match &request.body_error {
-                    Some(msg) => scalar("REQBODY_ERROR_MSG", msg),
-                    None => vec![],
+                if let Some(msg) = &request.body_error {
+                    scalar(visit, "REQBODY_ERROR_MSG", msg)
                 }
             }
 
             // Response variables
-            VariableName::ResponseStatus => scalar("RESPONSE_STATUS", response.status.to_string()),
-            VariableName::ResponseBody => scalar("RESPONSE_BODY", response.body_str()),
+            VariableName::ResponseStatus => {
+                scalar(visit, "RESPONSE_STATUS", response.status.to_string())
+            }
+            VariableName::ResponseBody => scalar(visit, "RESPONSE_BODY", response.body_str()),
             VariableName::ResponseContentType => {
-                scalar("RESPONSE_CONTENT_TYPE", &response.content_type)
+                scalar(visit, "RESPONSE_CONTENT_TYPE", &response.content_type)
             }
-            VariableName::ResponseHeaders => {
-                self.resolve_collection_ci(&response.headers, "RESPONSE_HEADERS", selection)
-            }
+            VariableName::ResponseHeaders => visit_collection(
+                visit,
+                &response.headers,
+                "RESPONSE_HEADERS",
+                selection,
+                true,
+            ),
 
             // TX collection
-            VariableName::Xml => self.resolve_xml(selection),
+            VariableName::Xml => self.visit_xml(selection, visit),
 
-            VariableName::Tx => self.resolve_tx_collection(selection),
+            VariableName::Tx => {
+                let tx: &'a TxCollection = self.tx;
+                match selection {
+                    Some(Selection::Key(key)) => keyed(visit, "TX", key, tx.values(key)),
+                    Some(Selection::Regex(pattern)) => members(visit, "TX", tx.iter_regex(pattern)),
+                    None => members(visit, "TX", tx.iter()),
+                }
+            }
 
             // Client/Server info
-            VariableName::RemoteAddr => scalar("REMOTE_ADDR", &request.client_ip),
-            VariableName::RemotePort => scalar("REMOTE_PORT", request.client_port.to_string()),
-            VariableName::ServerName => scalar("SERVER_NAME", &request.server_name),
-            VariableName::ServerAddr => scalar("SERVER_ADDR", &request.server_addr),
-            VariableName::ServerPort => scalar("SERVER_PORT", request.server_port.to_string()),
+            VariableName::RemoteAddr => scalar(visit, "REMOTE_ADDR", &request.client_ip),
+            VariableName::RemotePort => {
+                scalar(visit, "REMOTE_PORT", request.client_port.to_string())
+            }
+            VariableName::ServerName => scalar(visit, "SERVER_NAME", &request.server_name),
+            VariableName::ServerAddr => scalar(visit, "SERVER_ADDR", &request.server_addr),
+            VariableName::ServerPort => {
+                scalar(visit, "SERVER_PORT", request.server_port.to_string())
+            }
 
             // Matched variables
             VariableName::MatchedVar => {
                 if let Some(v) = self.matched_var {
-                    scalar("MATCHED_VAR", v)
-                } else {
-                    vec![]
+                    scalar(visit, "MATCHED_VAR", v)
                 }
             }
             VariableName::MatchedVars => {
                 let matched_vars: &'a [(String, String)] = self.matched_vars;
-                matched_vars
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            ResolvedName::member("MATCHED_VARS", k.as_str()),
-                            Cow::Borrowed(v.as_str()),
-                        )
-                    })
-                    .collect()
+                members(
+                    visit,
+                    "MATCHED_VARS",
+                    matched_vars.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+                );
             }
-            VariableName::MatchedVarName => match self.matched_vars.last() {
-                Some((name, _)) => scalar("MATCHED_VAR_NAME", name),
-                None => vec![],
-            },
+            VariableName::MatchedVarName => {
+                if let Some((name, _)) = self.matched_vars.last() {
+                    scalar(visit, "MATCHED_VAR_NAME", name)
+                }
+            }
             VariableName::MatchedVarsNames => {
                 let matched_vars: &'a [(String, String)] = self.matched_vars;
-                matched_vars
-                    .iter()
-                    .map(|(k, _)| {
-                        (
-                            ResolvedName::member("MATCHED_VARS_NAMES", k.as_str()),
-                            Cow::Borrowed(k.as_str()),
-                        )
-                    })
-                    .collect()
+                members(
+                    visit,
+                    "MATCHED_VARS_NAMES",
+                    matched_vars.iter().map(|(k, _)| (k.as_str(), k.as_str())),
+                );
             }
 
             // Default - empty
-            _ => vec![],
+            _ => {}
         }
     }
 
-    /// Resolve a collection with optional selection.
-    fn resolve_collection<'s>(
-        &self,
-        collection: &'s HashMapCollection,
-        prefix: &'static str,
-        selection: &'s Option<Selection>,
-    ) -> Vec<ResolvedValue<'s>> {
-        let mut values = Vec::new();
-        self.resolve_collection_into(&mut values, collection, prefix, selection, false);
-        values
-    }
-
-    /// Resolve a collection where keys are matched case-insensitively (HTTP headers).
-    fn resolve_collection_ci<'s>(
-        &self,
-        collection: &'s HashMapCollection,
-        prefix: &'static str,
-        selection: &'s Option<Selection>,
-    ) -> Vec<ResolvedValue<'s>> {
-        let mut values = Vec::new();
-        self.resolve_collection_into(&mut values, collection, prefix, selection, true);
-        values
-    }
-
-    /// Append a collection's selected values to `values`, straight from the
-    /// collection: nothing is gathered in between.
-    fn resolve_collection_into<'s>(
-        &self,
-        values: &mut Vec<ResolvedValue<'s>>,
-        collection: &'s HashMapCollection,
-        prefix: &'static str,
-        selection: &'s Option<Selection>,
-        lowercase_key: bool,
-    ) {
-        match selection {
-            Some(Selection::Key(key)) => {
-                let lookup = if lowercase_key && key.bytes().any(|b| b.is_ascii_uppercase()) {
-                    Cow::Owned(key.to_ascii_lowercase())
-                } else {
-                    Cow::Borrowed(key.as_str())
-                };
-                values.extend(keyed(prefix, key, collection.values(&lookup)));
-            }
-            Some(Selection::Regex(pattern)) => {
-                values.extend(members(prefix, collection.iter_regex(pattern)));
-            }
-            None => values.extend(members(prefix, collection.iter())),
-        }
-    }
-
-    /// Resolve ARGS collection (GET + POST combined).
-    /// Resolve an `XML:` target against the flattened XML body.
+    /// Visit an `XML:` target against the flattened XML body.
     ///
     /// The XML body processor flattens element text to `xml.<path>` and
     /// attributes to `xml.<path>.@<name>` in `ARGS`. `XML:/*` and `XML://@*`
@@ -392,109 +378,110 @@ impl<'a> VariableResolver<'a> {
     /// Values are reported under their XPath-style name -- `xml.order.item.@id`
     /// is reported as `XML:/order/item/@id` -- so `%{MATCHED_VAR_NAME}` in a
     /// rule's `logdata` names the node the way the rule addressed it.
-    fn resolve_xml(&self, selection: &Option<Selection>) -> Vec<ResolvedValue<'a>> {
+    fn visit_xml<'s>(
+        &self,
+        selection: &Option<Selection>,
+        visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
         let Some(target) = XmlTarget::from_selection(selection.as_ref()) else {
             // An XPath expression this engine cannot express. Reported when the
             // rules load, so there is nothing to say per request.
-            return vec![];
+            return;
         };
 
         let request: &'a RequestData = self.request;
-        request
-            .args_post
-            .iter()
-            .filter_map(|(name, value)| {
-                let path = name.strip_prefix("xml.")?;
-                // An XML element name cannot begin with `@`, so `.@` only ever
-                // marks the attribute segment this processor appends.
-                let is_attribute = path.contains(".@");
-                let wanted = match target {
-                    XmlTarget::Elements => !is_attribute,
-                    XmlTarget::Attributes => is_attribute,
-                    XmlTarget::All => true,
-                };
-                if !wanted {
-                    return None;
-                }
-                Some((
+        for (name, value) in request.args_post.iter() {
+            let Some(path) = name.strip_prefix("xml.") else {
+                continue;
+            };
+            // An XML element name cannot begin with `@`, so `.@` only ever
+            // marks the attribute segment this processor appends.
+            let is_attribute = path.contains(".@");
+            let wanted = match target {
+                XmlTarget::Elements => !is_attribute,
+                XmlTarget::Attributes => is_attribute,
+                XmlTarget::All => true,
+            };
+            if wanted {
+                visit(
                     ResolvedName::member("XML", format!("/{}", path.replace('.', "/"))),
                     Cow::Borrowed(value),
-                ))
-            })
-            .collect()
-    }
-
-    fn resolve_collection_from_all_args<'s>(
-        &self,
-        selection: &'s Option<Selection>,
-    ) -> Vec<ResolvedValue<'s>>
-    where
-        'a: 's,
-    {
-        let request: &'a RequestData = self.request;
-        let mut result = Vec::new();
-        for collection in [&request.args_get, &request.args_post] {
-            self.resolve_collection_into(&mut result, collection, "ARGS", selection, false);
-        }
-        result
-    }
-
-    /// Resolve a `*_NAMES` collection: the values are the keys of the backing
-    /// collection(s), one entry per stored value (duplicates preserved,
-    /// matching ModSecurity).
-    fn resolve_collection_names<'s>(
-        &self,
-        collections: &[&'s HashMapCollection],
-        prefix: &'static str,
-        selection: &Option<Selection>,
-    ) -> Vec<ResolvedValue<'s>> {
-        let mut result = Vec::new();
-        for collection in collections {
-            for (key, _) in collection.iter() {
-                let selected = match selection {
-                    Some(Selection::Key(sel)) => key.eq_ignore_ascii_case(sel),
-                    Some(Selection::Regex(pattern)) => pattern.is_match(key),
-                    None => true,
-                };
-                if selected {
-                    result.push((ResolvedName::member(prefix, key), Cow::Borrowed(key)));
-                }
+                );
             }
         }
-        result
     }
+}
 
-    /// Resolve TX collection.
-    fn resolve_tx_collection<'s>(&self, selection: &'s Option<Selection>) -> Vec<ResolvedValue<'s>>
-    where
-        'a: 's,
-    {
-        let tx: &'a TxCollection = self.tx;
-        match selection {
-            Some(Selection::Key(key)) => keyed("TX", key, tx.values(key)).collect(),
-            Some(Selection::Regex(pattern)) => members("TX", tx.iter_regex(pattern)).collect(),
-            None => members("TX", tx.iter()).collect(),
+/// Visit a collection's selected values, straight from the collection.
+/// `lowercase_key` looks a key selection up case-insensitively (HTTP headers).
+fn visit_collection<'s>(
+    visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    collection: &'s HashMapCollection,
+    prefix: &'static str,
+    selection: &'s Option<Selection>,
+    lowercase_key: bool,
+) {
+    match selection {
+        Some(Selection::Key(key)) => {
+            let lookup = if lowercase_key && key.bytes().any(|b| b.is_ascii_uppercase()) {
+                Cow::Owned(key.to_ascii_lowercase())
+            } else {
+                Cow::Borrowed(key.as_str())
+            };
+            keyed(visit, prefix, key, collection.values(&lookup));
+        }
+        Some(Selection::Regex(pattern)) => members(visit, prefix, collection.iter_regex(pattern)),
+        None => members(visit, prefix, collection.iter()),
+    }
+}
+
+/// Visit a `*_NAMES` collection: the values are the keys of the backing
+/// collection(s), one entry per stored value (duplicates preserved,
+/// matching ModSecurity).
+fn visit_names<'s>(
+    visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    collections: &[&'s HashMapCollection],
+    prefix: &'static str,
+    selection: &Option<Selection>,
+) {
+    for collection in collections {
+        for (key, _) in collection.iter() {
+            let selected = match selection {
+                Some(Selection::Key(sel)) => key.eq_ignore_ascii_case(sel),
+                Some(Selection::Regex(pattern)) => pattern.is_match(key),
+                None => true,
+            };
+            if selected {
+                visit(ResolvedName::member(prefix, key), Cow::Borrowed(key));
+            }
         }
     }
 }
 
-/// Name every `(key, value)` of a collection as `PREFIX:key`.
+/// Visit every `(key, value)` of a collection, named `PREFIX:key`.
 fn members<'s>(
+    visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
     prefix: &'static str,
     entries: impl Iterator<Item = (&'s str, &'s str)>,
-) -> impl Iterator<Item = ResolvedValue<'s>> {
-    entries.map(move |(k, v)| (ResolvedName::member(prefix, k), Cow::Borrowed(v)))
+) {
+    for (k, v) in entries {
+        visit(ResolvedName::member(prefix, k), Cow::Borrowed(v));
+    }
 }
 
-/// Name every value a `PREFIX:key` selection found as the rule wrote the key.
+/// Visit every value a `PREFIX:key` selection found, named as the rule wrote
+/// the key.
 fn keyed<'s>(
+    visit: &mut impl FnMut(ResolvedName<'s>, Cow<'s, str>),
     prefix: &'static str,
     key: &'s str,
     values: &'s [String],
-) -> impl Iterator<Item = ResolvedValue<'s>> {
-    values
-        .iter()
-        .map(move |v| (ResolvedName::member(prefix, key), Cow::Borrowed(v.as_str())))
+) {
+    for v in values {
+        visit(ResolvedName::member(prefix, key), Cow::Borrowed(v.as_str()));
+    }
 }
 
 #[cfg(test)]

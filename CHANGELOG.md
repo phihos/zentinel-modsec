@@ -73,6 +73,11 @@ CRS conformance: 4,975 to 4,979 of 5,184 runnable cases.
   before testing them. Each target's values are tested from the list the
   resolver returned, which removes an allocation, its regrowth and a copy of
   every value for each rule evaluated. (#111)
+- Evaluating a rule no longer builds a list of each target's values. The
+  resolver hands every value to the rule as it finds it
+  (`VariableResolver::visit`), so a rule allocates nothing for the values it
+  only looks at, and an operand with macros is expanded only once a rule has
+  a value to test. (#116)
 
 ### API changes
 
