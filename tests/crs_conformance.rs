@@ -71,7 +71,8 @@ use zentinel_modsec::ModSecurity;
 /// 3 cases; 934100, 1).
 /// 4978: t:normalizePath keeps a back-reference it cannot resolve (930120
 /// `../.history`) and t:escapeSeqDecode decodes as v3 (932210, 2 cases).
-const MIN_PASSING: u32 = 4978;
+/// 4979: a macro expands any variable (920650's `%{ARGS._method}`, 1 case).
+const MIN_PASSING: u32 = 4979;
 
 /// Corpus stages that cannot be driven from here: an `encoded_request` payload,
 /// or an expectation that is not about rule IDs (`status`, `match_regex`).

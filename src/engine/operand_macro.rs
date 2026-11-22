@@ -18,12 +18,19 @@ pub(super) enum OperandMacro<'a> {
     MatchedVarName,
     /// `%{tx.<name>}`.
     Tx(&'a str),
-    /// A bare `%{<name>}`, expanded as `tx.<name>`. libmodsecurity reads it
-    /// as the variable of that name instead, which is not resolved here.
+    /// A bare `%{<name>}`: the variable of that name, as libmodsecurity reads
+    /// it (`%{REQUEST_METHOD}`), or else `tx.<name>`. A numeric operator with
+    /// a bare name that is no variable is left unable to match at load
+    /// ([`unresolvable`]): libmodsecurity would read a variable there, never
+    /// `tx.<name>`.
     Bare(&'a str),
     /// `%{request_headers.<name>}` (CRS 943110: `!@endsWith
     /// %{request_headers.host}`).
     RequestHeader(&'a str),
+    /// `%{<collection>.<key>}` of any other collection the engine resolves: that
+    /// member, as libmodsecurity expands any variable (CRS 920650:
+    /// `%{ARGS._method}`).
+    Member(&'a str, &'a str),
 }
 
 impl<'a> OperandMacro<'a> {
@@ -44,9 +51,15 @@ impl<'a> OperandMacro<'a> {
         } else if collection.eq_ignore_ascii_case("request_headers") {
             Some(Self::RequestHeader(name))
         } else {
-            None
+            resolved(collection).then_some(Self::Member(collection, name))
         }
     }
+}
+
+/// Whether `name` is a variable the engine resolves.
+fn resolved(name: &str) -> bool {
+    crate::parser::VariableName::from_str(&name.to_ascii_uppercase())
+        .is_some_and(|v| v.is_implemented())
 }
 
 /// Replace every macro in `arg` with what `resolve` returns for it. A macro
@@ -82,15 +95,15 @@ pub(super) fn expand(arg: &str, resolve: impl Fn(OperandMacro) -> String) -> Str
 
 /// The macros in `arg` whose value in libmodsecurity [`expand`] cannot
 /// produce, as written: one on a collection it leaves empty
-/// (`%{env.MAX_LEN}`), or a bare variable name (`%{REMOTE_PORT}`).
+/// (`%{env.MAX_LEN}`), or a bare name that is no variable it resolves.
 pub(super) fn unresolvable(arg: &str) -> impl Iterator<Item = &str> {
     PATTERN.captures_iter(arg).filter_map(|caps| {
         let (written, [inner]) = caps.extract();
-        matches!(
-            OperandMacro::parse(inner),
-            None | Some(OperandMacro::Bare(_))
-        )
-        .then_some(written)
+        match OperandMacro::parse(inner) {
+            None => Some(written),
+            Some(OperandMacro::Bare(name)) => (!resolved(name)).then_some(written),
+            Some(_) => None,
+        }
     })
 }
 
@@ -106,6 +119,7 @@ mod tests {
             OperandMacro::Tx(name) => format!("<tx:{name}>"),
             OperandMacro::Bare(name) => format!("<bare:{name}>"),
             OperandMacro::RequestHeader(name) => format!("<h:{name}>"),
+            OperandMacro::Member(collection, name) => format!("<{collection}:{name}>"),
         }
     }
 

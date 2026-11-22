@@ -22,7 +22,7 @@ The run prints the pass count, the files with the most failures, and the rule
 IDs most often missing or spurious:
 
 ```
-CRS regression corpus: 4978/5184 passing (96.0%), 41 skipped
+CRS regression corpus: 4979/5184 passing (96.0%), 41 skipped
 ```
 
 The test then asserts `pass == MIN_PASSING`. Both directions fail: a loss is a

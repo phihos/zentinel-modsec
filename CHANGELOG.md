@@ -9,7 +9,7 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
-CRS conformance: 4,975 to 4,978 of 5,184 runnable cases.
+CRS conformance: 4,975 to 4,979 of 5,184 runnable cases.
 
 ### Behavior changes
 
@@ -31,6 +31,15 @@ CRS conformance: 4,975 to 4,978 of 5,184 runnable cases.
     up to three octal digits; any other escaped byte becomes that byte, its
     backslash dropped; a lone trailing backslash stays. `\u` is not an
     escape there, as in v3. (#106)
+
+- **A `%{...}` macro expands any variable the engine resolves**, as
+  libmodsecurity does: a member of any collection (`%{ARGS._method}`, which
+  CRS 920650 compares with the request's method) and a bare variable name
+  (`%{REQUEST_METHOD}`, `%{REMOTE_PORT}`), in operator arguments and in
+  `msg`/`logdata`. Only TX, request headers and `MATCHED_VAR*` expanded; any
+  other collection was empty, and a bare name read TX. A bare name that is no
+  variable still reads TX outside numeric operators, and still leaves a
+  numeric operator unable to match, with its load-time warning. (#109)
 
 ### Added
 

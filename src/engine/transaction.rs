@@ -1103,12 +1103,17 @@ impl Transaction {
         Ok(RuleOutcome { matches })
     }
 
-    /// Expand `%{...}` macros in an operator argument against current TX state.
+    /// Expand `%{...}` macros in an operator argument, or a rule's message,
+    /// against the transaction as it is now.
     ///
-    /// Resolved: the `TX` collection (thresholds, `tx.allowed_methods`),
-    /// `REQUEST_HEADERS.<name>` and `MATCHED_VAR`/`MATCHED_VAR_NAME`. Anything
-    /// else expands to an empty string.
+    /// Any variable expands, as in libmodsecurity: `MATCHED_VAR` and
+    /// `MATCHED_VAR_NAME`, the `TX` collection (thresholds,
+    /// `tx.allowed_methods`), `REQUEST_HEADERS.<name>`, a member of any other
+    /// collection (CRS 920650 compares REQUEST_METHOD with `%{ARGS._method}`)
+    /// and a bare variable name (`%{REQUEST_METHOD}`), else a TX key of that
+    /// name. A variable this engine does not resolve expands to nothing.
     fn expand_operator_macros(&self, arg: &str) -> String {
+        let tx = |name: &str| self.tx.values(name).first().cloned().unwrap_or_default();
         operand_macro::expand(arg, |operand| match operand {
             OperandMacro::MatchedVar => self
                 .matched_vars
@@ -1120,9 +1125,10 @@ impl Transaction {
                 .last()
                 .map(|(n, _)| n.clone())
                 .unwrap_or_default(),
-            OperandMacro::Tx(name) | OperandMacro::Bare(name) => {
-                self.tx.values(name).first().cloned().unwrap_or_default()
-            }
+            OperandMacro::Tx(name) => tx(name),
+            OperandMacro::Bare(name) => self
+                .macro_variable(&name.to_ascii_uppercase())
+                .unwrap_or_else(|| tx(name)),
             OperandMacro::RequestHeader(name) => self
                 .request
                 .headers
@@ -1130,7 +1136,36 @@ impl Transaction {
                 .first()
                 .cloned()
                 .unwrap_or_default(),
+            OperandMacro::Member(collection, name) => self
+                .macro_variable(&format!("{}:{}", collection.to_ascii_uppercase(), name))
+                .unwrap_or_default(),
         })
+    }
+
+    /// The first value of a variable written as a rule target (`ARGS:_method`,
+    /// `REQUEST_METHOD`), for a macro. `None` when the name is not a variable
+    /// this engine resolves.
+    fn macro_variable(&self, target: &str) -> Option<String> {
+        let spec = crate::parser::parse_single_variable(target).ok()?;
+        if !spec.name.is_implemented() {
+            return None;
+        }
+        let resolver = VariableResolver::new(
+            &self.request,
+            &self.response,
+            &self.tx,
+            self.matched_vars.last().map(|(_, value)| value.as_str()),
+            &self.matched_vars,
+            &self.captures,
+        );
+        Some(
+            resolver
+                .resolve(&spec)
+                .into_iter()
+                .next()
+                .map(|(_, v)| v)
+                .unwrap_or_default(),
+        )
     }
 
     /// Publish the captures of a `capture` rule as `TX:0`..`TX:9`.

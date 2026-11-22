@@ -40,7 +40,7 @@ closed). A new divergence gets a row in the change that introduces it.
 | Regex key selections (`ARGS:/.../`, `TX:/.../`, `!ARGS:/.../`) | Compiled once with the rule (`KeyRegex`, `src/variables/key_regex.rs`): caseless, Unicode off, matched against the key's bytes, so only ASCII letters fold, and CRS 922110's `TX:/MULTIPART_HEADERS_CONTENT_TYPES_*/` finds the lowercased TX keys 922150 sets. | Built case-insensitively (`VariableRegex`, `KeyExclusionRegex` in `src/variables/variable.h` pass `ignoreCase`), compiled without PCRE's UTF flag, so only ASCII letters fold (`src/utils/regex.cc`). | Matches |
 | `REQUEST_LINE` | Always built as `METHOD URI PROTOCOL`. An HTTP/0.9 line (`GET /`, no protocol) is never produced, so CRS 905100 is inert. 905110 works. | Built from the request as received. | Gap, low impact |
 | Persistent collections (`IP`, `SESSION`, `USER`, `GLOBAL`, `RESOURCE`) | Not implemented. A `setvar` into one is removed when the rules load, with one warning per collection (since #78). | Persistent, stored across transactions. | Gap |
-| `%{...}` on collections other than TX and `REQUEST_HEADERS` (`ENV`, `IP`, ...) | Not resolved in operator arguments (`MATCHED_VAR` and `MATCHED_VAR_NAME` are); expands to an empty string. In a numeric operator the rule never matches, with a load warning (#80). | Resolved. | Gap |
+| `%{...}` on collections this engine does not resolve (`ENV`, `IP`, ...) | Expands to an empty string; in a numeric operator the rule never matches, with a load warning (#80). A member of any collection it resolves (`%{ARGS._method}`) expands, as in v3. | Resolved. | Gap |
 | `XML:` targets | No XPath. `XML:/*` and `XML://@*` resolve against the flattened body; other expressions are reported at load. | XPath via libxml2. | Gap |
 | Capture slots `TX:0`..`TX:9` | All ten are cleared before a capturing match stores its groups (`store_captures` in `src/engine/transaction.rs`). | Each capture is stored on its own and nothing is removed (`operators/rx.cc`), so a stale higher slot can survive. | Deliberate |
 
@@ -48,7 +48,7 @@ closed). A new divergence gets a row in the change that introduces it.
 
 | Area | This engine | ModSecurity v3 | Kind |
 |---|---|---|---|
-| Bare `%{NAME}` in an operator argument | Looked up as `TX:NAME` (`OperandMacro::parse` in `src/engine/operand_macro.rs`). `@gt %{REMOTE_PORT}` compares against a missing TX member, which is 0. | A bare name is a variable (`REMOTE_PORT`), never TX. Follow-up to #80: treat bare names other than `MATCHED_VAR` and `MATCHED_VAR_NAME` as unresolvable in the numeric-operand load check. | Gap |
+| Bare `%{NAME}` in an operator argument | A variable this engine resolves is read as that variable (`%{REQUEST_METHOD}`, `%{REMOTE_PORT}`), as in v3. A name that is no variable is looked up as `TX:NAME`; in a numeric operator it never matches, with a load warning (#87). | A bare name is a variable, never TX. | Deliberate (the `TX:NAME` fallback for a name that is no variable) |
 | Numeric operand macro on an unresolvable collection | Rule never matches; one load warning per macro with a count (#80). | Resolves the macro. | Deliberate fallback for a gap |
 | Mixed macro operand (`@gt %{tx.a}%{env.b}`) | Treated as unresolvable as a whole. | Resolves both. | Deliberate |
 | Numeric operator width | 64-bit, saturating (`leading_integer` in `src/operators/comparison.rs`). | `atoll` for `@gt`/`@lt`/`@ge`/`@le`; `stoi` (32-bit, 0 on overflow) for `@eq`. | Deliberate |

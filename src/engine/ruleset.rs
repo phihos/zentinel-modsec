@@ -782,8 +782,9 @@ fn compile_operator_reporting(
 /// against a limit of 0 and match every non-empty value. The rule is left
 /// unable to match instead, and [`report_unresolvable_operands`] says so.
 ///
-/// A bare `%{REMOTE_PORT}` is the same case: libmodsecurity reads the
-/// variable, never `tx.REMOTE_PORT`.
+/// A bare name that is no variable the engine resolves is the same case:
+/// libmodsecurity reads the variable of that name. One it resolves
+/// (`%{REMOTE_PORT}`) is read as libmodsecurity reads it.
 ///
 /// A macro that can be resolved but has no value (`%{tx.unset}`) is not this
 /// case: it is 0 in libmodsecurity too.
