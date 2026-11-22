@@ -16,8 +16,8 @@ use crate::error::Result;
 use crate::operators::{compile_operator, Operator};
 use crate::parser::{Action, ControlAction, DataAction, OperatorSpec, VariableName};
 use crate::variables::{
-    Collection, MutableCollection, RequestData, ResolvedName, ResolvedValue, ResponseData,
-    TxCollection, VariableResolver,
+    Collection, MutableCollection, RequestData, ResolvedName, ResponseData, TxCollection,
+    VariableResolver,
 };
 
 /// Whether a lowercased Content-Type denotes a JSON body.
@@ -104,14 +104,6 @@ impl fmt::Display for TargetName<'_> {
             Self::Count(variable) => write!(f, "&{variable:?}"),
         }
     }
-}
-
-/// What one target of a rule resolved to, in the order the rule lists them.
-enum Target<'a> {
-    /// The values of a variable or collection; never empty.
-    Values(Vec<ResolvedValue<'a>>),
-    /// A `&VARIABLE` target: the variable and how many values it has.
-    Count(VariableName, usize),
 }
 
 /// One variable value a rule's operator matched.
@@ -905,101 +897,26 @@ impl Transaction {
             &self.captures,
         );
 
-        // Resolve variables from all specs.
-        //
-        // A spec in count mode (`&VAR`) contributes the *number* of matching
-        // values as a single value — 0 when the variable is absent — rather than
-        // the values themselves. This matches ModSecurity's `&VARIABLE` semantics
-        // and is what CRS's `SecRule &TX:x "@eq 0"` initialization relies on.
-        // Emitting a value even for an absent count also keeps the spec out of
-        // the "resolved to nothing" early-return below, so `&x "@eq 0"` matches.
-        // ctl:ruleRemoveTargetById and ctl:ruleRemoveTargetByTag drop
-        // individual targets from this rule for this transaction. Both checks
-        // are hoisted so rules with no exclusion -- effectively all of them --
-        // pay one comparison rather than a scan per variable.
-        let filter_by_id = self.controls.has_target_removals(rule.id.as_deref());
-        let filter_by_tag = self.controls.has_tag_target_removals(rule.tags());
-        let filter_targets = filter_by_id || filter_by_tag;
-
-        // What each target resolved to, kept as the resolver returned it:
-        // one entry per target that has something to test, so the list is
-        // sized once and no value is copied into it.
-        let mut targets: Vec<Target<'_>> = Vec::new();
-        let mut any_excluded = false;
-        for spec in &rule.variables {
-            let mut resolved = resolver.resolve_borrowed(spec);
-            if filter_targets {
-                let before = resolved.len();
-                resolved.retain(|(name, _)| {
-                    // Rendered only for a rule a `ctl:` target exclusion names.
-                    let name = &name.to_string();
-                    let removed_by_id = filter_by_id
-                        && self
-                            .controls
-                            .is_target_removed(rule.id.as_deref(), spec, name);
-                    let removed_by_tag = filter_by_tag
-                        && self
-                            .controls
-                            .is_target_removed_by_tag(rule.tags(), spec, name);
-                    !removed_by_id && !removed_by_tag
-                });
-                any_excluded |= resolved.len() != before;
-            }
-            let target = if spec.count_mode {
-                // An exclusion reduces the count, which is what a rule like
-                // `SecRule &ARGS:x "@eq 0"` is asking about.
-                Target::Count(spec.name, resolved.len())
-            } else if resolved.is_empty() {
-                continue;
+        // A rule with no variable specs at all (i.e. SecAction) runs its
+        // operator unconditionally — this is how CRS sets up TX thresholds.
+        if rule.variables.is_empty() {
+            let result = rule.operator.execute("");
+            let matched = if rule.operator_negated {
+                !result.matched
             } else {
-                Target::Values(resolved)
+                result.matched
             };
-            if targets.capacity() == 0 {
-                targets.reserve_exact(rule.variables.len());
+            // A SecAction has no variable, so there is nothing to report
+            // as the match target.
+            if !matched {
+                return Ok(RuleOutcome::no_match());
             }
-            targets.push(target);
-        }
-
-        // Exclusions removed everything this rule had to test. Return before
-        // the branch below: a rule stripped down to nothing is not the same as
-        // a SecAction with no targets, and running the operator unconditionally
-        // could match.
-        if any_excluded && targets.is_empty() {
-            return Ok(RuleOutcome::no_match());
-        }
-
-        if targets.is_empty() {
-            // A rule with no variable specs at all (i.e. SecAction) runs its
-            // operator unconditionally — this is how CRS sets up TX thresholds.
-            if rule.variables.is_empty() {
-                let result = rule.operator.execute("");
-                let matched = if rule.operator_negated {
-                    !result.matched
-                } else {
-                    result.matched
-                };
-                // A SecAction has no variable, so there is nothing to report
-                // as the match target.
-                if !matched {
-                    return Ok(RuleOutcome::no_match());
-                }
-                return Ok(RuleOutcome {
-                    matches: vec![RuleMatch {
-                        captures: result.captures,
-                        matched_variable: None,
-                    }],
-                });
-            }
-            // Variables were specified but resolved to nothing (e.g. absent
-            // header). ModSecurity does not run the operator when there is no
-            // value to run it against, so the rule does not match -- including
-            // when the operator is negated. Reporting a negated operator as a
-            // match here inverts "this variable is absent" into "every request
-            // matches", which is how an unimplemented variable turned CRS
-            // 920100 (`REQUEST_LINE "!@rx ..."`) into a rule that denied all
-            // traffic. Absence is tested with `&VAR "@eq 0"`, which resolves to
-            // a count and so never reaches this branch.
-            return Ok(RuleOutcome::no_match());
+            return Ok(RuleOutcome {
+                matches: vec![RuleMatch {
+                    captures: result.captures,
+                    matched_variable: None,
+                }],
+            });
         }
 
         // If the operator argument references runtime macros (e.g.
@@ -1007,43 +924,60 @@ impl Transaction {
         // current TX state and recompile the operator so the comparison runs
         // against the resolved value. Otherwise use the precompiled operator,
         // which for an operand the engine cannot resolve is one that never
-        // matches.
-        let dynamic_operator;
-        let operator: &dyn Operator = if !rule.operand_unresolvable && rule.operand_has_macro {
-            let expanded = self.expand_operator_macros(&rule.operator_spec.argument);
-            match compile_operator(&OperatorSpec {
-                negated: rule.operator_spec.negated,
-                name: rule.operator_spec.name,
-                argument: expanded,
-            }) {
-                Ok(compiled) => {
-                    dynamic_operator = compiled;
-                    dynamic_operator.as_ref()
-                }
-                // An expanded argument can come from the request
-                // (`@rx %{request_headers.x}`), so it may not compile.
-                // ModSecurity v3 treats that as neither a match nor a
-                // mismatch: the rule does not fire, negated or not, and
-                // evaluation goes on (operators/rx.cc,
-                // owasp-modsecurity/ModSecurity#3123). Returning the error
-                // instead would end the phase, and the rules after this one,
-                // the blocking evaluation among them, would never run.
-                Err(err) => {
-                    tracing::debug!(
-                        rule_id = rule.id.as_deref().unwrap_or("-"),
-                        error = %err,
-                        "expanded operator argument does not compile; the rule does not match"
-                    );
-                    return Ok(RuleOutcome::no_match());
-                }
-            }
-        } else {
-            rule.operator.as_ref()
-        };
+        // matches. The expansion waits for the first value: a rule whose
+        // targets resolve to nothing never runs its operator.
+        let expands_operand = !rule.operand_unresolvable && rule.operand_has_macro;
+        let mut dynamic_operator: Option<Option<Arc<dyn Operator>>> = None;
 
-        // Apply transformations and match every value
+        // Apply transformations and match every value, as the resolver
+        // produces it: no target's values are gathered first.
+        //
+        // Variables that resolve to nothing (e.g. an absent header) leave
+        // nothing to test. ModSecurity does not run the operator when there
+        // is no value to run it against, so the rule does not match --
+        // including when the operator is negated. Reporting a negated
+        // operator as a match there inverts "this variable is absent" into
+        // "every request matches", which is how an unimplemented variable
+        // turned CRS 920100 (`REQUEST_LINE "!@rx ..."`) into a rule that
+        // denied all traffic. Absence is tested with `&VAR "@eq 0"`, which
+        // always has a value, the count. The same holds for a rule whose
+        // targets `ctl:` exclusions removed entirely.
         let mut matches = Vec::new();
         let mut test = |name: TargetName<'_>, value: Cow<'_, str>| {
+            let operator: &dyn Operator = if expands_operand {
+                let compiled = dynamic_operator.get_or_insert_with(|| {
+                    let expanded = self.expand_operator_macros(&rule.operator_spec.argument);
+                    compile_operator(&OperatorSpec {
+                        negated: rule.operator_spec.negated,
+                        name: rule.operator_spec.name,
+                        argument: expanded,
+                    })
+                    // An expanded argument can come from the request
+                    // (`@rx %{request_headers.x}`), so it may not compile.
+                    // ModSecurity v3 treats that as neither a match nor a
+                    // mismatch: the rule does not fire, negated or not, and
+                    // evaluation goes on (operators/rx.cc,
+                    // owasp-modsecurity/ModSecurity#3123). Returning the
+                    // error instead would end the phase, and the rules after
+                    // this one, the blocking evaluation among them, would
+                    // never run.
+                    .map_err(|err| {
+                        tracing::debug!(
+                            rule_id = rule.id.as_deref().unwrap_or("-"),
+                            error = %err,
+                            "expanded operator argument does not compile; the rule does not match"
+                        );
+                    })
+                    .ok()
+                });
+                match compiled.as_deref() {
+                    Some(operator) => operator,
+                    None => return,
+                }
+            } else {
+                rule.operator.as_ref()
+            };
+
             // multiMatch: the operator at every stage of the pipeline, the
             // first stage that matches being the match (CRS 930110 finds
             // `..\` before t:cmdLine deletes the backslash)
@@ -1087,16 +1021,49 @@ impl Transaction {
                 });
             }
         };
-        for target in targets {
-            match target {
-                Target::Values(values) => {
-                    for (name, value) in values {
-                        test(TargetName::Value(name), value);
+
+        // A spec in count mode (`&VAR`) contributes the *number* of matching
+        // values as a single value — 0 when the variable is absent — rather
+        // than the values themselves. This matches ModSecurity's `&VARIABLE`
+        // semantics and is what CRS's `SecRule &TX:x "@eq 0"` initialization
+        // relies on.
+        //
+        // ctl:ruleRemoveTargetById and ctl:ruleRemoveTargetByTag drop
+        // individual targets from this rule for this transaction. Both checks
+        // are hoisted so rules with no exclusion -- effectively all of them --
+        // pay one comparison rather than a scan per variable.
+        let filter_by_id = self.controls.has_target_removals(rule.id.as_deref());
+        let filter_by_tag = self.controls.has_tag_target_removals(rule.tags());
+        let filter_targets = filter_by_id || filter_by_tag;
+
+        for spec in &rule.variables {
+            // An exclusion reduces the count, which is what a rule like
+            // `SecRule &ARGS:x "@eq 0"` is asking about.
+            let mut count = 0usize;
+            resolver.visit(spec, |name, value| {
+                if filter_targets {
+                    // Rendered only for a rule a `ctl:` target exclusion names.
+                    let name = &name.to_string();
+                    let removed_by_id = filter_by_id
+                        && self
+                            .controls
+                            .is_target_removed(rule.id.as_deref(), spec, name);
+                    let removed_by_tag = filter_by_tag
+                        && self
+                            .controls
+                            .is_target_removed_by_tag(rule.tags(), spec, name);
+                    if removed_by_id || removed_by_tag {
+                        return;
                     }
                 }
-                Target::Count(variable, count) => {
-                    test(TargetName::Count(variable), Cow::Owned(count.to_string()));
+                if spec.count_mode {
+                    count += 1;
+                } else {
+                    test(TargetName::Value(name), value);
                 }
+            });
+            if spec.count_mode {
+                test(TargetName::Count(spec.name), Cow::Owned(count.to_string()));
             }
         }
 

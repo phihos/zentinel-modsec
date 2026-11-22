@@ -4,9 +4,9 @@
 //! to nothing contributes nothing. `ctl:ruleRemoveTargetById` drops values
 //! before they are counted or tested.
 //!
-//! Rule evaluation keeps what each target resolved to rather than copying the
-//! values into one list; these tests pin the order and the edge cases that
-//! must not move with it. `setvar` runs once per match
+//! Rule evaluation tests each value as the resolver produces it rather than
+//! gathering the values first; these tests pin the order and the edge cases
+//! that must not move with it. `setvar` runs once per match
 //! (`rule_with_operator.cc`), so appending `MATCHED_VAR_NAME` to a TX
 //! variable records every value the operator matched, in order.
 
@@ -83,4 +83,72 @@ fn a_rule_whose_targets_are_all_removed_does_not_match() {
     ));
     assert_eq!(order(&tx), "start");
     assert_eq!(tx.matched_rules(), ["1", "2"]);
+}
+
+#[test]
+fn an_exclusion_applies_to_every_target_of_its_collection() {
+    let tx = run(&format!(
+        "SecRule ARGS|!ARGS:a|ARGS:/^[ab]$/|ARGS_NAMES|&ARGS|REQUEST_HEADERS:HOST \
+         \"@rx .\" \"id:2,phase:1,pass,{RECORD}\""
+    ));
+    assert_eq!(
+        order(&tx),
+        "start ARGS:b=2 ARGS:b=2 ARGS_NAMES:a=a ARGS_NAMES:b=b &Args=1 \
+         REQUEST_HEADERS:HOST=example.com"
+    );
+}
+
+#[test]
+fn multi_match_reports_the_first_matching_stage_of_each_value() {
+    let tx = run(&format!(
+        "SecRule ARGS_NAMES|REQUEST_METHOD \"@rx ^(?:A|get)$\" \
+         \"id:2,phase:1,pass,t:none,t:uppercase,t:lowercase,multiMatch,{RECORD}\""
+    ));
+    assert_eq!(order(&tx), "start ARGS_NAMES:a=A REQUEST_METHOD=get");
+}
+
+#[test]
+fn capture_and_matched_var_hold_the_last_match() {
+    let tx = run(&format!(
+        "SecRule ARGS|REQUEST_METHOD \"@rx ^(.)\" \"id:2,phase:1,pass,capture,{RECORD}\"\n\
+         SecRule MATCHED_VAR|MATCHED_VAR_NAME|TX:1 \"@rx .\" \"id:3,phase:1,pass,{RECORD}\""
+    ));
+    assert_eq!(
+        order(&tx),
+        "start ARGS:a=1 ARGS:b=2 REQUEST_METHOD=GET \
+         MATCHED_VAR=GET MATCHED_VAR_NAME=REQUEST_METHOD TX:1=G"
+    );
+}
+
+#[test]
+fn a_chain_link_tests_what_the_starter_matched() {
+    let tx = run(&format!(
+        "SecRule ARGS \"@rx .\" \"id:2,phase:1,pass,chain\"\n\
+         SecRule MATCHED_VARS|&MATCHED_VARS_NAMES \"@rx ^2$\" \"{RECORD}\""
+    ));
+    assert_eq!(
+        order(&tx),
+        "start MATCHED_VARS:ARGS:b=2 &MatchedVarsNames=2"
+    );
+}
+
+#[test]
+fn an_operand_macro_is_expanded_for_every_value() {
+    let tx = run(&format!(
+        "SecAction \"id:2,phase:1,pass,nolog,setvar:tx.want=2\"\n\
+         SecRule ARGS|&ARGS|REQUEST_HEADERS:X-Absent \"@streq %{{tx.want}}\" \"id:3,phase:1,pass,{RECORD}\""
+    ));
+    assert_eq!(order(&tx), "start ARGS:b=2 &Args=2");
+}
+
+#[test]
+fn an_expanded_operand_that_does_not_compile_matches_nothing() {
+    let tx = run(&format!(
+        "SecAction \"id:2,phase:1,pass,nolog,setvar:'tx.bad=('\"\n\
+         SecRule ARGS|&ARGS \"!@rx %{{tx.bad}}\" \"id:3,phase:1,pass,{RECORD}\"\n\
+         SecRule REQUEST_HEADERS:X-Absent \"!@rx %{{tx.bad}}\" \"id:4,phase:1,pass,{RECORD}\"\n\
+         SecRule REQUEST_METHOD \"@rx .\" \"id:5,phase:1,pass,{RECORD}\""
+    ));
+    assert_eq!(order(&tx), "start REQUEST_METHOD=GET");
+    assert_eq!(tx.matched_rules(), ["1", "2", "5"]);
 }
