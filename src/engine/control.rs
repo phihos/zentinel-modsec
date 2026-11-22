@@ -429,6 +429,31 @@ impl TransactionControls {
         })
     }
 
+    /// Whether a target exclusion of this rule, by id or by tag, names the
+    /// variable of `var`.
+    ///
+    /// Only such an exclusion can take a value from that target, so this is
+    /// asked once per target before any of its values is named. CRS 941010
+    /// excludes `REQUEST_FILENAME` from a whole class of rules on almost every
+    /// request; their other targets have nothing to compare.
+    pub(crate) fn removes_from_variable<'a, T>(
+        &self,
+        rule_id: Option<&str>,
+        rule_tags: T,
+        var: &VariableSpec,
+    ) -> bool
+    where
+        T: IntoIterator<Item = &'a str> + Clone,
+    {
+        self.removed_targets
+            .iter()
+            .any(|(r, target)| target.name == var.name && Some(r.as_str()) == rule_id)
+            || self
+                .removed_targets_by_tag
+                .iter()
+                .any(|(tag, _, target)| target.name == var.name && has_tag(rule_tags.clone(), tag))
+    }
+
     /// Whether any target exclusion applies to this rule.
     ///
     /// Checked before the per-variable filter so the common case -- no

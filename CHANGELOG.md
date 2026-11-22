@@ -18,6 +18,12 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   necessary condition read off the parsed pattern, so no result changes. A
   pattern that passes validation but cannot be built is now reported at the
   first value that reaches the regex. (#119)
+- A `ctl:ruleRemoveTargetById` or `ctl:ruleRemoveTargetByTag` exclusion no
+  longer makes a rule render the name of every value it inspects. The names
+  are compared only for a target whose variable an exclusion names. CRS
+  941010 excludes `REQUEST_FILENAME` from the rules tagged
+  `xss-perf-disable` on almost every request, so those rules paid for a name
+  per argument, cookie and header value without anything to compare. (#120)
 
 ## [0.12.0] - 2026-11-22
 
