@@ -36,6 +36,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#117](https://github.com/zentinelproxy/zentinel-modsec/pull/117) | Record a match without copying its variable and value. Merged. |
 | [#119](https://github.com/zentinelproxy/zentinel-modsec/pull/119) | Rule a value out before running a regex it cannot match. Merged. |
 | [#120](https://github.com/zentinelproxy/zentinel-modsec/pull/120) | Name a target's values for a ctl removal only when one names its variable. Merged. |
+| [#121](https://github.com/zentinelproxy/zentinel-modsec/pull/121) | Prepare what the leading rules of phase 1 leave behind at load. |
 
 ## Queued on the fork
 
