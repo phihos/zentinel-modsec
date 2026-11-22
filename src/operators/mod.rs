@@ -4,6 +4,7 @@ mod comparison;
 mod detection;
 mod network;
 mod pattern;
+mod requirements;
 mod traits;
 mod validation;
 
