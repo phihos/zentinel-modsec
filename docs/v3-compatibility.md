@@ -59,6 +59,13 @@ closed). A new divergence gets a row in the change that introduces it.
 | `@detectSQLi` | Pure Rust port of libinjection v4.0.2 (`src/libinjection/sqli.rs`), with the same verdict and fingerprint (#84). Assumes signed `char`, as on x86-64. | C libinjection v4.0.2 (the `others/libinjection` submodule on `v3/master`), through `libinjection_sqli` (`operators/detect_sqli.cc`). | Matches |
 | `@detectXSS` | Pure Rust port of libinjection v4.0.2 (`src/libinjection/xss.rs`, with its HTML5 tokenizer in `html5.rs`), with the same verdict. libinjection has no XSS fingerprint, so the match (`TX:0` with `capture`) is the whole input, as v3 stores it. | C libinjection v4.0.2, `libinjection_xss` (`operators/detect_xss.cc`). | Matches |
 
+### Transformations
+
+| Area | This engine | ModSecurity v3 | Kind |
+|---|---|---|---|
+| A byte a decoder produces that is not UTF-8 (`t:escapeSeqDecode` `\xff` or `\377`, `t:urlDecode` `%ff`) | Becomes U+FFFD: values are UTF-8 strings. | Kept as the raw byte (`std::string`). | Gap |
+| `t:normalizePath` / `t:normalizePathWin` on a path ending in a back-reference (`/a/b/..`), under `multiMatch` | The value is normalized as in v3 (`/a`), and it counts as a change: the operator runs on it as a stage. | `normalize_path_inplace` leaves `changed` unset there (`if (done) goto skip_copy;` in `normalise_path.cc`), so the value is normalized but adds no `multiMatch` stage. | Deliberate |
+
 ### Actions and `ctl:`
 
 | Area | This engine | ModSecurity v3 | Kind |

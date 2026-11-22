@@ -238,7 +238,7 @@ naming the rule IDs that must, or must not, appear in the log for a request.
 | | |
 |---|---|
 | Corpus | CRS `main` (4.31.0-dev), pinned commit in `.github/workflows/ci.yml` |
-| Passing | **4,975 of 5,184 runnable cases (96.0%)** (`MIN_PASSING`) |
+| Passing | **4,978 of 5,184 runnable cases (96.0%)** (`MIN_PASSING`) |
 
 ```bash
 mkdir -p test-rules
@@ -282,6 +282,7 @@ substitutes for the other.
 | Regex key selections compare keys case-insensitively, as in v3, 0.8.0 ([#83](https://github.com/zentinelproxy/zentinel-modsec/pull/83)) | 4,969 |
 | `@detectXSS` ported from libinjection rather than approximated | 4,971 |
 | `multiMatch` runs the operator at every transformation stage | 4,975 |
+| `t:normalizePath`, `t:normalizePathWin` and `t:escapeSeqDecode` ported from v3 | 4,978 |
 
 Two of those were bypasses: the `+` encoding and the missing `=` each let a
 payload reach the application while the engine inspected nothing.

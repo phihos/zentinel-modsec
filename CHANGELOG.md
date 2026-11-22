@@ -9,12 +9,28 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+CRS conformance: 4,975 to 4,978 of 5,184 runnable cases.
+
 ### Behavior changes
 
 - **An intervention's `msg` and `logdata` have their macros expanded** at
   the match, as ModSecurity logs them: `Inbound Anomaly Score Exceeded (Total
   Score: %{TX.BLOCKING_INBOUND_ANOMALY_SCORE})` reads with its score.
   `nolog` is recorded (`RuleMetadata::nolog`). (#108)
+
+- **`t:normalizePath`, `t:normalizePathWin` and `t:escapeSeqDecode` are
+  libmodsecurity v3's** (`normalise_path.cc`, `escape_seq_decode.cc`), ported
+  step for step on bytes:
+  - A relative path keeps the back-references it cannot resolve:
+    `../.history` stays as it is, where it lost its `../`.
+  - A path ending on a back-reference is normalized as v3 leaves it:
+    `/a/b/..` is `/a`, and `/foo/..` and `a/..` are empty.
+  - Only `normalizePathWin` treats a backslash as a separator;
+    `normalizePath` leaves `a\b\c` as it is.
+  - `escapeSeqDecode` decodes `\a \b \f \n \r \t \v \\ \? \' \"`, `\xHH` and
+    up to three octal digits; any other escaped byte becomes that byte, its
+    backslash dropped; a lone trailing backslash stays. `\u` is not an
+    escape there, as in v3. (#106)
 
 ### Added
 

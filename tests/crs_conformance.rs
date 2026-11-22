@@ -69,7 +69,9 @@ use zentinel_modsec::ModSecurity;
 /// 4971: `@detectXSS` ported from libinjection (941100 tests 2 and 3).
 /// 4975: multiMatch runs the operator at every transformation stage (930110,
 /// 3 cases; 934100, 1).
-const MIN_PASSING: u32 = 4975;
+/// 4978: t:normalizePath keeps a back-reference it cannot resolve (930120
+/// `../.history`) and t:escapeSeqDecode decodes as v3 (932210, 2 cases).
+const MIN_PASSING: u32 = 4978;
 
 /// Corpus stages that cannot be driven from here: an `encoded_request` payload,
 /// or an expectation that is not about rule IDs (`status`, `match_regex`).
