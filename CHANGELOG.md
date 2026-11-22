@@ -78,6 +78,12 @@ CRS conformance: 4,975 to 4,979 of 5,184 runnable cases.
   (`VariableResolver::visit`), so a rule allocates nothing for the values it
   only looks at, and an operand with macros is expanded only once a rule has
   a value to test. (#116)
+- A match is recorded with fewer copies. The variable and value a rule
+  matched on are moved into `MATCHED_VARS` and from there into the rule's
+  `matched_data()` entry when the next match replaces them, where each was
+  copied twice before; a rule matching on one value no longer allocates a
+  list for it; and a rule's message is built once, not copied from a copy of
+  its metadata. (#117)
 
 ### API changes
 
