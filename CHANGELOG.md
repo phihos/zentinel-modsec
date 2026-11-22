@@ -24,6 +24,15 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   941010 excludes `REQUEST_FILENAME` from the rules tagged
   `xss-perf-disable` on almost every request, so those rules paid for a name
   per argument, cookie and header value without anything to compare. (#120)
+- The rules phase 1 starts with are run once, when the ruleset loads, for as
+  long as they read only `TX`: CRS opens with `SecAction`s and
+  `SecRule &TX:x "@eq 0"` defaults, 25 rules before the first that reads
+  the request. A transaction takes over what they leave behind (the `TX`
+  variables, matched rules, matched data and messages) and goes on with the
+  rule after them. The rules are run by the interpreter that runs them for a
+  request, so no result changes. A transaction whose `TX` the caller took
+  with `tx_mut()` before phase 1, or that records `setvar` effects, runs
+  them itself as before. (#121)
 
 ## [0.12.0] - 2026-11-22
 
