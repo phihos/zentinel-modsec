@@ -37,6 +37,7 @@
 | [#121](https://github.com/zentinelproxy/zentinel-modsec/pull/121) | Prepare what the leading rules of phase 1 leave behind at load. Merged. |
 | [#124](https://github.com/zentinelproxy/zentinel-modsec/pull/124) | Answer the status a denying rule names. Merged. |
 | [#126](https://github.com/zentinelproxy/zentinel-modsec/pull/126) | Share the prepared TX variables between transactions. Merged. |
+| [#127](https://github.com/zentinelproxy/zentinel-modsec/pull/127) | Prepare the keys of TX and REQUEST_HEADERS targets at load. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 

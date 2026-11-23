@@ -39,6 +39,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#121](https://github.com/zentinelproxy/zentinel-modsec/pull/121) | Prepare what the leading rules of phase 1 leave behind at load. Merged. |
 | [#124](https://github.com/zentinelproxy/zentinel-modsec/pull/124) | Answer the status a denying rule names. Merged. |
 | [#126](https://github.com/zentinelproxy/zentinel-modsec/pull/126) | Share the prepared TX variables between transactions. Merged. |
+| [#127](https://github.com/zentinelproxy/zentinel-modsec/pull/127) | Prepare the keys of TX and REQUEST_HEADERS targets at load. |
 
 ## Queued on the fork
 
