@@ -12,7 +12,7 @@ use crate::transformations::TransformationPipeline;
 
 use super::operand_macro;
 use super::phase::Phase;
-use super::plan::RulePlan;
+use super::plan::{ControlTags, RulePlan};
 use super::transaction::InitialState;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
@@ -405,6 +405,10 @@ impl CompiledRuleset {
                 InitialState::prepare(ruleset.rules.for_phase(Phase::RequestHeaders));
         }
         let initial_tx = ruleset.initial_state.as_ref().map(InitialState::tx);
+        let mut tags = ControlTags::default();
+        for rule in ruleset.rules.by_phase.values().flatten() {
+            tags.note(rule);
+        }
         ruleset.plans = ruleset
             .rules
             .by_phase
@@ -412,7 +416,7 @@ impl CompiledRuleset {
             .map(|(phase, rules)| {
                 let plans = rules
                     .iter()
-                    .map(|rule| RulePlan::prepare(rule, initial_tx))
+                    .map(|rule| RulePlan::prepare(rule, initial_tx, &tags))
                     .collect();
                 (*phase, plans)
             })

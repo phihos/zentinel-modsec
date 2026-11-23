@@ -4,6 +4,7 @@
 //! position. A target a plan says nothing about is resolved from its parsed
 //! form, as every target is when a rule runs without a plan.
 
+use super::control::CtlDirective;
 use super::ruleset::CompiledRule;
 use crate::parser::{Selection, VariableName, VariableSpec};
 use crate::variables::TxCollection;
@@ -22,13 +23,46 @@ pub(super) enum TargetPlan {
 /// The plan of one rule.
 pub(super) struct RulePlan {
     targets: Vec<TargetPlan>,
+    /// Whether a `ctl:ruleRemoveByTag` of the ruleset names a tag of this rule.
+    pub(super) removable_by_tag: bool,
+    /// Whether a `ctl:ruleRemoveTargetByTag` of the ruleset names a tag of
+    /// this rule.
+    pub(super) targets_removable_by_tag: bool,
+}
+
+/// The tags the `ctl:` actions of a ruleset can name. A `ctl:` argument is
+/// taken as written, so no transaction names another.
+#[derive(Default)]
+pub(super) struct ControlTags {
+    rules: Vec<String>,
+    targets: Vec<String>,
+}
+
+impl ControlTags {
+    /// Note the tags the `ctl:` actions of `rule` name.
+    pub(super) fn note(&mut self, rule: &CompiledRule) {
+        for ctl in &rule.on_match.control_ops {
+            match CtlDirective::parse(ctl) {
+                CtlDirective::RuleRemoveByTag(tag) => self.rules.push(tag),
+                CtlDirective::RuleRemoveTargetByTag { tag, .. } => self.targets.push(tag),
+                _ => {}
+            }
+        }
+    }
 }
 
 impl RulePlan {
     /// Plan the targets of `rule`. `initial_tx` is `TX` as the prepared
     /// leading rules of phase 1 leave it, if any were prepared.
-    pub(super) fn prepare(rule: &CompiledRule, initial_tx: Option<&TxCollection>) -> Self {
+    pub(super) fn prepare(
+        rule: &CompiledRule,
+        initial_tx: Option<&TxCollection>,
+        tags: &ControlTags,
+    ) -> Self {
+        let named = |tags: &[String]| rule.tags().any(|tag| tags.iter().any(|t| t == tag));
         Self {
+            removable_by_tag: named(&tags.rules),
+            targets_removable_by_tag: named(&tags.targets),
             targets: rule
                 .variables
                 .iter()

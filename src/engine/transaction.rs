@@ -684,8 +684,10 @@ impl Transaction {
             // this transaction. Skip it as though it were not in the ruleset --
             // including its chain links, which cannot fire without their
             // starter.
+            let plan = plans.get(idx);
             if self.controls.is_rule_removed(rule.id.as_deref())
-                || self.controls.is_rule_removed_by_tag(rule.tags())
+                || (plan.map_or(true, |plan| plan.removable_by_tag)
+                    && self.controls.is_rule_removed_by_tag(rule.tags()))
             {
                 if rule.is_chain {
                     chain_state.reset();
@@ -714,7 +716,7 @@ impl Transaction {
             }
 
             // Evaluate rule
-            let matches = self.evaluate_rule(rule, plans.get(idx))?;
+            let matches = self.evaluate_rule(rule, plan)?;
             let matched = !matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
             let mut captures = Vec::new();
@@ -1148,7 +1150,8 @@ impl Transaction {
         // are hoisted so rules with no exclusion -- effectively all of them --
         // pay one comparison rather than a scan per variable.
         let filter_by_id = self.controls.has_target_removals(rule.id.as_deref());
-        let filter_by_tag = self.controls.has_tag_target_removals(rule.tags());
+        let filter_by_tag = plan.map_or(true, |plan| plan.targets_removable_by_tag)
+            && self.controls.has_tag_target_removals(rule.tags());
         let rule_has_removals = filter_by_id || filter_by_tag;
 
         for (position, spec) in rule.variables.iter().enumerate() {
