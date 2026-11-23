@@ -9,6 +9,14 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- A transaction that takes over the state prepared at load shares its `TX`
+  variables with the ruleset instead of copying them, and keeps only what it
+  sets or deletes itself. Every prepared variable was a copy of its key and
+  value per transaction before. Reads, order and the `TX` API are unchanged.
+  (#126)
+
 ## [0.13.0] - 2026-11-23
 
 CRS conformance: 4,979 of 5,184 runnable cases, unchanged.
