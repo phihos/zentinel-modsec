@@ -16,6 +16,13 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   sets or deletes itself. Every prepared variable was a copy of its key and
   value per transaction before. Reads, order and the `TX` API are unchanged.
   (#126)
+- Every rule gets a plan when the ruleset loads, kept beside the compiled
+  rules by phase and position. For a `TX:key` or `REQUEST_HEADERS:key` target
+  it holds the key as the collection stores it and, for `TX`, where the
+  variables a transaction shares hold it. A key is no longer lowercased for
+  every evaluation, and a shared `TX` variable is read by position rather
+  than by hashing its name. Any other target, and a rule that leaves a target
+  out, is resolved as before. (#127)
 
 ## [0.13.0] - 2026-11-23
 
