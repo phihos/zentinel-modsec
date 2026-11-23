@@ -51,6 +51,27 @@ impl TxCollection {
         self.data.values(&normalize(key))
     }
 
+    /// The values stored under `key`, which is already lowercased, looked
+    /// for at `position` first.
+    pub(crate) fn values_near(&self, key: &str, position: usize) -> &[String] {
+        self.data.values_near(key, position)
+    }
+
+    /// Where the lowercased `key` sits in insertion order.
+    pub(crate) fn position(&self, key: &str) -> Option<usize> {
+        self.data.position(key)
+    }
+
+    /// Make room for `additional` more variables.
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.data.reserve(additional);
+    }
+
+    /// How many variables are set.
+    pub(crate) fn keys(&self) -> usize {
+        self.data.keys()
+    }
+
     /// The `(key, value)` pairs whose stored, lowercased key matches
     /// `pattern`, read in place.
     pub fn iter_regex<'a, 'r>(

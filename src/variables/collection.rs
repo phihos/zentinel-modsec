@@ -84,6 +84,33 @@ impl HashMapCollection {
         self.data.get(key).map_or(&[], Vec::as_slice)
     }
 
+    /// The values stored under `key`, looked for at `position` first.
+    ///
+    /// A position found once (see [`position`](Self::position)) stays right
+    /// until an earlier key is deleted, and is checked here, so a stale one
+    /// only costs the lookup by name.
+    pub(crate) fn values_near(&self, key: &str, position: usize) -> &[String] {
+        match self.data.get_index(position) {
+            Some((stored, values)) if stored == key => values,
+            _ => self.values(key),
+        }
+    }
+
+    /// Where `key` sits in insertion order.
+    pub(crate) fn position(&self, key: &str) -> Option<usize> {
+        self.data.get_index_of(key)
+    }
+
+    /// Make room for `additional` more keys.
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.data.reserve(additional);
+    }
+
+    /// How many keys are stored.
+    pub(crate) fn keys(&self) -> usize {
+        self.data.len()
+    }
+
     /// The `(key, value)` pairs whose key matches `pattern`, in insertion
     /// order, read in place.
     ///

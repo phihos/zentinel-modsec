@@ -140,6 +140,40 @@ impl<'a> VariableResolver<'a> {
         }
     }
 
+    /// Visit `TX:key` with the key already lowercased and its likely position
+    /// known, as a rule's plan prepares them. Names the values as
+    /// [`visit`](Self::visit) does.
+    pub(crate) fn visit_tx_key<'s>(
+        &self,
+        key: &'s str,
+        lowered: &str,
+        position: usize,
+        mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
+        let tx: &'a TxCollection = self.tx;
+        keyed(&mut visit, "TX", key, tx.values_near(lowered, position));
+    }
+
+    /// Visit `REQUEST_HEADERS:key` with the key already lowercased.
+    pub(crate) fn visit_header_key<'s>(
+        &self,
+        key: &'s str,
+        lowered: &str,
+        mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
+        let request: &'a RequestData = self.request;
+        keyed(
+            &mut visit,
+            "REQUEST_HEADERS",
+            key,
+            request.headers.values(lowered),
+        );
+    }
+
     /// Visit a variable's values by name.
     fn visit_variable<'s>(
         &self,

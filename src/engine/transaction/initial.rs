@@ -18,6 +18,10 @@ use crate::parser::{OperatorName, VariableName};
 use crate::variables::TxCollection;
 use std::sync::Arc;
 
+/// How many more `TX` variables a transaction makes room for when it takes
+/// the prepared ones over.
+const HEADROOM: usize = 32;
+
 /// What a transaction holds once the leading rules of phase 1 have run.
 pub(in crate::engine) struct InitialState {
     /// How many rules of phase 1 this stands for.
@@ -48,7 +52,7 @@ impl InitialState {
                 break;
             }
             // A rule that does not match does nothing, whatever its actions.
-            let Ok(matches) = scratch.evaluate_rule(rule) else {
+            let Ok(matches) = scratch.evaluate_rule(rule, None) else {
                 break;
             };
             if !matches.is_empty() && !acts_on_tx(rule) {
@@ -61,6 +65,7 @@ impl InitialState {
             scratch
                 .run_rules_from(
                     &rules[..next],
+                    &[],
                     count,
                     Phase::RequestHeaders,
                     &mut open_record,
@@ -83,6 +88,11 @@ impl InitialState {
         })
     }
 
+    /// `TX` as the prepared rules leave it.
+    pub(in crate::engine) fn tx(&self) -> &TxCollection {
+        &self.tx
+    }
+
     /// Put `transaction`, which has run no rule and holds nothing in `TX`,
     /// into this state. Returns the index of the rule phase 1 goes on with.
     pub(super) fn restore(
@@ -90,6 +100,9 @@ impl InitialState {
         transaction: &mut Transaction,
         open_record: &mut Option<OpenRecord>,
     ) -> usize {
+        // Room for what the rules after these set, so that the first of them
+        // does not move every variable.
+        transaction.tx.reserve(self.tx.keys() + HEADROOM);
         transaction.tx.clone_from(&self.tx);
         transaction.matched_rules.clone_from(&self.matched_rules);
         transaction.matched_vars.clone_from(&self.matched_vars);

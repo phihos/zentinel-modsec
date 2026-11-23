@@ -12,6 +12,7 @@ use crate::transformations::TransformationPipeline;
 
 use super::operand_macro;
 use super::phase::Phase;
+use super::plan::RulePlan;
 use super::transaction::InitialState;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
@@ -175,6 +176,8 @@ pub struct CompiledRuleset {
     /// What the leading rules of phase 1 leave behind in every transaction,
     /// when they read nothing of the request.
     initial_state: Option<InitialState>,
+    /// A plan for every rule, by phase and position.
+    plans: HashMap<Phase, Vec<RulePlan>>,
 }
 
 /// Rule engine operating mode.
@@ -196,6 +199,7 @@ impl CompiledRuleset {
             rules: Rules::new(),
             engine_mode: RuleEngineMode::default(),
             initial_state: None,
+            plans: HashMap::new(),
         }
     }
 
@@ -400,6 +404,19 @@ impl CompiledRuleset {
             ruleset.initial_state =
                 InitialState::prepare(ruleset.rules.for_phase(Phase::RequestHeaders));
         }
+        let initial_tx = ruleset.initial_state.as_ref().map(InitialState::tx);
+        ruleset.plans = ruleset
+            .rules
+            .by_phase
+            .iter()
+            .map(|(phase, rules)| {
+                let plans = rules
+                    .iter()
+                    .map(|rule| RulePlan::prepare(rule, initial_tx))
+                    .collect();
+                (*phase, plans)
+            })
+            .collect();
 
         Ok(ruleset)
     }
@@ -407,6 +424,11 @@ impl CompiledRuleset {
     /// Get rules for a phase.
     pub fn rules_for_phase(&self, phase: Phase) -> &[CompiledRule] {
         self.rules.for_phase(phase)
+    }
+
+    /// The plans of a phase's rules, by position.
+    pub(super) fn plans_for_phase(&self, phase: Phase) -> &[RulePlan] {
+        self.plans.get(&phase).map_or(&[], Vec::as_slice)
     }
 
     /// Get total rule count.
