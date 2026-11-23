@@ -84,16 +84,18 @@ impl HashMapCollection {
         self.data.get(key).map_or(&[], Vec::as_slice)
     }
 
-    /// The values stored under `key`, looked for at `position` first.
-    ///
-    /// A position found once (see [`position`](Self::position)) stays right
-    /// until an earlier key is deleted, and is checked here, so a stale one
-    /// only costs the lookup by name.
-    pub(crate) fn values_near(&self, key: &str, position: usize) -> &[String] {
-        match self.data.get_index(position) {
-            Some((stored, values)) if stored == key => values,
-            _ => self.values(key),
-        }
+    /// The key and values at `position` in insertion order.
+    pub(crate) fn entry_at(&self, position: usize) -> Option<(&str, &[String])> {
+        self.data
+            .get_index(position)
+            .map(|(key, values)| (key.as_str(), values.as_slice()))
+    }
+
+    /// Every key with its values, in insertion order.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, &[String])> {
+        self.data
+            .iter()
+            .map(|(key, values)| (key.as_str(), values.as_slice()))
     }
 
     /// Where `key` sits in insertion order.

@@ -147,13 +147,13 @@ impl<'a> VariableResolver<'a> {
         &self,
         key: &'s str,
         lowered: &str,
-        position: usize,
+        position: Option<usize>,
         mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
     ) where
         'a: 's,
     {
         let tx: &'a TxCollection = self.tx;
-        keyed(&mut visit, "TX", key, tx.values_near(lowered, position));
+        keyed(&mut visit, "TX", key, tx.values_at(lowered, position));
     }
 
     /// Visit `REQUEST_HEADERS:key` with the key already lowercased.

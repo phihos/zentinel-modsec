@@ -7,7 +7,7 @@
 use super::control::CtlDirective;
 use super::ruleset::CompiledRule;
 use crate::parser::{Selection, VariableName, VariableSpec};
-use crate::variables::TxCollection;
+use crate::variables::HashMapCollection;
 
 /// How one target of a rule finds its values.
 pub(super) enum TargetPlan {
@@ -15,7 +15,10 @@ pub(super) enum TargetPlan {
     Resolver,
     /// `TX:key`: the key as `TX` stores it, and where it sits in a
     /// transaction that took the prepared initial state over.
-    TxKey { lowered: String, position: usize },
+    TxKey {
+        lowered: String,
+        position: Option<usize>,
+    },
     /// `REQUEST_HEADERS:key`: the key as the headers store it.
     HeaderKey { lowered: String },
 }
@@ -56,7 +59,7 @@ impl RulePlan {
     /// leading rules of phase 1 leave it, if any were prepared.
     pub(super) fn prepare(
         rule: &CompiledRule,
-        initial_tx: Option<&TxCollection>,
+        initial_tx: Option<&HashMapCollection>,
         tags: &ControlTags,
     ) -> Self {
         let named = |tags: &[String]| rule.tags().any(|tag| tags.iter().any(|t| t == tag));
@@ -77,7 +80,7 @@ impl RulePlan {
     }
 }
 
-fn plan_target(spec: &VariableSpec, initial_tx: Option<&TxCollection>) -> TargetPlan {
+fn plan_target(spec: &VariableSpec, initial_tx: Option<&HashMapCollection>) -> TargetPlan {
     let Some(Selection::Key(key)) = &spec.selection else {
         return TargetPlan::Resolver;
     };
@@ -89,9 +92,7 @@ fn plan_target(spec: &VariableSpec, initial_tx: Option<&TxCollection>) -> Target
         VariableName::Tx => {
             // A key the initial state does not hold is looked up by name;
             // no variable sits at this position.
-            let position = initial_tx
-                .and_then(|tx| tx.position(&lowered))
-                .unwrap_or(usize::MAX);
+            let position = initial_tx.and_then(|tx| tx.position(&lowered));
             TargetPlan::TxKey { lowered, position }
         }
         VariableName::RequestHeaders => TargetPlan::HeaderKey { lowered },
