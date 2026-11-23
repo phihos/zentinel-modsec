@@ -38,6 +38,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#120](https://github.com/zentinelproxy/zentinel-modsec/pull/120) | Name a target's values for a ctl removal only when one names its variable. Merged. |
 | [#121](https://github.com/zentinelproxy/zentinel-modsec/pull/121) | Prepare what the leading rules of phase 1 leave behind at load. Merged. |
 | [#124](https://github.com/zentinelproxy/zentinel-modsec/pull/124) | Answer the status a denying rule names. Merged. |
+| [#126](https://github.com/zentinelproxy/zentinel-modsec/pull/126) | Share the prepared TX variables between transactions. |
 
 ## Queued on the fork
 
