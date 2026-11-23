@@ -19,6 +19,11 @@ impl TransformationPipeline {
         }
     }
 
+    /// The names of the transformations, in order.
+    pub(crate) fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.transformations.iter().map(|t| t.name())
+    }
+
     /// Create a pipeline from transformation names.
     pub fn from_names(names: &[String]) -> Result<Self> {
         let mut transformations = Vec::new();

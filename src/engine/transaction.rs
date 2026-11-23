@@ -1056,6 +1056,7 @@ impl Transaction {
         // denied all traffic. Absence is tested with `&VAR "@eq 0"`, which
         // always has a value, the count. The same holds for a rule whose
         // targets `ctl:` exclusions removed entirely.
+        let too_short = plan.and_then(|plan| plan.too_short.as_ref());
         let mut matches = Matches::default();
         let mut test = |name: TargetName<'_>, value: Cow<'_, str>| {
             let operator: &dyn Operator = if expands_operand {
@@ -1091,6 +1092,12 @@ impl Transaction {
             } else {
                 rule.operator.as_ref()
             };
+
+            // A value the rule's regex cannot match whatever the
+            // transformations make of it is not transformed.
+            if too_short.is_some_and(|bounds| bounds.rules_out(value.as_bytes())) {
+                return;
+            }
 
             // multiMatch: the operator at every stage of the pipeline, the
             // first stage that matches being the match (CRS 930110 finds
