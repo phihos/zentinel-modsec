@@ -84,6 +84,13 @@ impl HashMapCollection {
         self.data.get(key).map_or(&[], Vec::as_slice)
     }
 
+    /// The key and values at `position` in insertion order.
+    pub(crate) fn entry_at(&self, position: usize) -> Option<(&str, &[String])> {
+        self.data
+            .get_index(position)
+            .map(|(key, values)| (key.as_str(), values.as_slice()))
+    }
+
     /// Where `key` sits in insertion order, with its values.
     pub(crate) fn find(&self, key: &str) -> Option<(usize, &[String])> {
         self.data

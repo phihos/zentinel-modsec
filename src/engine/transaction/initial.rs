@@ -48,7 +48,7 @@ impl InitialState {
                 break;
             }
             // A rule that does not match does nothing, whatever its actions.
-            let Ok(matches) = scratch.evaluate_rule(rule) else {
+            let Ok(matches) = scratch.evaluate_rule(rule, None) else {
                 break;
             };
             if !matches.is_empty() && !acts_on_tx(rule) {
@@ -61,6 +61,7 @@ impl InitialState {
             scratch
                 .run_rules_from(
                     &rules[..next],
+                    &[],
                     count,
                     Phase::RequestHeaders,
                     &mut open_record,
@@ -81,6 +82,11 @@ impl InitialState {
             matched_data: scratch.matched_data,
             open_record,
         })
+    }
+
+    /// The `TX` variables a transaction that takes this state over shares.
+    pub(in crate::engine) fn tx(&self) -> &HashMapCollection {
+        &self.tx
     }
 
     /// Put `transaction`, which has run no rule and holds nothing in `TX`,

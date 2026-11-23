@@ -13,6 +13,7 @@ use super::control::{CtlDirective, TransactionControls};
 use super::intervention::{Intervention, RuleMessage};
 use super::operand_macro::{self, OperandMacro};
 use super::phase::Phase;
+use super::plan::{RulePlan, TargetPlan};
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
 use super::scoring::ANOMALY_SCORE;
 use crate::actions::{DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar, SetVarOperation};
@@ -600,6 +601,7 @@ impl Transaction {
         // Keep the immutable ruleset alive independently of mutable transaction state.
         let ruleset = Arc::clone(&self.ruleset);
         let rules = ruleset.rules_for_phase(phase);
+        let plans = ruleset.plans_for_phase(phase);
 
         // The leading rules of phase 1 that read only TX leave the same state
         // behind in every transaction that starts them with nothing in it, so
@@ -613,13 +615,15 @@ impl Transaction {
             }
             _ => 0,
         };
-        self.run_rules_from(rules, start, phase, open_record)
+        self.run_rules_from(rules, plans, start, phase, open_record)
     }
 
-    /// Run `rules`, the rules of `phase`, from the one at `start`.
+    /// Run `rules`, the rules of `phase`, from the one at `start`. `plans`
+    /// holds their plans by position; a rule past its end runs without one.
     fn run_rules_from(
         &mut self,
         rules: &[CompiledRule],
+        plans: &[RulePlan],
         start: usize,
         phase: Phase,
         open_record: &mut Option<OpenRecord>,
@@ -709,7 +713,7 @@ impl Transaction {
             }
 
             // Evaluate rule
-            let matches = self.evaluate_rule(rule)?;
+            let matches = self.evaluate_rule(rule, plans.get(idx))?;
             let matched = !matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
             let mut captures = Vec::new();
@@ -995,7 +999,7 @@ impl Transaction {
     /// state at load calls it too, and a second caller would otherwise make
     /// it a function of its own on the request path.
     #[inline]
-    fn evaluate_rule(&self, rule: &CompiledRule) -> Result<Matches> {
+    fn evaluate_rule(&self, rule: &CompiledRule, plan: Option<&RulePlan>) -> Result<Matches> {
         let resolver = VariableResolver::new(
             &self.request,
             &self.response,
@@ -1146,7 +1150,7 @@ impl Transaction {
         let filter_by_tag = self.controls.has_tag_target_removals(rule.tags());
         let rule_has_removals = filter_by_id || filter_by_tag;
 
-        for spec in &rule.variables {
+        for (position, spec) in rule.variables.iter().enumerate() {
             // An exclusion reduces the count, which is what a rule like
             // `SecRule &ARGS:x "@eq 0"` is asking about.
             let mut count = 0usize;
@@ -1156,7 +1160,7 @@ impl Transaction {
                 && self
                     .controls
                     .removes_from_variable(rule.id.as_deref(), rule.tags(), spec);
-            resolver.visit(spec, |name, value| {
+            let mut each = |name: ResolvedName<'_>, value: Cow<'_, str>| {
                 if filter_targets {
                     // Rendered only for a target a `ctl:` exclusion can concern.
                     let name = &name.to_string();
@@ -1177,7 +1181,20 @@ impl Transaction {
                 } else {
                     test(TargetName::Value(name), value);
                 }
-            });
+            };
+            // A target the plan prepared is read where the plan says; the
+            // resolver finds any other, and every target without a plan.
+            match plan.map(|plan| plan.target(position)) {
+                Some(TargetPlan::TxKey {
+                    key,
+                    lowered,
+                    position,
+                }) => resolver.visit_tx_key(key, lowered, *position, &mut each),
+                Some(TargetPlan::HeaderKey { key, lowered }) => {
+                    resolver.visit_header_key(key, lowered, &mut each)
+                }
+                Some(TargetPlan::Resolver) | None => resolver.visit(spec, &mut each),
+            }
             if spec.count_mode {
                 test(TargetName::Count(spec.name), Cow::Owned(count.to_string()));
             }
