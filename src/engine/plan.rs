@@ -8,7 +8,7 @@
 use super::ruleset::CompiledRule;
 use crate::operators::RxOperator;
 use crate::parser::{OperatorName, Selection, VariableName, VariableSpec};
-use crate::variables::HashMapCollection;
+use crate::variables::{HashMapCollection, RequestData};
 
 /// How one target of a rule finds its values.
 pub(super) enum TargetPlan {
@@ -29,6 +29,9 @@ pub(super) enum TargetPlan {
 /// The plan of one rule.
 pub(super) struct RulePlan {
     targets: Vec<TargetPlan>,
+    /// Per target, the request collections all its values come from, as bits
+    /// of [`Widths`]; zero when they come from elsewhere or it counts them.
+    sources: Vec<u8>,
     /// Lengths below which a value of a narrow alphabet cannot match, as it
     /// stands before the rule's transformations.
     pub(super) too_short: Option<TooShort>,
@@ -50,6 +53,15 @@ impl TooShort {
         len <= 64
             && (len < self.token && value.iter().copied().all(is_token)
                 || len < self.alphanumeric && value.iter().all(u8::is_ascii_alphanumeric))
+    }
+
+    /// Whether no value of a collection as wide as `width` can match.
+    fn rules_out_all(&self, width: Width) -> bool {
+        match width.alphabet {
+            Alphabet::Alphanumeric => width.longest < self.token.max(self.alphanumeric),
+            Alphabet::Token => width.longest < self.token,
+            Alphabet::Any => false,
+        }
     }
 
     fn of(rule: &CompiledRule) -> Option<Self> {
@@ -140,6 +152,7 @@ impl RulePlan {
     /// transaction takes over from the ruleset, if it prepared any.
     pub(super) fn prepare(rule: &CompiledRule, shared_tx: Option<&HashMapCollection>) -> Self {
         Self {
+            sources: rule.variables.iter().map(sources).collect(),
             too_short: TooShort::of(rule),
             targets: rule
                 .variables
@@ -147,6 +160,19 @@ impl RulePlan {
                 .map(|spec| plan_target(spec, shared_tx))
                 .collect(),
         }
+    }
+
+    /// Whether no value of the target at `position` can match, going by the
+    /// widths of the request's collections.
+    #[inline]
+    pub(super) fn rules_out_target(&self, position: usize, widths: &Widths) -> bool {
+        let (Some(bounds), Some(&sources)) = (&self.too_short, self.sources.get(position)) else {
+            return false;
+        };
+        sources != 0
+            && (0..SOURCES)
+                .filter(|source| sources & (1 << source) != 0)
+                .all(|source| bounds.rules_out_all(widths.0[source]))
     }
 
     /// The plan of the target at `position` in the rule.
@@ -182,6 +208,91 @@ fn plan_target(spec: &VariableSpec, shared_tx: Option<&HashMapCollection>) -> Ta
     }
 }
 
+const SOURCES: usize = 6;
+const GET_VALUES: u8 = 1;
+const GET_NAMES: u8 = 2;
+const POST_VALUES: u8 = 4;
+const POST_NAMES: u8 = 8;
+const COOKIE_VALUES: u8 = 16;
+const COOKIE_NAMES: u8 = 32;
+
+/// The request collections every value of `spec` comes from.
+fn sources(spec: &VariableSpec) -> u8 {
+    if spec.count_mode {
+        return 0;
+    }
+    match spec.name {
+        VariableName::Args => GET_VALUES | POST_VALUES,
+        VariableName::ArgsGet => GET_VALUES,
+        // The XML body is flattened into the POST arguments.
+        VariableName::ArgsPost | VariableName::Xml => POST_VALUES,
+        VariableName::ArgsNames => GET_NAMES | POST_NAMES,
+        VariableName::ArgsGetNames => GET_NAMES,
+        VariableName::ArgsPostNames => POST_NAMES,
+        VariableName::RequestCookies => COOKIE_VALUES,
+        VariableName::RequestCookiesNames => COOKIE_NAMES,
+        _ => 0,
+    }
+}
+
+/// What the texts of a collection are made of.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Alphabet {
+    /// Letters and digits only, as is a collection with no text.
+    #[default]
+    Alphanumeric,
+    /// Those and `-./:_`.
+    Token,
+    /// Any byte, or a text too long to be worth scanning.
+    Any,
+}
+
+/// The longest text of a collection and the narrowest alphabet all its texts
+/// are written in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Width {
+    longest: usize,
+    alphabet: Alphabet,
+}
+
+impl Width {
+    fn of<'a>(texts: impl Iterator<Item = &'a str>) -> Self {
+        let mut width = Self::default();
+        for text in texts {
+            let bytes = text.as_bytes();
+            if bytes.len() > 64 || !bytes.iter().copied().all(is_token) {
+                width.alphabet = Alphabet::Any;
+                break;
+            }
+            if !bytes.iter().all(u8::is_ascii_alphanumeric) {
+                width.alphabet = Alphabet::Token;
+            }
+            width.longest = width.longest.max(bytes.len());
+        }
+        width
+    }
+}
+
+/// The widths of the names and values of the request's arguments and
+/// cookies, taken once per phase.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Widths([Width; SOURCES]);
+
+impl Widths {
+    pub(super) fn of(request: &RequestData) -> Self {
+        let values = |c: &'_ HashMapCollection| Width::of(c.iter().map(|(_, value)| value));
+        let names = |c: &'_ HashMapCollection| Width::of(c.entries().map(|(name, _)| name));
+        Self([
+            values(&request.args_get),
+            names(&request.args_get),
+            values(&request.args_post),
+            names(&request.args_post),
+            values(&request.cookies),
+            names(&request.cookies),
+        ])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,28 +308,38 @@ mod tests {
         SecRule &TX:limit "@eq 0" "id:2,phase:1,pass,nolog,setvar:'tx.limit=5'"
     "#;
 
-    /// Everything a caller can read of a transaction that ran `rules` on one
-    /// request. `touch` takes `TX` before phase 1, so nothing is shared.
-    fn outcome(ruleset: CompiledRuleset, touch: bool) -> String {
+    /// A request: its URI, more headers, and its body.
+    struct Request {
+        uri: &'static str,
+        headers: &'static [(&'static str, &'static str)],
+        body: &'static str,
+    }
+
+    const REQUEST: Request = Request {
+        uri: "/shop?item=book&ITEM=pen&p=%41%42%43%44%45%46",
+        headers: &[],
+        body: "",
+    };
+
+    /// Everything a caller can read of a transaction that ran `rules` on
+    /// `request`. `touch` takes `TX` before phase 1, so nothing is shared.
+    fn outcome(ruleset: CompiledRuleset, touch: bool, request: &Request) -> String {
         let mut tx = Transaction::new(Arc::new(ruleset), 403);
         if touch {
             tx.tx_mut();
         }
-        tx.process_uri(
-            "/shop?item=book&ITEM=pen&p=%41%42%43%44%45%46",
-            "POST",
-            "HTTP/1.1",
-        )
-        .unwrap();
-        for (name, value) in [
+        tx.process_uri(request.uri, "POST", "HTTP/1.1").unwrap();
+        let headers = [
             ("Host", "shop.example"),
             ("User-Agent", "curl/8"),
             ("X-Trace", "one"),
             ("x-trace", "two"),
-        ] {
+        ];
+        for (name, value) in headers.iter().chain(request.headers) {
             tx.add_request_header(name, value).unwrap();
         }
         tx.process_request_headers().unwrap();
+        tx.append_request_body(request.body.as_bytes()).unwrap();
         tx.process_request_body().unwrap();
         tx.process_logging().unwrap();
         format!(
@@ -234,10 +355,20 @@ mod tests {
     /// Run `rules` after `SETUP` with plans and without, and expect the same
     /// outcome and the rule ids in `matched` among the matched rules.
     fn same_with_and_without_plans(rules: &str, matched: &[&str]) {
+        same_on(&REQUEST, rules, matched);
+    }
+
+    /// As [`same_with_and_without_plans`], on `request`.
+    fn same_on(request: &Request, rules: &str, matched: &[&str]) {
         let load = || CompiledRuleset::from_string(&format!("{SETUP}{rules}")).expect("rules load");
         for touch in [false, true] {
-            let planned = outcome(load(), touch);
-            assert_eq!(planned, outcome(load().without_plans(), touch), "{rules}");
+            let planned = outcome(load(), touch, request);
+            assert_eq!(
+                planned,
+                outcome(load().without_plans(), touch, request),
+                "{}",
+                request.uri
+            );
             let ids = planned.lines().next().unwrap();
             for id in matched {
                 assert!(ids.contains(&format!("\"{id}\"")), "{id} in {ids}");
@@ -407,8 +538,8 @@ mod tests {
             "a.b.c",
             "A/B/../../c",
         ];
-        type Alphabet = fn(u8) -> bool;
-        let cases: [(&[&str], &str, Alphabet); 2] = [
+        type Within = fn(u8) -> bool;
+        let cases: [(&[&str], &str, Within); 2] = [
             (KEEP_TOKENS, "aZ0-./:_", is_token),
             (KEEP_ALPHANUMERICS, "aZ09xf", |b| b.is_ascii_alphanumeric()),
         ];
@@ -514,5 +645,157 @@ mod tests {
             "#,
             &["11", "12", "13", "14", "15", "16", "18", "19"],
         );
+    }
+
+    #[test]
+    fn a_width_is_the_longest_text_and_the_alphabet_of_all() {
+        let width = |texts: &[&str]| {
+            let width = Width::of(texts.iter().copied());
+            (width.longest, width.alphabet)
+        };
+        assert_eq!(width(&[]), (0, Alphabet::Alphanumeric));
+        assert_eq!(width(&["", "abc", "Z9"]), (3, Alphabet::Alphanumeric));
+        assert_eq!(width(&["abc", "a.b/c:d_e-f", "x"]), (11, Alphabet::Token));
+        assert_eq!(width(&["a.b", "abcdef"]), (6, Alphabet::Token));
+        for other in ["a b", "a%41", "é", "a=b", "a\0"] {
+            assert_eq!(width(&["abc", other, "a.b"]).1, Alphabet::Any, "{other:?}");
+        }
+        let long = "a".repeat(65);
+        assert_eq!(width(&[&long[..64]]), (64, Alphabet::Alphanumeric));
+        assert_eq!(width(&["abc", &long]).1, Alphabet::Any);
+    }
+
+    /// Which targets of the one rule in `rule` the widths of a request with
+    /// this URI and `Cookie` header rule out.
+    fn ruled_out(rule: &str, uri: &str, cookie: &str) -> Vec<bool> {
+        let ruleset = CompiledRuleset::from_string(rule).unwrap();
+        let phase = crate::engine::phase::Phase::RequestHeaders;
+        let plan = &ruleset.plans_for_phase(phase)[0];
+        let mut request = RequestData::new();
+        request.set_uri(uri);
+        request.add_header("Cookie", cookie);
+        let widths = Widths::of(&request);
+        (0..ruleset.rules_for_phase(phase)[0].variables.len())
+            .map(|position| plan.rules_out_target(position, &widths))
+            .collect()
+    }
+
+    #[test]
+    fn a_target_is_ruled_out_when_no_value_of_its_collections_can_match() {
+        let rule = |targets: &str, actions: &str| {
+            format!(r#"SecRule {targets} "@rx ^[a-z]{{6,}}$" "id:10,phase:1,pass{actions}""#)
+        };
+        let all = "ARGS|ARGS_GET|ARGS_POST|ARGS_NAMES|ARGS_GET_NAMES|ARGS_POST_NAMES\
+                   |REQUEST_COOKIES|REQUEST_COOKIES_NAMES|XML:/*";
+        // Short letters and digits everywhere.
+        assert_eq!(
+            ruled_out(&rule(all, ""), "/?item=book&n=1", "sid=abc12"),
+            [true; 9]
+        );
+        // One value long enough, one name long enough, a cookie with a space.
+        assert_eq!(
+            ruled_out(&rule(all, ""), "/?item=booked&author=x", "sid=a b"),
+            [false, false, true, false, false, true, false, true, true]
+        );
+        // Dots keep a value out only where the transformations keep them.
+        let uri = "/?a=b.c&d=e";
+        assert_eq!(ruled_out(&rule("ARGS", ""), uri, ""), [true]);
+        assert_eq!(ruled_out(&rule("ARGS", ",t:lowercase"), uri, ""), [true]);
+        assert_eq!(
+            ruled_out(&rule("ARGS", ",t:normalizePath"), uri, ""),
+            [false]
+        );
+        assert_eq!(ruled_out(&rule("ARGS", ",t:hexEncode"), uri, ""), [false]);
+        // A selection takes values of the same collections; a count is not a
+        // value of them, and other variables are not looked at.
+        assert_eq!(
+            ruled_out(
+                &rule(
+                    "ARGS:item|ARGS:/^it/|&ARGS|&ARGS:item|REQUEST_HEADERS|REQUEST_URI",
+                    ""
+                ),
+                "/?item=book",
+                ""
+            ),
+            [true, true, false, false, false, false]
+        );
+    }
+
+    #[test]
+    fn targets_ruled_out_by_the_request_match_the_same() {
+        let rules = r#"
+            SecRule ARGS "@rx ^[a-z]{6,}$" "id:10,phase:1,pass"
+            SecRule ARGS "@rx ^[a-z]{6,}$" "id:11,phase:2,pass,log,logdata:'%{MATCHED_VAR_NAME}=%{MATCHED_VAR}'"
+            SecRule ARGS_GET|ARGS_POST "@rx ^[a-z ]{8,}$" "id:12,phase:2,pass"
+            SecRule ARGS_NAMES "@rx ^[a-z.]{7,}$" "id:13,phase:2,pass"
+            SecRule ARGS_GET_NAMES|ARGS_POST_NAMES "@rx ^[a-z]{4}$" "id:14,phase:2,pass"
+            SecRule REQUEST_COOKIES "@rx ^[a-z]{4}$" "id:15,phase:1,pass"
+            SecRule REQUEST_COOKIES_NAMES "@rx ^[a-z]{5}$" "id:16,phase:1,pass"
+            SecRule XML:/* "@rx ^[a-z]{6}$" "id:17,phase:2,pass"
+            SecRule &ARGS "@rx ^[0-9]{2}$" "id:18,phase:2,pass"
+            SecRule &ARGS "@rx ^[0-9]$" "id:19,phase:2,pass"
+            SecRule ARGS|REQUEST_HEADERS:User-Agent "@rx ^[a-z/0-9]{6}$" "id:20,phase:2,pass"
+            SecRule ARGS "@rx <script" "id:21,phase:2,pass,t:lowercase"
+            SecRule ARGS|!ARGS:item "@rx ^[a-z]{3,4}$" "id:22,phase:2,pass"
+            SecRule ARGS:/^it/ "@rx ^[a-z]{3,4}$" "id:23,phase:2,pass,multiMatch"
+            SecRule ARGS "!@rx ^[a-z]{6,}$" "id:24,phase:2,pass"
+            SecRule ARGS "@rx ^[0-9a-f]{6}$" "id:25,phase:2,pass,t:hexEncode"
+            SecRule ARGS "@rx ^(\\w)\\w{5}$" "id:26,phase:2,pass,capture,chain"
+                SecRule TX:1 "@rx ^[a-z]$" ""
+        "#;
+        const FORM: (&str, &str) = ("Content-Type", "application/x-www-form-urlencoded");
+        let cases: [(Request, &[&str]); 6] = [
+            (
+                Request {
+                    uri: "/shop?item=book&ITEM=pen",
+                    headers: &[("Cookie", "sid=abc; theme=dark")],
+                    body: "",
+                },
+                &["14", "15", "16", "20", "23", "24", "25"],
+            ),
+            (
+                Request {
+                    uri: "/shop?item=book",
+                    headers: &[FORM],
+                    body: "comment=hello+world&n=1&author=anyone&tag=new",
+                },
+                &["11", "12", "13", "14", "20", "22", "23", "24", "26"],
+            ),
+            (
+                Request {
+                    uri: "/shop?n=1&ref=search",
+                    headers: &[("Content-Type", "application/json")],
+                    body: r#"{"user":{"name":"visitor","tags":["a","bcdefg"]}}"#,
+                },
+                &["10", "11", "13", "20", "24", "26"],
+            ),
+            (
+                Request {
+                    uri: "/shop",
+                    headers: &[("Content-Type", "application/xml")],
+                    body: r#"<order id="123456"><item>widget</item><n>1</n></order>"#,
+                },
+                &["11", "13", "17", "20", "24", "26"],
+            ),
+            (
+                Request {
+                    uri: "/shop?q=%3CScript%3Ealert(1)&x=1",
+                    headers: &[("Cookie", "a b=c d")],
+                    body: "",
+                },
+                &["19", "20", "21", "24"],
+            ),
+            (
+                Request {
+                    uri: "/shop",
+                    headers: &[],
+                    body: "",
+                },
+                &["19", "20"],
+            ),
+        ];
+        for (request, matched) in &cases {
+            same_on(request, rules, matched);
+        }
     }
 }
