@@ -84,6 +84,25 @@ impl HashMapCollection {
         self.data.get(key).map_or(&[], Vec::as_slice)
     }
 
+    /// Where `key` sits in insertion order, with its values.
+    pub(crate) fn find(&self, key: &str) -> Option<(usize, &[String])> {
+        self.data
+            .get_full(key)
+            .map(|(position, _, values)| (position, values.as_slice()))
+    }
+
+    /// Every key with its values, in insertion order.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, &[String])> {
+        self.data
+            .iter()
+            .map(|(key, values)| (key.as_str(), values.as_slice()))
+    }
+
+    /// How many keys are stored.
+    pub(crate) fn keys(&self) -> usize {
+        self.data.len()
+    }
+
     /// The `(key, value)` pairs whose key matches `pattern`, in insertion
     /// order, read in place.
     ///
