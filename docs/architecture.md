@@ -60,6 +60,10 @@ become `CompiledRule`s grouped by phase, in declaration order:
   unsupported `ctl:` values, `setvar` into collections other than TX (removed
   from the rule), numeric-operator arguments using macros it cannot resolve
   (those rules never match), unimplemented variables.
+- The rules phase 1 starts with are run once, for as long as they read only
+  TX (CRS opens with `SecAction`s and `SecRule &TX:x "@eq 0"` defaults), by
+  the interpreter that runs them for a request, and the state they leave
+  behind is kept (`src/engine/transaction/initial.rs`).
 
 ## Evaluate
 
@@ -73,7 +77,10 @@ holds the raw body.
 **A phase** (`Transaction::run_phase`) walks the phase's rules in order. It
 stops early when the transaction already has an intervention or was allowed,
 or when the effective engine mode is `Off`. It honors `skip`, `skipAfter`
-(never backwards), and the per-transaction removals set by `ctl:`.
+(never backwards), and the per-transaction removals set by `ctl:`. Phase 1
+starts from the state prepared at load, behind the rules it stands for, when
+the transaction has run no phase, the caller has not taken `tx_mut()` and
+`setvar` effects are not recorded; otherwise those rules run as any other.
 
 **A rule** (`evaluate_rule`):
 

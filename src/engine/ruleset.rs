@@ -12,6 +12,7 @@ use crate::transformations::TransformationPipeline;
 
 use super::operand_macro;
 use super::phase::Phase;
+use super::transaction::InitialState;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -171,6 +172,9 @@ pub struct CompiledRuleset {
     rules: Rules,
     /// Rule engine mode.
     engine_mode: RuleEngineMode,
+    /// What the leading rules of phase 1 leave behind in every transaction,
+    /// when they read nothing of the request.
+    initial_state: Option<InitialState>,
 }
 
 /// Rule engine operating mode.
@@ -191,6 +195,7 @@ impl CompiledRuleset {
         Self {
             rules: Rules::new(),
             engine_mode: RuleEngineMode::default(),
+            initial_state: None,
         }
     }
 
@@ -390,6 +395,12 @@ impl CompiledRuleset {
         ruleset.rules.resolve_skip_targets();
         report_unresolvable_operands(&unresolvable_operands);
 
+        // The rules are final now. An engine that is off runs none of them.
+        if ruleset.engine_mode != RuleEngineMode::Off {
+            ruleset.initial_state =
+                InitialState::prepare(ruleset.rules.for_phase(Phase::RequestHeaders));
+        }
+
         Ok(ruleset)
     }
 
@@ -411,6 +422,12 @@ impl CompiledRuleset {
     /// Get a marker's position within one phase.
     pub fn marker(&self, name: &str, phase: Phase) -> Option<usize> {
         self.rules.marker(name, phase)
+    }
+
+    /// The state a transaction that starts with nothing takes over in place
+    /// of running the leading rules of phase 1, if any were prepared.
+    pub(super) fn initial_state(&self) -> Option<&InitialState> {
+        self.initial_state.as_ref()
     }
 }
 

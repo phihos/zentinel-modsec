@@ -4,6 +4,10 @@ use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 
+mod initial;
+
+pub(super) use initial::InitialState;
+
 use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
 use super::intervention::{Intervention, RuleMessage};
@@ -79,6 +83,10 @@ pub struct Transaction {
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
     record_setvar_effects: bool,
+    /// Whether no phase has run yet and the embedding application has not
+    /// asked for `TX` to write to. Only then is the transaction in the state
+    /// the ruleset's [`InitialState`] was prepared from.
+    untouched: bool,
 }
 
 /// The variable a rule matched on.
@@ -231,6 +239,7 @@ impl Transaction {
             matched_data: Vec::new(),
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
+            untouched: true,
         }
     }
 
@@ -543,6 +552,7 @@ impl Transaction {
 
     /// Get mutable TX collection.
     pub fn tx_mut(&mut self) -> &mut TxCollection {
+        self.untouched = false;
         &mut self.tx
     }
 
@@ -575,6 +585,7 @@ impl Transaction {
     /// Run the rules of a phase. `open_record` is set while the last record
     /// still waits for its variable and value (see [`OpenRecord`]).
     fn run_rules(&mut self, phase: Phase, open_record: &mut Option<OpenRecord>) -> Result<()> {
+        let untouched = std::mem::take(&mut self.untouched);
         if self.allowed || self.intervention.is_some() {
             return Ok(());
         }
@@ -589,10 +600,30 @@ impl Transaction {
         // Keep the immutable ruleset alive independently of mutable transaction state.
         let ruleset = Arc::clone(&self.ruleset);
         let rules = ruleset.rules_for_phase(phase);
-        if rules.is_empty() {
-            return Ok(());
-        }
 
+        // The leading rules of phase 1 that read only TX leave the same state
+        // behind in every transaction that starts them with nothing in it, so
+        // that state was prepared when the ruleset loaded. A caller that wants
+        // the `setvar` effects gets them from the rules themselves.
+        let start = match ruleset.initial_state() {
+            Some(initial)
+                if phase == Phase::RequestHeaders && untouched && !self.record_setvar_effects =>
+            {
+                initial.restore(self, open_record)
+            }
+            _ => 0,
+        };
+        self.run_rules_from(rules, start, phase, open_record)
+    }
+
+    /// Run `rules`, the rules of `phase`, from the one at `start`.
+    fn run_rules_from(
+        &mut self,
+        rules: &[CompiledRule],
+        start: usize,
+        phase: Phase,
+        open_record: &mut Option<OpenRecord>,
+    ) -> Result<()> {
         let mut chain_state = ChainState::new();
         // A chain is one logical rule: the starter's actions fire only when
         // every link matches, so they are held here until the chain completes.
@@ -609,7 +640,7 @@ impl Transaction {
         // (`CompiledRule::skip_after_index`).
         let mut skip_after: Option<Option<usize>> = None;
 
-        let mut idx = 0;
+        let mut idx = start;
         while idx < rules.len() {
             // Handle skip
             if skip_count > 0 {
@@ -959,6 +990,11 @@ impl Transaction {
     }
 
     /// Evaluate a single rule.
+    ///
+    /// Inlined into the loop over a phase's rules: preparing the initial
+    /// state at load calls it too, and a second caller would otherwise make
+    /// it a function of its own on the request path.
+    #[inline]
     fn evaluate_rule(&self, rule: &CompiledRule) -> Result<Matches> {
         let resolver = VariableResolver::new(
             &self.request,
