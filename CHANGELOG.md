@@ -9,6 +9,16 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Behavior changes
+
+- **`status` sets the response status of a rule that denies.** It was parsed
+  and ignored, so `deny,status:429` answered 403. As in ModSecurity v3
+  (`actions/data/status.cc`, `actions/disruptive/deny.cc`), `deny` now answers
+  the status the rule names and 403 only when it names none. `block`, which
+  denies here, takes the rule's status too and keeps the default status
+  without one. A rule set that names a status other than 403 now answers
+  that status. (#124)
+
 ### Performance
 
 - `@rx` rules a value out before running the regex when the pattern's syntax

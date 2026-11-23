@@ -164,12 +164,14 @@ pub fn execute_actions_without_metadata(
     matched_value: Option<&str>,
 ) -> ActionResult {
     let mut result = ActionResult::default();
+    let mut status = None;
 
     for action in actions {
         match action {
             Action::Disruptive(d) => {
                 result.disruptive = Some(execute_disruptive(d));
             }
+            Action::Metadata(MetadataAction::Status(named)) => status = Some(*named),
             Action::Flow(f) => {
                 result.flow = execute_flow(f);
             }
@@ -187,6 +189,17 @@ pub fn execute_actions_without_metadata(
             Action::Transformation(_) => {
                 // Transformations are applied during variable resolution, not execution
             }
+        }
+    }
+
+    // `status` names the response status of a rule that denies. `block` denies
+    // here, so it takes the status too; without one it keeps the default.
+    if let Some(status) = status {
+        if matches!(
+            result.disruptive,
+            Some(DisruptiveOutcome::Deny(_) | DisruptiveOutcome::Block)
+        ) {
+            result.disruptive = Some(DisruptiveOutcome::Deny(status));
         }
     }
 
@@ -296,7 +309,7 @@ fn execute_metadata(action: &MetadataAction, metadata: &mut RuleMetadata) {
             metadata.logdata = Some(data.clone());
         }
         MetadataAction::Status(_) => {
-            // Status is handled at disruptive action level
+            // Applied to the disruptive action by `execute_actions_without_metadata`.
         }
     }
 }
