@@ -15,14 +15,14 @@ use crate::engine::operand_macro;
 use crate::engine::phase::Phase;
 use crate::engine::ruleset::CompiledRule;
 use crate::parser::{OperatorName, VariableName};
-use crate::variables::TxCollection;
+use crate::variables::HashMapCollection;
 use std::sync::Arc;
 
 /// What a transaction holds once the leading rules of phase 1 have run.
 pub(in crate::engine) struct InitialState {
     /// How many rules of phase 1 this stands for.
     rules: usize,
-    tx: TxCollection,
+    tx: Arc<HashMapCollection>,
     matched_rules: Vec<String>,
     matched_vars: Vec<(String, String)>,
     messages: Vec<RuleMessage>,
@@ -73,7 +73,7 @@ impl InitialState {
         }
         Some(Self {
             rules: count,
-            tx: scratch.tx,
+            tx: scratch.tx.into_shared(),
             matched_rules: scratch.matched_rules,
             matched_vars: scratch.matched_vars,
             messages: scratch.messages,
@@ -90,7 +90,7 @@ impl InitialState {
         transaction: &mut Transaction,
         open_record: &mut Option<OpenRecord>,
     ) -> usize {
-        transaction.tx.clone_from(&self.tx);
+        transaction.tx.share(&self.tx);
         transaction.matched_rules.clone_from(&self.matched_rules);
         transaction.matched_vars.clone_from(&self.matched_vars);
         transaction.messages.clone_from(&self.messages);
