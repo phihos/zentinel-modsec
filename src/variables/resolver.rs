@@ -140,6 +140,42 @@ impl<'a> VariableResolver<'a> {
         }
     }
 
+    /// Visit `TX:key` for a rule whose plan holds the key as `TX` stores it
+    /// and its position among the shared variables (see
+    /// [`TxCollection::values_at`]). Names the values as
+    /// [`visit`](Self::visit) does.
+    pub(crate) fn visit_tx_key<'s>(
+        &self,
+        key: &'s str,
+        lowered: &str,
+        position: Option<usize>,
+        mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
+        let tx: &'a TxCollection = self.tx;
+        keyed(&mut visit, "TX", key, tx.values_at(lowered, position));
+    }
+
+    /// Visit `REQUEST_HEADERS:key` for a rule whose plan holds the key as
+    /// the headers store it.
+    pub(crate) fn visit_header_key<'s>(
+        &self,
+        key: &'s str,
+        lowered: &str,
+        mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
+        let request: &'a RequestData = self.request;
+        keyed(
+            &mut visit,
+            "REQUEST_HEADERS",
+            key,
+            request.headers.values(lowered),
+        );
+    }
+
     /// Visit a variable's values by name.
     fn visit_variable<'s>(
         &self,

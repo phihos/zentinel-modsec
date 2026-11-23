@@ -128,6 +128,23 @@ impl TxCollection {
         self.lowered_values(&normalize(key))
     }
 
+    /// The values stored under `key`, which is already lowercased, for a
+    /// caller that looked the key up in the shared variables beforehand:
+    /// `position` is where they hold it, `None` when they do not.
+    ///
+    /// Only for a collection that shares those variables or none, which is
+    /// every transaction of the ruleset they were prepared with.
+    pub(crate) fn values_at(&self, key: &str, position: Option<usize>) -> &[String] {
+        let Some(shared) = &self.shared else {
+            return self.data.values(key);
+        };
+        debug_assert_eq!(shared.find(key).map(|(found, _)| found), position);
+        position
+            .and_then(|position| shared.entry_at(position))
+            .and_then(|(_, values)| self.shared_at(position?, values))
+            .unwrap_or_else(|| self.data.values(key))
+    }
+
     /// The `(key, value)` pairs whose stored, lowercased key matches
     /// `pattern`, read in place.
     pub fn iter_regex<'a, 'r>(
