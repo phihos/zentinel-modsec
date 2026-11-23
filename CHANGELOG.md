@@ -9,6 +9,10 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-23
+
+CRS conformance: 4,979 of 5,184 runnable cases, unchanged.
+
 ### Behavior changes
 
 - **`status` sets the response status of a rule that denies.** It was parsed
@@ -406,7 +410,8 @@ upgrading.
 0.1.2 through 0.6.0 are tagged in Git (`v0.1.2` ... `v0.6.0`); see the tags
 and the commit history for what each contains.
 
-[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.9.0...v0.10.0

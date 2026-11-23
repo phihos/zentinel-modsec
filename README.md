@@ -40,7 +40,7 @@ a different thing: it wraps the C++ libmodsecurity.
 
 ```toml
 [dependencies]
-zentinel-modsec = "0.12"
+zentinel-modsec = "0.13"
 ```
 
 ```rust
