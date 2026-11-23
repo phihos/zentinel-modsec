@@ -22,17 +22,17 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
 pub struct TxCollection {
     shared: Option<Arc<HashMapCollection>>,
-    /// What became of each shared variable, by its position. Shorter than
-    /// `shared` while the later ones are unchanged.
-    changes: Vec<Change>,
+    /// What became of the shared variables this transaction changed, with
+    /// their positions. A transaction changes few of them.
+    changes: Vec<(usize, Change)>,
     data: HashMapCollection,
+    /// Whether a capture slot, `0`..`9`, may be set.
+    slots: bool,
 }
 
 /// What a transaction did to a variable it shares.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 enum Change {
-    #[default]
-    Kept,
     Set(Vec<String>),
     /// Deleted. Set again, it is a variable of the transaction's own, at the
     /// end of the order, where a deleted and re-added key goes.
@@ -60,6 +60,16 @@ impl TxCollection {
         self.shared = None;
         self.changes.clear();
         self.data.clear();
+        self.slots = false;
+    }
+
+    /// Delete the capture slots `0`..`9`.
+    pub(crate) fn clear_slots(&mut self) {
+        if std::mem::take(&mut self.slots) {
+            for slot in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] {
+                self.delete(slot);
+            }
+        }
     }
 
     /// The variables of this collection, which shares none, for other
@@ -72,16 +82,25 @@ impl TxCollection {
     /// Start this collection, which is empty, from `shared`.
     pub(crate) fn share(&mut self, shared: &Arc<HashMapCollection>) {
         debug_assert!(self.shared.is_none() && self.data.keys() == 0);
+        self.slots = shared.entries().any(|(key, _)| matches!(key.as_bytes(), [b'0'..=b'9']));
         self.shared = Some(Arc::clone(shared));
     }
 
     /// The values of the shared variable at `position`, unless it was deleted.
     fn shared_at<'a>(&'a self, position: usize, values: &'a [String]) -> Option<&'a [String]> {
-        match self.changes.get(position) {
-            None | Some(Change::Kept) => Some(values),
+        match self.changed(position) {
+            None => Some(values),
             Some(Change::Set(values)) => Some(values),
             Some(Change::Deleted) => None,
         }
+    }
+
+    /// What became of the shared variable at `position`, if it changed.
+    fn changed(&self, position: usize) -> Option<&Change> {
+        self.changes
+            .iter()
+            .find(|(changed, _)| *changed == position)
+            .map(|(_, change)| change)
     }
 
     /// The position of the shared variable `key`, a lowercased key.
@@ -165,17 +184,17 @@ impl TxCollection {
 
     /// Note what became of the shared variable at `position`.
     fn change(&mut self, position: usize, change: Change) {
-        if self.changes.len() <= position {
-            let all = self.shared.as_ref().map_or(0, |shared| shared.keys());
-            self.changes.resize_with(all, Change::default);
+        match self.changes.iter_mut().find(|(changed, _)| *changed == position) {
+            Some((_, slot)) => *slot = change,
+            None => self.changes.push((position, change)),
         }
-        self.changes[position] = change;
     }
 
     /// Set the lowercased `key`.
     fn set_lowered(&mut self, key: Cow<'_, str>, value: String) {
+        self.slots |= matches!(key.as_bytes(), [b'0'..=b'9']);
         if let Some(position) = self.shared_position(&key) {
-            if !matches!(self.changes.get(position), Some(Change::Deleted)) {
+            if !matches!(self.changed(position), Some(Change::Deleted)) {
                 self.change(position, Change::Set(vec![value]));
                 return;
             }

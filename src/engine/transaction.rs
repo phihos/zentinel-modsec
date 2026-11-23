@@ -1286,9 +1286,7 @@ impl Transaction {
     /// ruleset should depend on a leftover like that, so the stale read is
     /// closed here.
     fn store_captures(&mut self, whole: Option<String>, groups: &[String]) {
-        for i in 0..10 {
-            self.tx.delete(&i.to_string());
-        }
+        self.tx.clear_slots();
         if let Some(w) = whole {
             self.tx.set("0".to_string(), w);
         }
