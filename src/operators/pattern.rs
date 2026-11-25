@@ -60,6 +60,12 @@ impl RxOperator {
         })
     }
 
+    /// What every match of `pattern` needs, if it parses.
+    pub(crate) fn requirements_of(pattern: &str) -> Option<MatchRequirements> {
+        let hir = regex_syntax::Parser::new().parse(pattern).ok()?;
+        Some(MatchRequirements::of(&hir))
+    }
+
     /// Get or compile the regex pattern.
     ///
     /// Returns `None` if compilation failed. Syntax was already validated in

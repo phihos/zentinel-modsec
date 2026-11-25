@@ -33,7 +33,7 @@ fn is_alphanumeric(byte: u8) -> bool {
 
 /// Necessary conditions for a value to match a pattern.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct MatchRequirements {
+pub(crate) struct MatchRequirements {
     /// The shortest match, in bytes.
     len: usize,
     /// The shortest match made only of token bytes; `usize::MAX` if none is.
@@ -45,6 +45,12 @@ pub(super) struct MatchRequirements {
 }
 
 impl MatchRequirements {
+    /// The shortest match made only of token bytes, and only of letters and
+    /// digits: what a value of such bytes has to be as long as.
+    pub(crate) fn widths(&self) -> (usize, usize) {
+        (self.token_len, self.alphanumeric_len)
+    }
+
     pub(super) fn of(pattern: &Hir) -> Self {
         Self {
             len: pattern.properties().minimum_len().unwrap_or(0),

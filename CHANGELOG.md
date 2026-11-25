@@ -23,6 +23,15 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   every evaluation, and a shared `TX` variable is read by position rather
   than by hashing its name. Any other target, and a rule that leaves a target
   out, is resolved as before. (#127)
+- A value that is too short for a rule's regex is ruled out before the
+  rule's transformations run, not after: a value made only of letters and
+  digits, or only of those and `-./:_`, that is shorter than the shortest
+  such match. This applies where every transformation of the rule keeps such
+  a value in its alphabet and no longer (case folding, the URL, HTML, JS and
+  CSS decoders, whitespace and null removal, and for letters and digits also
+  comment removal, `cmdLine` and path normalization); a rule with any other
+  transformation, a negated operator or a macro in its operand tests every
+  value as before. (#128)
 
 ## [0.13.0] - 2026-11-23
 
