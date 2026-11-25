@@ -9,6 +9,16 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- A target of an `@rx` rule is skipped when no value of the request
+  collections it reads can match: the arguments, their names, the cookies
+  and their names are measured once per rule run (longest text, and whether
+  all are letters and digits or those and `-./:_`), and a target whose
+  collections are all too short for the rule's shortest match is not
+  resolved at all. The bounds are those of #128, so the same rules qualify;
+  a counting target and any other variable are resolved as before. (#130)
+
 ## [0.13.1] - 2026-11-25
 
 CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.0 on the CRS regression corpus.
