@@ -13,7 +13,7 @@ use super::control::{CtlDirective, TransactionControls};
 use super::intervention::{Intervention, RuleMessage};
 use super::operand_macro::{self, OperandMacro};
 use super::phase::Phase;
-use super::plan::{RulePlan, TargetPlan};
+use super::plan::{RulePlan, TargetPlan, Widths};
 use super::ruleset::{CompiledRule, CompiledRuleset, RuleEngineMode};
 use super::scoring::ANOMALY_SCORE;
 use crate::actions::{DisruptiveOutcome, FlowOutcome, SetVarOp as RuleSetVar, SetVarOperation};
@@ -88,6 +88,8 @@ pub struct Transaction {
     /// asked for `TX` to write to. Only then is the transaction in the state
     /// the ruleset's [`InitialState`] was prepared from.
     untouched: bool,
+    /// The widths of the request's collections as the current phase found them.
+    widths: Widths,
 }
 
 /// The variable a rule matched on.
@@ -241,6 +243,7 @@ impl Transaction {
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
             untouched: true,
+            widths: Widths::default(),
         }
     }
 
@@ -602,6 +605,7 @@ impl Transaction {
         let ruleset = Arc::clone(&self.ruleset);
         let rules = ruleset.rules_for_phase(phase);
         let plans = ruleset.plans_for_phase(phase);
+        self.widths = Widths::of(&self.request);
 
         // The leading rules of phase 1 that read only TX leave the same state
         // behind in every transaction that starts them with nothing in it, so
@@ -1161,6 +1165,9 @@ impl Transaction {
             // An exclusion reduces the count, which is what a rule like
             // `SecRule &ARGS:x "@eq 0"` is asking about.
             let mut count = 0usize;
+            if plan.is_some_and(|plan| plan.rules_out_target(position, &self.widths)) {
+                continue;
+            }
             // An exclusion names one variable, so it can only take values of
             // a target with that variable: the others are not filtered.
             let filter_targets = rule_has_removals
