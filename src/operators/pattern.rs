@@ -60,12 +60,6 @@ impl RxOperator {
         })
     }
 
-    /// What every match of `pattern` needs, if it parses.
-    pub(crate) fn requirements_of(pattern: &str) -> Option<MatchRequirements> {
-        let hir = regex_syntax::Parser::new().parse(pattern).ok()?;
-        Some(MatchRequirements::of(&hir))
-    }
-
     /// Get or compile the regex pattern.
     ///
     /// Returns `None` if compilation failed. Syntax was already validated in
@@ -91,6 +85,10 @@ impl RxOperator {
 }
 
 impl Operator for RxOperator {
+    fn minimum_match_widths(&self) -> Option<(usize, usize)> {
+        Some(self.requirements.widths())
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if self.requirements.rule_out(value.as_bytes()) {
             return OperatorResult::no_match();
@@ -225,6 +223,22 @@ impl PmOperator {
 }
 
 impl Operator for PmOperator {
+    fn minimum_match_widths(&self) -> Option<(usize, usize)> {
+        // Matching folds ASCII case. It preserves length and membership in
+        // both alphabets, including for phrases read from a file.
+        let mut token = usize::MAX;
+        let mut alphanumeric = usize::MAX;
+        for phrase in &self.patterns {
+            if phrase.bytes().all(super::is_token) {
+                token = token.min(phrase.len());
+                if phrase.bytes().all(|b| b.is_ascii_alphanumeric()) {
+                    alphanumeric = alphanumeric.min(phrase.len());
+                }
+            }
+        }
+        Some((token, alphanumeric))
+    }
+
     fn execute(&self, value: &str) -> OperatorResult {
         if let Some(mat) = self.automaton.find(value) {
             let matched = &self.patterns[mat.pattern().as_usize()];
@@ -256,6 +270,17 @@ mod tests {
         let result = op.execute("user=john");
         assert!(result.matched);
         assert_eq!(result.captures, vec!["john"]);
+    }
+
+    #[test]
+    fn phrase_file_widths_use_only_entries_in_each_alphabet() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), "x y\nab.cd\nlongword\nÉ\n").unwrap();
+        let op = PmOperator::from_file(file.path().to_str().unwrap()).unwrap();
+        assert_eq!(op.minimum_match_widths(), Some((5, 8)));
+        assert!(op.execute("AB.CD").matched);
+        assert!(op.execute("x y").matched);
+        assert!(op.execute("É").matched);
     }
 
     #[test]

@@ -45,6 +45,13 @@ pub trait Operator: Send + Sync {
     /// Execute the operator against a value.
     fn execute(&self, value: &str) -> OperatorResult;
 
+    /// Lower bounds on match length for two ASCII alphabets. The first allows
+    /// letters, digits and `-./:_`, the second only letters and digits.
+    /// `usize::MAX` denotes an impossible match within that alphabet.
+    fn minimum_match_widths(&self) -> Option<(usize, usize)> {
+        None
+    }
+
     /// Get the operator name.
     fn name(&self) -> &'static str;
 

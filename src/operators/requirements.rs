@@ -23,7 +23,7 @@ const BYTE_SEARCH_LIMIT: usize = 128;
 const DEPTH_LIMIT: usize = 32;
 
 /// A letter, a digit, or the punctuation of names and paths: `-./:_`.
-fn is_token(byte: u8) -> bool {
+pub(crate) fn is_token(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'/' | b':' | b'_')
 }
 

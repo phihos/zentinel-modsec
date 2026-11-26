@@ -6,8 +6,8 @@
 //! rule runs without a plan.
 
 use super::ruleset::CompiledRule;
-use crate::operators::RxOperator;
-use crate::parser::{OperatorName, Selection, VariableName, VariableSpec};
+use crate::operators::is_token;
+use crate::parser::{Selection, VariableName, VariableSpec};
 use crate::variables::{HashMapCollection, RequestData};
 
 /// How one target of a rule finds its values.
@@ -38,7 +38,7 @@ pub(super) struct RulePlan {
     pub(super) too_short: Option<TooShort>,
 }
 
-/// What a rule's regex needs of a value made only of token bytes (letters,
+/// What a rule's operator needs of a value made only of token bytes (letters,
 /// digits and `-./:_`) or only of letters and digits. Zero where the rule's
 /// transformations could turn such a value into something else.
 pub(super) struct TooShort {
@@ -66,15 +66,10 @@ impl TooShort {
     }
 
     fn of(rule: &CompiledRule) -> Option<Self> {
-        if rule.operator_spec.name != OperatorName::Rx
-            || rule.operator_negated
-            || rule.operand_has_macro
-            || rule.operand_unresolvable
-        {
+        if rule.operator_negated || rule.operand_has_macro || rule.operand_unresolvable {
             return None;
         }
-        let (token, alphanumeric) =
-            RxOperator::requirements_of(&rule.operator_spec.argument)?.widths();
+        let (token, alphanumeric) = rule.operator.minimum_match_widths()?;
         let keeps = |kept: &[&str]| {
             rule.transformations
                 .names()
@@ -90,10 +85,6 @@ impl TooShort {
         };
         (bounds.token > 1 || bounds.alphanumeric > 1).then_some(bounds)
     }
-}
-
-fn is_token(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'/' | b':' | b'_')
 }
 
 /// Transformations that turn a value of token bytes into one of token bytes
@@ -804,6 +795,24 @@ mod tests {
                 ""
             ),
             [true, true, false, false, false, false]
+        );
+    }
+
+    #[test]
+    fn phrase_bounds_keep_matching_inputs_and_unsafe_transforms() {
+        let rules = r#"
+            SecRule ARGS "@pm longphrase ab.cd" "id:10,phase:1,pass"
+            SecRule ARGS "!@pm longphrase" "id:11,phase:1,pass"
+            SecRule ARGS "@pm 626f6f6b" "id:12,phase:1,pass,t:hexEncode"
+            SecRule ARGS "@pm ab.cd" "id:13,phase:1,pass,multiMatch,t:lowercase"
+        "#;
+        same_on(
+            &Request {
+                uri: "/?q=book&x=AB.CD",
+                ..REQUEST
+            },
+            rules,
+            &["10", "11", "12", "13"],
         );
     }
 
