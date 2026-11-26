@@ -44,6 +44,10 @@
 | [#132](https://github.com/zentinelproxy/zentinel-modsec/pull/132) | Share prepared match data until the caller reads it. Merged. |
 | [#133](https://github.com/zentinelproxy/zentinel-modsec/pull/133) | Test multiMatch transformation stages as they run. Merged. |
 | [#134](https://github.com/zentinelproxy/zentinel-modsec/pull/134) | Skip rules whose request targets are all absent. Merged. |
+| [#137](https://github.com/zentinelproxy/zentinel-modsec/pull/137) | Build the reported member name in one allocation. |
+| [#138](https://github.com/zentinelproxy/zentinel-modsec/pull/138) | Reuse one match buffer per phase. |
+| [#139](https://github.com/zentinelproxy/zentinel-modsec/pull/139) | Skip absent targets within a mixed target list. |
+| [#140](https://github.com/zentinelproxy/zentinel-modsec/pull/140) | Borrow words for a dynamic within comparison against TX. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 

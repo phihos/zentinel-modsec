@@ -46,6 +46,10 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#132](https://github.com/zentinelproxy/zentinel-modsec/pull/132) | Share prepared match data until the caller reads it. Merged. |
 | [#133](https://github.com/zentinelproxy/zentinel-modsec/pull/133) | Test multiMatch transformation stages as they run. Merged. |
 | [#134](https://github.com/zentinelproxy/zentinel-modsec/pull/134) | Skip rules whose request targets are all absent. Merged. |
+| [#137](https://github.com/zentinelproxy/zentinel-modsec/pull/137) | Build the reported member name in one allocation. |
+| [#138](https://github.com/zentinelproxy/zentinel-modsec/pull/138) | Reuse one match buffer per phase. |
+| [#139](https://github.com/zentinelproxy/zentinel-modsec/pull/139) | Skip absent targets within a mixed target list. |
+| [#140](https://github.com/zentinelproxy/zentinel-modsec/pull/140) | Borrow words for a dynamic within comparison against TX. |
 
 ## Queued on the fork
 
