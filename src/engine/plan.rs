@@ -29,6 +29,9 @@ pub(super) enum TargetPlan {
 /// The plan of one rule.
 pub(super) struct RulePlan {
     possible_sources: u64,
+    /// Union of the width sources for every target. Zero if any target
+    /// cannot be ruled out by width, including count and scalar targets.
+    all_width_sources: u8,
     targets: Vec<TargetPlan>,
     /// Per target, the request collections all its values come from, as bits
     /// of [`Widths`]; zero when they come from elsewhere or it counts them.
@@ -152,7 +155,13 @@ impl RulePlan {
     /// Plan the targets of `rule`. `shared_tx` holds the `TX` variables a
     /// transaction takes over from the ruleset, if it prepared any.
     pub(super) fn prepare(rule: &CompiledRule, shared_tx: Option<&HashMapCollection>) -> Self {
+        let sources: Vec<_> = rule.variables.iter().map(sources).collect();
+        let all_width_sources = sources
+            .iter()
+            .try_fold(0, |mask, &source| (source != 0).then_some(mask | source))
+            .unwrap_or(0);
         Self {
+            all_width_sources,
             possible_sources: if rule.variables.is_empty() {
                 ALWAYS
             } else {
@@ -161,7 +170,7 @@ impl RulePlan {
                     .map(presence_source)
                     .fold(0, |mask, bit| mask | bit)
             },
-            sources: rule.variables.iter().map(sources).collect(),
+            sources,
             too_short: TooShort::of(rule),
             targets: rule
                 .variables
@@ -171,9 +180,14 @@ impl RulePlan {
         }
     }
 
-    /// False only when every target needs a collection or header that is absent.
-    pub(super) fn targets_absent(&self, widths: &Widths) -> bool {
+    /// Whether presence or width rules out every target before evaluation.
+    pub(super) fn rules_out_rule(&self, widths: &Widths) -> bool {
         self.possible_sources & widths.present == 0
+            || (self.all_width_sources != 0
+                && self
+                    .too_short
+                    .as_ref()
+                    .is_some_and(|bounds| widths.all_too_short(self.all_width_sources, bounds)))
     }
 
     /// Whether no value of the target at `position` can match, going by the
@@ -183,10 +197,7 @@ impl RulePlan {
         let (Some(bounds), Some(&sources)) = (&self.too_short, self.sources.get(position)) else {
             return false;
         };
-        sources != 0
-            && (0..SOURCES)
-                .filter(|source| sources & (1 << source) != 0)
-                .all(|source| bounds.rules_out_all(widths.collections[source]))
+        sources != 0 && widths.all_too_short(sources, bounds)
     }
 
     /// The plan of the target at `position` in the rule.
@@ -340,6 +351,18 @@ pub(super) struct Widths {
 }
 
 impl Widths {
+    /// Check only the collections selected by the mask.
+    fn all_too_short(&self, mut mask: u8, bounds: &TooShort) -> bool {
+        while mask != 0 {
+            let index = mask.trailing_zeros() as usize;
+            if !bounds.rules_out_all(self.collections[index]) {
+                return false;
+            }
+            mask &= mask - 1;
+        }
+        true
+    }
+
     pub(super) fn of(request: &RequestData) -> Self {
         let values = |c: &'_ HashMapCollection| Width::of(c.iter().map(|(_, value)| value));
         let names = |c: &'_ HashMapCollection| Width::of(c.entries().map(|(name, _)| name));
@@ -805,6 +828,37 @@ mod tests {
             ),
             [true, true, false, false, false, false]
         );
+    }
+
+    #[test]
+    fn whole_rule_width_checks_preserve_mixed_targets_and_chain_flow() {
+        let rules = r#"
+            SecRule ARGS|REQUEST_COOKIES "@rx ^[a-z]{6}$" "id:10,phase:1,pass,chain"
+                SecRule REQUEST_METHOD "@streq POST" "setvar:'tx.chain=1'"
+            SecRule ARGS|REQUEST_METHOD "@rx ^POST$" "id:11,phase:1,pass"
+            SecRule ARGS|&REQUEST_COOKIES "@rx ^0$" "id:12,phase:1,pass"
+            SecRule TX:chain "@eq 1" "id:13,phase:1,pass"
+            SecRule ARGS|REQUEST_COOKIES "!@rx ^[a-z]{6}$" "id:14,phase:1,pass"
+        "#;
+        for (uri, headers, ids) in [
+            ("/?x=abc", &[][..], &["11", "12", "14"][..]),
+            ("/?x=abcdef", &[][..], &["10", "11", "12", "13"][..]),
+            (
+                "/?x=abc",
+                &[("Cookie", "sid=abcdef")][..],
+                &["10", "11", "13", "14"][..],
+            ),
+        ] {
+            same_on(
+                &Request {
+                    uri,
+                    headers,
+                    ..REQUEST
+                },
+                rules,
+                ids,
+            );
+        }
     }
 
     #[test]

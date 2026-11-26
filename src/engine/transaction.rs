@@ -719,7 +719,7 @@ impl Transaction {
 
             // Evaluate rule
             let plan = plans.get(idx);
-            let matches = if plan.is_some_and(|plan| plan.targets_absent(&self.widths)) {
+            let matches = if plan.is_some_and(|plan| plan.rules_out_rule(&self.widths)) {
                 Matches::default()
             } else {
                 self.evaluate_rule(rule, plan)?
