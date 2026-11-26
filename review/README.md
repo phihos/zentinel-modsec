@@ -56,7 +56,7 @@
 | [#146](https://github.com/zentinelproxy/zentinel-modsec/pull/146) | Avoid collecting discarded regex match data. |
 | [#147](https://github.com/zentinelproxy/zentinel-modsec/pull/147) | Borrow whole macro values while expanding rule text. |
 | [#148](https://github.com/zentinelproxy/zentinel-modsec/pull/148) | Keep singleton collection values in their map entries. |
-| [#149](https://github.com/zentinelproxy/zentinel-modsec/pull/149) | Skip phrase searches on targets too short to match. |
+| [#149](https://github.com/zentinelproxy/zentinel-modsec/pull/149) | Use phrase and dotted-word width bounds to skip impossible matches. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 

@@ -2,9 +2,26 @@
 
 On clean CRS requests, two of the largest measured differences were the cost of constructing short strings for repeated matches and the cost of searching inputs that cannot contain any configured phrase. On the fork, routing nonempty short values through heap storage increased unread GET, form and JSON latency by 28.7%, 23.2% and 20.7%. The three median times went from 37.9 to 48.6 µs, 47.4 to 58.8 µs and 55.4 to 67.4 µs. This experiment changes storage and the corresponding construction paths together. [Ablation patch](disable-short-values.patch) · [Paired samples](short-ablation.json)
 
-## Current head-to-head
+## Final comparison after porting dotted-word bounds
 
-Each cell is a median of eight process means in µs per request. Both builds use 698 rules from CRS 4.25.0. Each process warms up before measuring 2,200 transactions per fixture. Build order alternates within each pair on CPU 12. The integrated build contains the thirteen performance changes based on upstream 0.13.3. The fork is at `3d1fd5c`. The [paired samples](phrase-gap.json) also support computing median within-pair ratios, which can differ from ratios of the table entries.
+The fork computes separate minimum match lengths for names made of ASCII letters, digits and dots. Clean JSON supplies names such as `json.items.0.sku`. A regex or phrase that requires a slash, colon or other punctuation cannot match such a name. The planner can skip that target before transforming or searching it.
+
+Disabling just the dotted bound on the fork increased JSON from 56.42 to 60.98 µs unread and 74.41 to 79.28 µs read. The median paired increases were 6.57% and 6.42%. Adding the same distinction to #149 reduced integrated JSON latency by 7.07% unread and 5.99% read. The extra classification cost 1.22% on GET and 1.90% on form unread in that comparison. [Fork ablation](dotted-attribution.json) · [Ablation patch](disable-dotted-width.patch) · [Integrated pairs](dotted-increment.json)
+
+| Matched data | Build | GET µs | Form POST µs | JSON POST µs |
+|---|---|---:|---:|---:|
+| Unread | #137–149 together | 38.3 | 49.6 | 57.3 |
+| Unread | Fork | 38.9 | 48.9 | 57.7 |
+| Read at end | #137–149 together | 48.4 | 60.2 | 68.0 |
+| Read at end | Fork | 57.7 | 66.8 | 75.1 |
+
+This confirmation repeats eight alternating process pairs on CPU 12. Medians of within-pair differences (integrated minus fork) were −0.65, +0.67 and +0.12 µs unread. In the first eight pairs they were +0.10, +1.80 and +0.24 µs. Both runs put JSON close to parity and form slightly ahead on the fork. Reading matched data favored the integrated build on all three fixtures in both runs. [First run](dotted-gap.json) · [Confirmation](dotted-confirm.json)
+
+The updated #149 alone reduced unread GET, form and JSON latency by 4.5%, 4.9% and 7.5% against upstream main. All 10,368 public audit snapshots still agreed with main for #149 and the combined build. [Standalone pairs](dotted-standalone.json)
+
+## Before the dotted-word change
+
+Each cell is a median of eight process means in µs per request. Both builds use 698 rules from CRS 4.25.0. Each process warms up before measuring 2,200 transactions per fixture. Build order alternates within each pair on CPU 12. The integrated build contains the thirteen performance changes, with #149 at its first commit, based on upstream 0.13.3. The fork is at `3d1fd5c`. The [paired samples](phrase-gap.json) also support computing median within-pair ratios, which can differ from ratios of the table entries.
 
 | Matched data | Build | GET | Form POST | JSON POST |
 |---|---|---:|---:|---:|
@@ -27,7 +44,7 @@ Upstream main at `a3a5f2c` measured 63.1, 75.6 and 84.0 µs unread in the [previ
 
 The changes interact. Their percentages use different baselines and cannot be added. The focused results use ten alternating process pairs and 4,000 transactions per fixture. [Focused harness](residual_focus.rs) · [Full workload and instructions](../post-140/)
 
-## What remains on JSON
+## Locating the JSON difference before the dotted-word change
 
 Separate timing around the public transaction methods on CPU 14 measured 36.23 µs for appending and processing the JSON request body on the combined build and 31.24 µs on the fork. Logging took 2.41 vs 1.08 µs. The body interval includes parsing and phase-two rule evaluation. Instrumentation changes absolute times. [Phase samples](final-phases.json) · [Phase harness](phase_cost.rs)
 
@@ -35,6 +52,6 @@ For the combined build and each new PR separately, all 10,368 after-header and a
 
 The body interval with an empty object was 16.81 vs 15.66 µs. With two flat scalar fields it was 29.16 vs 24.30 µs, and with the nested fixture it was 35.68 vs 31.02 µs. Rules that explicitly match the nested SKU and quantity fired in both builds. Timing request construction, JSON parsing and destruction in isolation took 0.61 µs on the integrated build and 0.80 µs on the fork. Parsing alone cannot account for the fork’s lead. [JSON fixture samples](json-phases.json) · [Harness](json_cost.rs)
 
-The fork exposes the raw request body to rules according to the selected processor. Upstream also exposes the raw JSON body. An experimental fork build exposed the raw body and its length during JSON inspection. The median paired JSON latency changed by +0.54% unread and −0.37% read. In a separate head-to-head comparison the fork with that change still took 56.83 µs vs 60.19 µs unread. Raw-body visibility alone explains little of the observed difference. The remaining time is concentrated in phase-two inspection with populated arguments. These timings do not isolate a single operator as the cause. [Experimental change](expose-json-body.patch) · [Within-fork pairs](json-visibility.json) · [Integrated comparison](json-visible-gap.json)
+The fork exposes the raw request body to rules according to the selected processor. Upstream also exposes the raw JSON body. An experimental fork build exposed the raw body and its length during JSON inspection. The median paired JSON latency changed by +0.54% unread and −0.37% read. In a separate head-to-head comparison the fork with that change still took 56.83 µs vs 60.19 µs unread. Raw-body visibility alone explains little of the observed difference. The remaining time is concentrated in phase-two inspection with populated arguments. This observation led to testing the fork’s dotted-word bounds above. [Experimental change](expose-json-body.patch) · [Within-fork pairs](json-visibility.json) · [Integrated comparison](json-visible-gap.json)
 
 The per-request allocator trace counts allocation, zeroed allocation and reallocation on one warmed request with matched data unread. On the eight-PR GET, repeated construction of matched values, rule IDs and successful numeric results accounted for 44, 42 and 30 calls respectively. [Allocator harness](alloc_probe.rs)

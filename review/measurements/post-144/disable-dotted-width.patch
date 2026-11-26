@@ -1,0 +1,13 @@
+diff --git a/src/engine/ruleset/dispatch.rs b/src/engine/ruleset/dispatch.rs
+index de434d3..62da72c 100644
+--- a/src/engine/ruleset/dispatch.rs
++++ b/src/engine/ruleset/dispatch.rs
+@@ -93,7 +93,7 @@ impl RuleDispatch {
+             let [word, path] = rule.operator.short_token_minimums();
+             [
+                 word,
+-                rule.operator.dotted_token_minimum(),
++                0,
+                 if rule.transformations.preserves_token_width_bounds() {
+                     path
+                 } else {
