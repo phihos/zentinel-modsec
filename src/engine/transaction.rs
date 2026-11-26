@@ -1,7 +1,6 @@
 //! Transaction processing for ModSecurity.
 
 use std::borrow::Cow;
-use std::fmt;
 use std::sync::Arc;
 
 mod initial;
@@ -110,11 +109,11 @@ enum TargetName<'a> {
     Count(VariableName),
 }
 
-impl fmt::Display for TargetName<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl TargetName<'_> {
+    fn rendered(&self) -> String {
         match self {
-            Self::Value(name) => name.fmt(f),
-            Self::Count(variable) => write!(f, "&{variable:?}"),
+            Self::Value(name) => name.rendered(),
+            Self::Count(variable) => format!("&{variable:?}"),
         }
     }
 }
@@ -1132,7 +1131,7 @@ impl Transaction {
 
             if final_match {
                 let matched = MatchedVariable {
-                    name: name.to_string(),
+                    name: name.rendered(),
                     // ModSecurity's MATCHED_VAR is the *variable's* value, not
                     // the portion the operator hit. The portion is reported
                     // separately, since an audit log wants both: the value to
@@ -1177,7 +1176,7 @@ impl Transaction {
             let mut each = |name: ResolvedName<'_>, value: Cow<'_, str>| {
                 if filter_targets {
                     // Rendered only for a target a `ctl:` exclusion can concern.
-                    let name = &name.to_string();
+                    let name = &name.rendered();
                     let removed_by_id = filter_by_id
                         && self
                             .controls

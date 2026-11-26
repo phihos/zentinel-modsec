@@ -18,6 +18,18 @@ pub struct ResolvedName<'a> {
 }
 
 impl<'a> ResolvedName<'a> {
+    /// The name reported in match data or compared with a target exclusion.
+    pub(crate) fn rendered(&self) -> String {
+        let Some(member) = &self.member else {
+            return self.collection.to_owned();
+        };
+        let mut name = String::with_capacity(self.collection.len() + 1 + member.len());
+        name.push_str(self.collection);
+        name.push(':');
+        name.push_str(member);
+        name
+    }
+
     fn scalar(name: &'static str) -> Self {
         Self {
             collection: name,

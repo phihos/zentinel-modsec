@@ -350,3 +350,13 @@ fn a_chain_removed_for_the_transaction_leaves_the_records_around_it_whole() {
         ]
     );
 }
+
+#[test]
+fn a_long_member_name_is_reported_in_full() {
+    let member = "repeated-key-".repeat(24);
+    let tx = run(
+        "SecRuleEngine On\nSecRule ARGS \"@streq tea\" \"id:1,phase:2,pass\"\n",
+        &format!("/?{member}=tea"),
+    );
+    assert_eq!(tx.matched_data()[0].variable, format!("ARGS:{member}"));
+}
