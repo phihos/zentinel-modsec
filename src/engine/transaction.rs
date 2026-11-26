@@ -8,7 +8,7 @@ mod initial;
 mod record;
 
 pub(super) use initial::InitialState;
-use record::{MessageRecord, Records, RuleAt};
+use record::{MatchDataLog, MessageRecord, Records, RuleAt};
 
 use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
@@ -81,7 +81,7 @@ pub struct Transaction {
     /// rule so that `MATCHED_VARS` reads correctly. This accumulates for the
     /// whole transaction, because audit logging wants to answer "what did
     /// rule 942100 actually see" after the fact.
-    matched_data: Vec<MatchedData>,
+    matched_data: MatchDataLog,
     /// What each `setvar` that ran did, in order. See [`SetVarEffect`].
     setvar_effects: Vec<SetVarEffect>,
     /// Whether `setvar_effects` is filled. Off by default.
@@ -241,7 +241,7 @@ impl Transaction {
             messages: Records::default(),
             captures: Vec::new(),
             controls: TransactionControls::default(),
-            matched_data: Vec::new(),
+            matched_data: MatchDataLog::default(),
             setvar_effects: Vec::new(),
             record_setvar_effects: false,
             untouched: true,
@@ -305,7 +305,7 @@ impl Transaction {
     /// Pairs with [`matched_rules`](Self::matched_rules): that says which
     /// rules fired, this says what they saw.
     pub fn matched_data(&self) -> &[MatchedData] {
-        &self.matched_data
+        self.matched_data.as_slice(&self.ruleset)
     }
 
     /// Record what every `setvar` does, for [`setvar_effects`](Self::setvar_effects).
@@ -578,9 +578,10 @@ impl Transaction {
         // The phase is over and its last match stays `MATCHED_VAR` for the
         // next one, so this one record gets a copy.
         if open_record == Some(OpenRecord::Recorded) {
-            if let (Some(record), Some((name, value))) =
-                (self.matched_data.last_mut(), self.matched_vars.first())
-            {
+            if let (Some(record), Some((name, value))) = (
+                self.matched_data.records_mut().last_mut(),
+                self.matched_vars.first(),
+            ) {
                 record.variable.clone_from(name);
                 record.value.clone_from(value);
             }
@@ -730,7 +731,7 @@ impl Transaction {
                 // now that no rule reads them any more.
                 if let Some(open) = open_record.take() {
                     let record = match open {
-                        OpenRecord::Recorded => self.matched_data.last_mut(),
+                        OpenRecord::Recorded => self.matched_data.records_mut().last_mut(),
                         OpenRecord::Held => pending_chain_data.last_mut(),
                     };
                     if let (Some(record), Some((name, value))) =
@@ -786,7 +787,7 @@ impl Transaction {
                                 pending_chain_data.push(entry);
                                 *open_record = Some(OpenRecord::Held);
                             } else {
-                                self.matched_data.push(entry);
+                                self.matched_data.records_mut().push(entry);
                                 *open_record = Some(OpenRecord::Recorded);
                             }
                         }
@@ -828,7 +829,9 @@ impl Transaction {
                 let record_id = !chain_state.in_chain || pending_chain_actions.is_some();
                 let (acting_index, held_controls) = if chain_state.in_chain {
                     chain_state.reset();
-                    self.matched_data.append(&mut pending_chain_data);
+                    self.matched_data
+                        .records_mut()
+                        .append(&mut pending_chain_data);
                     if *open_record == Some(OpenRecord::Held) {
                         *open_record = Some(OpenRecord::Recorded);
                     }
