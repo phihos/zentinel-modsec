@@ -11,6 +11,8 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ### Performance
 
+- Rules with `multiMatch` test successive transformation stages as needed
+  and stop at the first qualifying stage.
 - A target of an `@rx` rule is skipped when no value of the request
   collections it reads can match: the arguments, their names, the cookies
   and their names are measured once per rule run (longest text, and whether
