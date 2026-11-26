@@ -125,36 +125,6 @@ struct RuleMatch {
     matched_variable: Option<MatchedVariable>,
 }
 
-/// Result of evaluating one rule: every match, in the order the variables were
-/// resolved. libmodsecurity runs the operator against every value and handles
-/// each match on its own (`capture`, `setvar`), so a rule over `REQUEST_HEADERS`
-/// acts once per matching header.
-///
-/// Most rules that match do so on one value, which is held without a list.
-#[derive(Default)]
-struct Matches {
-    first: Option<RuleMatch>,
-    rest: Vec<RuleMatch>,
-}
-
-impl Matches {
-    fn push(&mut self, next: RuleMatch) {
-        if self.first.is_none() {
-            self.first = Some(next);
-        } else {
-            self.rest.push(next);
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.first.is_none()
-    }
-
-    fn into_iter(self) -> impl Iterator<Item = RuleMatch> {
-        self.first.into_iter().chain(self.rest)
-    }
-}
-
 /// Where the record of the rule that matched last is while its variable and
 /// value are still only in `matched_vars`: the last entry of the transaction's
 /// records, or of those held for a chain that has not completed.
@@ -650,6 +620,9 @@ impl Transaction {
         // (`CompiledRule::skip_after_index`).
         let mut skip_after: Option<Option<usize>> = None;
 
+        // Every match is consumed before advancing the rule cursor. Reuse
+        // the allocation for later rules that match several values.
+        let mut matches = Vec::new();
         let mut idx = start;
         while idx < rules.len() {
             // Handle skip
@@ -719,11 +692,9 @@ impl Transaction {
 
             // Evaluate rule
             let plan = plans.get(idx);
-            let matches = if plan.is_some_and(|plan| plan.targets_absent(&self.widths)) {
-                Matches::default()
-            } else {
-                self.evaluate_rule(rule, plan)?
-            };
+            if !plan.is_some_and(|plan| plan.targets_absent(&self.widths)) {
+                self.evaluate_rule(rule, plan, &mut matches)?;
+            }
             let matched = !matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
             let mut captures = Vec::new();
@@ -772,7 +743,7 @@ impl Transaction {
                 // `setvar:tx.x=%{MATCHED_VAR}` is read by the links after it).
                 // Every other action waits for the whole chain. A continuation
                 // link has no id; its effects belong to the chain's starter.
-                for (n, m) in matches.into_iter().enumerate() {
+                for (n, m) in matches.drain(..).enumerate() {
                     let mut whole = None;
                     if let Some(var) = m.matched_variable {
                         whole = var.portion;
@@ -1007,7 +978,12 @@ impl Transaction {
     /// state at load calls it too, and a second caller would otherwise make
     /// it a function of its own on the request path.
     #[inline]
-    fn evaluate_rule(&self, rule: &CompiledRule, plan: Option<&RulePlan>) -> Result<Matches> {
+    fn evaluate_rule(
+        &self,
+        rule: &CompiledRule,
+        plan: Option<&RulePlan>,
+        matches: &mut Vec<RuleMatch>,
+    ) -> Result<()> {
         let resolver = VariableResolver::new(
             &self.request,
             &self.response,
@@ -1031,14 +1007,13 @@ impl Transaction {
             };
             // A SecAction has no variable, so there is nothing to report
             // as the match target.
-            let mut matches = Matches::default();
             if matched {
                 matches.push(RuleMatch {
                     captures: result.captures,
                     matched_variable: None,
                 });
             }
-            return Ok(matches);
+            return Ok(());
         }
 
         // If the operator argument references runtime macros (e.g.
@@ -1065,7 +1040,6 @@ impl Transaction {
         // always has a value, the count. The same holds for a rule whose
         // targets `ctl:` exclusions removed entirely.
         let too_short = plan.and_then(|plan| plan.too_short.as_ref());
-        let mut matches = Matches::default();
         let mut test = |name: TargetName<'_>, value: Cow<'_, str>| {
             let operator: &dyn Operator = if expands_operand {
                 let compiled = dynamic_operator.get_or_insert_with(|| {
@@ -1214,7 +1188,7 @@ impl Transaction {
             }
         }
 
-        Ok(matches)
+        Ok(())
     }
 
     /// Expand `%{...}` macros in an operator argument, or a rule's message,

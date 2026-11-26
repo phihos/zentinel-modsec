@@ -43,14 +43,16 @@ impl InitialState {
         let mut scratch = Transaction::new(Arc::default(), 0);
         let mut open_record = None;
         let mut count = 0;
+        let mut matches = Vec::new();
         for rule in rules {
             if !decides_on_tx(rule) {
                 break;
             }
             // A rule that does not match does nothing, whatever its actions.
-            let Ok(matches) = scratch.evaluate_rule(rule, None) else {
+            matches.clear();
+            if scratch.evaluate_rule(rule, None, &mut matches).is_err() {
                 break;
-            };
+            }
             if !matches.is_empty() && !acts_on_tx(rule) {
                 break;
             }

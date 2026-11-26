@@ -350,3 +350,17 @@ fn a_chain_removed_for_the_transaction_leaves_the_records_around_it_whole() {
         ]
     );
 }
+
+#[test]
+fn a_multi_value_match_followed_by_a_miss_leaves_no_stale_results() {
+    let tx = run(
+        r#"SecRuleEngine On
+SecRule ARGS "@contains e" "id:1,phase:2,pass,setvar:tx.hits=+1"
+SecRule ARGS "@streq absent" "id:2,phase:2,pass,setvar:tx.hits=+10"
+SecRule TX:hits "@eq 2" "id:3,phase:2,pass"
+"#,
+        "/?a=tea&b=green",
+    );
+    assert_eq!(tx.matched_rules(), ["1", "3"]);
+    assert_eq!(tx_value(&tx, "hits").as_deref(), Some("2"));
+}
