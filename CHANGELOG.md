@@ -9,6 +9,12 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- When only some targets of a rule can be present, rule evaluation also
+  skips the individual targets whose request collection or named header is
+  absent.
+
 ## [0.13.3] - 2026-11-26
 
 CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.2 on the CRS regression corpus.

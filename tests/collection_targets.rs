@@ -148,3 +148,20 @@ SecRule ARGS_POST:x "@streq tea" "id:4,phase:2,pass"
     tx.process_request_body().unwrap();
     assert_eq!(tx.matched_rules(), ["1", "2", "4"]);
 }
+
+#[test]
+fn mixed_rule_keeps_counts_and_preserves_member_order() {
+    let rules = r#"SecRuleEngine On
+SecRule REQUEST_COOKIES|ARGS:q|REQUEST_HEADERS:X-Tea "@streq hot" "id:1,phase:2,pass"
+SecRule REQUEST_HEADERS:Missing|&REQUEST_COOKIES "@eq 0" "id:2,phase:2,pass"
+"#;
+    let engine = zentinel_modsec::ModSecurity::from_string(rules).unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/?q=hot", "GET", "HTTP/1.1").unwrap();
+    tx.add_request_header("x-tea", "hot").unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2"]);
+    assert_eq!(tx.matched_data()[0].variable, "ARGS:q");
+    assert_eq!(tx.matched_data()[1].value, "0");
+}

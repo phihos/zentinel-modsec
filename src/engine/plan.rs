@@ -26,13 +26,18 @@ pub(super) enum TargetPlan {
     HeaderKey { key: String, lowered: String },
 }
 
+/// Request collections whose presence or width can rule out one target.
+struct TargetSources {
+    presence: u64,
+    widths: u8,
+}
+
 /// The plan of one rule.
 pub(super) struct RulePlan {
     possible_sources: u64,
     targets: Vec<TargetPlan>,
-    /// Per target, the request collections all its values come from, as bits
-    /// of [`Widths`]; zero when they come from elsewhere or it counts them.
-    sources: Vec<u8>,
+    /// The presence and width tests available for each target, in rule order.
+    sources: Vec<TargetSources>,
     /// Lengths below which a value of a narrow alphabet cannot match, as it
     /// stands before the rule's transformations.
     pub(super) too_short: Option<TooShort>,
@@ -152,16 +157,23 @@ impl RulePlan {
     /// Plan the targets of `rule`. `shared_tx` holds the `TX` variables a
     /// transaction takes over from the ruleset, if it prepared any.
     pub(super) fn prepare(rule: &CompiledRule, shared_tx: Option<&HashMapCollection>) -> Self {
+        let sources: Vec<_> = rule
+            .variables
+            .iter()
+            .map(|spec| TargetSources {
+                presence: presence_source(spec),
+                widths: sources(spec),
+            })
+            .collect();
         Self {
-            possible_sources: if rule.variables.is_empty() {
+            possible_sources: if sources.is_empty() {
                 ALWAYS
             } else {
-                rule.variables
+                sources
                     .iter()
-                    .map(presence_source)
-                    .fold(0, |mask, bit| mask | bit)
+                    .fold(0, |mask, source| mask | source.presence)
             },
-            sources: rule.variables.iter().map(sources).collect(),
+            sources,
             too_short: TooShort::of(rule),
             targets: rule
                 .variables
@@ -177,12 +189,19 @@ impl RulePlan {
     }
 
     /// Whether no value of the target at `position` can match, going by the
-    /// widths of the request's collections.
+    /// presence and widths of the request's collections.
     #[inline]
     pub(super) fn rules_out_target(&self, position: usize, widths: &Widths) -> bool {
-        let (Some(bounds), Some(&sources)) = (&self.too_short, self.sources.get(position)) else {
+        let Some(source) = self.sources.get(position) else {
             return false;
         };
+        if source.presence & widths.present == 0 {
+            return true;
+        }
+        let Some(bounds) = &self.too_short else {
+            return false;
+        };
+        let sources = source.widths;
         sources != 0
             && (0..SOURCES)
                 .filter(|source| sources & (1 << source) != 0)
