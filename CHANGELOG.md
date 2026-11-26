@@ -26,6 +26,8 @@ CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: mat
   first reads the corresponding list. Message macros still expand when the
   rule matches, and a blocking intervention immediately reports its rule IDs
   and log. (#131)
+- Transactions share completed phase 1 match-data records with the ruleset
+  until the caller first reads `matched_data()`.
 
 ## [0.13.1] - 2026-11-25
 

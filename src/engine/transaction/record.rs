@@ -9,10 +9,11 @@
 //! [`Transaction::matched_rules`]: super::Transaction::matched_rules
 //! [`Transaction::messages`]: super::Transaction::messages
 
+use super::MatchedData;
 use crate::engine::intervention::RuleMessage;
 use crate::engine::phase::Phase;
 use crate::engine::ruleset::{CompiledRule, CompiledRuleset};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 /// Where a rule sits in its ruleset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,5 +124,47 @@ impl<R: Record> Records<R> {
         self.pending.clear();
         self.pending.extend_from_slice(pending);
         self.published = OnceLock::new();
+    }
+}
+
+/// Completed records from phase initialization live in the ruleset. A transaction
+/// owns the unfinished last record and every record produced by later rules.
+#[derive(Default)]
+pub(super) struct MatchDataLog {
+    prefix_len: usize,
+    suffix: Mutex<Vec<MatchedData>>,
+    published: OnceLock<Vec<MatchedData>>,
+}
+
+impl MatchDataLog {
+    pub(super) fn restore(&mut self, prepared: &[MatchedData], last_is_open: bool) {
+        self.prefix_len = prepared.len() - usize::from(last_is_open);
+        self.published.take();
+        let suffix = self.suffix.get_mut().unwrap();
+        suffix.clear();
+        suffix.extend_from_slice(&prepared[self.prefix_len..]);
+    }
+
+    pub(super) fn records_mut(&mut self) -> &mut Vec<MatchedData> {
+        match self.published.get_mut() {
+            Some(records) => records,
+            None => self.suffix.get_mut().unwrap(),
+        }
+    }
+
+    pub(super) fn as_slice(&self, ruleset: &CompiledRuleset) -> &[MatchedData] {
+        self.published.get_or_init(|| {
+            // Readers share &Transaction. Only the first one takes ownership of
+            // the suffix, and subsequent phases append to the published vector.
+            let suffix = std::mem::take(&mut *self.suffix.lock().unwrap());
+            if self.prefix_len == 0 {
+                return suffix;
+            }
+            let prepared = ruleset.initial_state().expect("prepared match data");
+            let mut records = Vec::with_capacity(self.prefix_len + suffix.len());
+            records.extend_from_slice(&prepared.matched_data[..self.prefix_len]);
+            records.extend(suffix);
+            records
+        })
     }
 }

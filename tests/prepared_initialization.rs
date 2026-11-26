@@ -697,3 +697,29 @@ SecRule TX:score "@ge %{tx.limit}" "id:5,phase:2,deny,nolog"
 fn engine_reference(rules: &str) -> ModSecurity {
     engine(rules, Start::BehindRequestReader)
 }
+
+#[test]
+fn prepared_match_data_survives_reads_before_and_between_phases() {
+    let rules = r#"SecRuleEngine On
+SecRule &TX:a "@eq 0" "id:1,phase:1,pass,setvar:tx.a=1"
+SecRule &TX:b "@eq 0" "id:2,phase:1,pass,setvar:tx.b=2"
+SecRule ARGS:q "@streq tea" "id:3,phase:2,pass"
+"#;
+    let compiled = engine(rules, Start::Plain);
+    let reference = engine(rules, Start::BehindRequestReader);
+    for early_read in [false, true] {
+        let mut tx = request(&compiled, Start::Plain);
+        let mut expected = request(&reference, Start::Plain);
+        assert!(tx.matched_data().is_empty());
+        tx.process_request_headers().unwrap();
+        expected.process_request_headers().unwrap();
+        if early_read {
+            assert_eq!(seen(&tx).matched_data, seen(&expected).matched_data);
+            assert_eq!(tx.matched_data().len(), 2);
+        }
+        tx.process_request_body().unwrap();
+        expected.process_request_body().unwrap();
+        assert_eq!(seen(&tx).matched_data, seen(&expected).matched_data);
+        assert_eq!(tx.matched_data().len(), 3);
+    }
+}

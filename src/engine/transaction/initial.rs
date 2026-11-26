@@ -27,7 +27,7 @@ pub(in crate::engine) struct InitialState {
     matched_vars: Vec<(String, String)>,
     messages: Vec<MessageRecord>,
     captures: Vec<String>,
-    matched_data: Vec<MatchedData>,
+    pub(super) matched_data: Vec<MatchedData>,
     /// Whether the last record still waits for its variable and value.
     open_record: Option<OpenRecord>,
 }
@@ -79,7 +79,7 @@ impl InitialState {
             matched_vars: scratch.matched_vars,
             messages: scratch.messages.into_pending(),
             captures: scratch.captures,
-            matched_data: scratch.matched_data,
+            matched_data: std::mem::take(scratch.matched_data.records_mut()),
             open_record,
         })
     }
@@ -101,7 +101,9 @@ impl InitialState {
         transaction.matched_vars.clone_from(&self.matched_vars);
         transaction.messages.restore(&self.messages);
         transaction.captures.clone_from(&self.captures);
-        transaction.matched_data.clone_from(&self.matched_data);
+        transaction
+            .matched_data
+            .restore(&self.matched_data, self.open_record.is_some());
         *open_record = self.open_record;
         self.rules
     }
