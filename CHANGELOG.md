@@ -9,6 +9,10 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- Prepare sparse TX regex selections over shared defaults when the ruleset loads. Each request checks transaction-local keys and reads current values in insertion order.
+
 ## [0.13.3] - 2026-11-26
 
 CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.2 on the CRS regression corpus.

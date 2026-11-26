@@ -157,6 +157,21 @@ impl<'a> VariableResolver<'a> {
         keyed(&mut visit, "TX", key, tx.values_at(lowered, position));
     }
 
+    pub(crate) fn visit_tx_regex<'s>(
+        &self,
+        pattern: &super::KeyRegex,
+        positions: &[usize],
+        mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
+    ) where
+        'a: 's,
+    {
+        members(
+            &mut visit,
+            "TX",
+            self.tx.iter_prepared_regex(pattern, positions),
+        );
+    }
+
     /// Visit `REQUEST_HEADERS:key` for a rule whose plan holds the key as
     /// the headers store it.
     pub(crate) fn visit_header_key<'s>(

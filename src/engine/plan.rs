@@ -21,6 +21,11 @@ pub(super) enum TargetPlan {
         lowered: String,
         position: Option<usize>,
     },
+    /// Shared TX keys selected by a regex. Local keys are checked at evaluation.
+    TxRegex {
+        pattern: crate::variables::KeyRegex,
+        positions: Box<[usize]>,
+    },
     /// `REQUEST_HEADERS:key`: the key as the rule wrote it and as the
     /// headers store it.
     HeaderKey { key: String, lowered: String },
@@ -195,15 +200,34 @@ impl RulePlan {
     }
 }
 
-/// Plan one target. Only a target that selects one key and leaves nothing
-/// out is prepared: its values are all the values of that key.
+/// Prepare unrestricted key lookups and sparse regex selections on shared TX keys.
 fn plan_target(spec: &VariableSpec, shared_tx: Option<&HashMapCollection>) -> TargetPlan {
-    let Some(Selection::Key(key)) = &spec.selection else {
-        return TargetPlan::Resolver;
-    };
     if !spec.exclusions.is_empty() {
         return TargetPlan::Resolver;
     }
+    if let (VariableName::Tx, Some(Selection::Regex(pattern)), Some(shared)) =
+        (spec.name, &spec.selection, shared_tx)
+    {
+        // Keep plans for sparse selections. Broad patterns can use the normal
+        // scan without storing another copy of the collection's positions.
+        const MAX_POSITIONS: usize = 16;
+        let positions: Vec<_> = shared
+            .entries()
+            .enumerate()
+            .filter(|(_, (key, _))| pattern.is_match(key))
+            .map(|(position, _)| position)
+            .take(MAX_POSITIONS + 1)
+            .collect();
+        if positions.len() <= MAX_POSITIONS {
+            return TargetPlan::TxRegex {
+                pattern: pattern.clone(),
+                positions: positions.into_boxed_slice(),
+            };
+        }
+    }
+    let Some(Selection::Key(key)) = &spec.selection else {
+        return TargetPlan::Resolver;
+    };
     let key = key.clone();
     let lowered = key.to_ascii_lowercase();
     match spec.name {
@@ -472,6 +496,7 @@ mod tests {
             .unwrap();
         (0..targets)
             .map(|position| match plan.target(position) {
+                TargetPlan::TxRegex { positions, .. } => format!("tx regex {positions:?}"),
                 TargetPlan::Resolver => "resolver".to_string(),
                 TargetPlan::TxKey {
                     key,
@@ -484,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn a_key_is_prepared_and_anything_else_left_to_the_resolver() {
+    fn key_and_shared_tx_regex_selections_are_prepared() {
         assert_eq!(
             planned(
                 r#"SecRule TX:Level|TX:later|&TX:limit|TX:/^l/|TX|REQUEST_HEADERS:User-Agent|REQUEST_HEADERS|ARGS:item "@eq 1" "id:10,phase:1,pass""#,
@@ -494,7 +519,7 @@ mod tests {
                 "tx Level level Some(0)",
                 "tx later later None",
                 "tx limit limit Some(2)",
-                "resolver",
+                "tx regex [0, 2]",
                 "resolver",
                 "header User-Agent user-agent",
                 "resolver",
@@ -525,6 +550,43 @@ mod tests {
             "#,
             &["10", "11", "12", "13"],
         );
+    }
+
+    #[test]
+    fn regex_selected_tx_keys_follow_transaction_changes() {
+        same_with_and_without_plans(
+            r#"
+            SecRule REQUEST_METHOD "POST" "id:10,phase:1,pass,setvar:'tx.limit=6',setvar:'!tx.level',setvar:'tx.local=8'"
+            SecRule &TX:/^L/ "@eq 2" "id:11,phase:1,pass"
+            SecRule REQUEST_METHOD "POST" "id:12,phase:2,pass,setvar:'tx.level=7'"
+            SecRule TX:/^L/ "@ge 0" "id:13,phase:2,pass,log,msg:'%{MATCHED_VAR_NAME}'"
+            SecRule &TX:/^L/ "@eq 3" "id:14,phase:2,pass"
+            "#,
+            &["10", "11", "12", "13", "14"],
+        );
+    }
+
+    #[test]
+    fn tx_regex_uses_the_current_collections_defaults_after_replacement() {
+        let load = |extra: &str| {
+            let rules = format!(
+                r#"
+                SecAction "id:1,phase:1,pass,nolog,setvar:'tx.{extra}=1'"
+                SecRule REQUEST_METHOD "@streq GET" "id:2,phase:1,pass"
+                SecRule TX:/^selected/ "@eq 1" "id:3,phase:2,pass"
+            "#
+            );
+            let mut tx =
+                Transaction::new(Arc::new(CompiledRuleset::from_string(&rules).unwrap()), 403);
+            tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+            tx.process_request_headers().unwrap();
+            tx
+        };
+        let mut source = load("selected");
+        let mut destination = load("different");
+        std::mem::swap(source.tx_mut(), destination.tx_mut());
+        destination.process_request_body().unwrap();
+        assert!(destination.matched_rules().iter().any(|id| id == "3"));
     }
 
     #[test]

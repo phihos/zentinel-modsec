@@ -159,6 +159,32 @@ impl TxCollection {
             .flat_map(|(key, values)| values.iter().map(move |v| (key, v.as_str())))
     }
 
+    pub(crate) fn shares(&self, defaults: &HashMapCollection) -> bool {
+        self.shared
+            .as_deref()
+            .is_some_and(|shared| std::ptr::eq(shared, defaults))
+    }
+
+    /// Visit the shared keys selected at load, then matching local keys. A
+    /// deleted and reinserted shared key lives at its new position in data.
+    pub(crate) fn iter_prepared_regex<'a, 'r>(
+        &'a self,
+        pattern: &'r KeyRegex,
+        positions: &'r [usize],
+    ) -> impl Iterator<Item = (&'a str, &'a str)> + 'r
+    where
+        'a: 'r,
+    {
+        positions
+            .iter()
+            .filter_map(move |&position| {
+                let (key, values) = self.shared.as_ref()?.entry_at(position)?;
+                Some((key, self.shared_at(position, values)?))
+            })
+            .flat_map(|(key, values)| values.iter().map(move |value| (key, value.as_str())))
+            .chain(self.data.iter_regex(pattern))
+    }
+
     /// Note what became of the shared variable at `position`.
     fn change(&mut self, position: usize, change: Change) {
         match self
