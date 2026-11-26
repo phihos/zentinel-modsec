@@ -43,6 +43,9 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#128](https://github.com/zentinelproxy/zentinel-modsec/pull/128) | Rule a value out before its transformations run. Merged. |
 | [#130](https://github.com/zentinelproxy/zentinel-modsec/pull/130) | Skip a target no value of which can match. Merged. |
 | [#131](https://github.com/zentinelproxy/zentinel-modsec/pull/131) | Build matched rule IDs and messages on first read. Merged. |
+| [#132](https://github.com/zentinelproxy/zentinel-modsec/pull/132) | Share prepared match data until the caller reads it. |
+| [#133](https://github.com/zentinelproxy/zentinel-modsec/pull/133) | Test multiMatch transformation stages as they run. |
+| [#134](https://github.com/zentinelproxy/zentinel-modsec/pull/134) | Skip rules whose request targets are all absent. |
 
 ## Queued on the fork
 
