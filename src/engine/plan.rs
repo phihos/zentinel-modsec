@@ -266,13 +266,14 @@ fn presence_source(spec: &VariableSpec) -> u64 {
     }
 }
 
-const SOURCES: usize = 6;
+const SOURCES: usize = 7;
 const GET_VALUES: u8 = 1;
 const GET_NAMES: u8 = 2;
 const POST_VALUES: u8 = 4;
 const POST_NAMES: u8 = 8;
 const COOKIE_VALUES: u8 = 16;
 const COOKIE_NAMES: u8 = 32;
+const FILENAME: u8 = 64;
 
 /// The request collections every value of `spec` comes from.
 fn sources(spec: &VariableSpec) -> u8 {
@@ -289,6 +290,7 @@ fn sources(spec: &VariableSpec) -> u8 {
         VariableName::ArgsPostNames => POST_NAMES,
         VariableName::RequestCookies => COOKIE_VALUES,
         VariableName::RequestCookiesNames => COOKIE_NAMES,
+        VariableName::RequestFilename => FILENAME,
         _ => 0,
     }
 }
@@ -374,6 +376,7 @@ impl Widths {
                 names(&request.args_post),
                 values(&request.cookies),
                 names(&request.cookies),
+                Width::of(std::iter::once(request.path.as_str())),
             ],
         }
     }
@@ -805,6 +808,24 @@ mod tests {
             ),
             [true, true, false, false, false, false]
         );
+    }
+
+    #[test]
+    fn filename_bounds_preserve_matches_for_paths_and_counted_targets() {
+        let rules = r#"
+            SecRule REQUEST_FILENAME "@rx ^/[a-z]{6}$" "id:10,phase:1,pass"
+            SecRule REQUEST_FILENAME "!@rx ^/[a-z]{6}$" "id:11,phase:1,pass"
+            SecRule &REQUEST_FILENAME "@rx ^1$" "id:12,phase:1,pass"
+            SecRule REQUEST_FILENAME "@rx ^/[a-z]{6}$" "id:13,phase:2,pass,t:lowercase,multiMatch"
+        "#;
+        for (uri, ids) in [
+            ("/abc?longquery=abcdef", &["11", "12"][..]),
+            ("/abcdef", &["10", "12", "13"][..]),
+            ("/ABCDEF", &["11", "12", "13"][..]),
+            ("/a+b", &["11", "12"][..]),
+        ] {
+            same_on(&Request { uri, ..REQUEST }, rules, ids);
+        }
     }
 
     #[test]
