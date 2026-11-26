@@ -45,6 +45,12 @@ pub trait Operator: Send + Sync {
     /// Execute the operator against a value.
     fn execute(&self, value: &str) -> OperatorResult;
 
+    /// Execute within a rule. A positive result in a negated rule is
+    /// discarded, so operators can omit its match text and capture groups.
+    fn execute_for_rule(&self, value: &str, _negated: bool) -> OperatorResult {
+        self.execute(value)
+    }
+
     /// Get the operator name.
     fn name(&self) -> &'static str;
 

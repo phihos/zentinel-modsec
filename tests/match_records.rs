@@ -350,3 +350,24 @@ fn a_chain_removed_for_the_transaction_leaves_the_records_around_it_whole() {
         ]
     );
 }
+
+#[test]
+fn negated_regex_matches_only_misses_at_each_transformation_stage() {
+    let tx = run(
+        r#"
+        SecRuleEngine On
+        SecRule ARGS:a "!@rx ^([A-Z]+)$" "id:1,phase:2,pass,nolog"
+        SecRule ARGS:a "!@rx ^([A-Z]+)$" "id:2,phase:2,pass,multiMatch,t:lowercase"
+        SecRule ARGS:a "@rx [A-Z]+" "id:3,phase:2,pass"
+        "#,
+        "/?a=ABC",
+    );
+    assert_eq!(tx.matched_rules(), ["2", "3"]);
+    assert_eq!(
+        tx.matched_data(),
+        [
+            entry("2", "ARGS:a", "abc", None),
+            entry("3", "ARGS:a", "ABC", Some("ABC")),
+        ]
+    );
+}

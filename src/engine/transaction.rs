@@ -1112,7 +1112,7 @@ impl Transaction {
             // `..\` before t:cmdLine deletes the backslash)
             let (transformed, result) = if rule.multi_match {
                 let Some(hit) = rule.transformations.find_stage(&value, |stage| {
-                    let result = operator.execute(stage);
+                    let result = operator.execute_for_rule(stage, rule.operator_negated);
                     (result.matched != rule.operator_negated).then_some(result)
                 }) else {
                     return;
@@ -1120,7 +1120,7 @@ impl Transaction {
                 hit
             } else {
                 let transformed = rule.transformations.apply(&value);
-                let result = operator.execute(&transformed);
+                let result = operator.execute_for_rule(&transformed, rule.operator_negated);
                 (transformed, result)
             };
 

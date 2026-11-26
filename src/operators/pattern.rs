@@ -100,6 +100,14 @@ impl Operator for RxOperator {
             return OperatorResult::no_match();
         };
 
+        if regex.captures_len() == 1 {
+            return regex
+                .find(value)
+                .map_or_else(OperatorResult::no_match, |hit| {
+                    OperatorResult::matched(hit.as_str().to_owned())
+                });
+        }
+
         // Most values do not match. `is_match` answers that without building
         // capture slots, which `captures` allocates before it searches.
         if !regex.is_match(value) {
@@ -123,6 +131,17 @@ impl Operator for RxOperator {
             }
         } else {
             OperatorResult::no_match()
+        }
+    }
+
+    fn execute_for_rule(&self, value: &str, negated: bool) -> OperatorResult {
+        if !negated {
+            return self.execute(value);
+        }
+        OperatorResult {
+            matched: !self.requirements.rule_out(value.as_bytes())
+                && self.get_regex().is_some_and(|regex| regex.is_match(value)),
+            ..OperatorResult::default()
         }
     }
 
