@@ -1049,6 +1049,7 @@ impl Transaction {
         // matches. The expansion waits for the first value: a rule whose
         // targets resolve to nothing never runs its operator.
         let expands_operand = !rule.operand_unresolvable && rule.operand_has_macro;
+        let mut within_words = None;
         let mut dynamic_operator: Option<Option<Arc<dyn Operator>>> = None;
 
         // Apply transformations and match every value, as the resolver
@@ -1067,7 +1068,14 @@ impl Transaction {
         let too_short = plan.and_then(|plan| plan.too_short.as_ref());
         let mut matches = Matches::default();
         let mut test = |name: TargetName<'_>, value: Cow<'_, str>| {
-            let operator: &dyn Operator = if expands_operand {
+            let operator: &dyn Operator = if !expands_operand {
+                rule.operator.as_ref()
+            } else if let Some(key) = plan.and_then(|p| p.within_tx_key.as_deref()) {
+                within_words.get_or_insert_with(|| {
+                    let words = self.tx.values(key).first().map_or("", String::as_str);
+                    crate::operators::WithinWords::new(words)
+                })
+            } else {
                 let compiled = dynamic_operator.get_or_insert_with(|| {
                     let expanded = self.expand_operator_macros(&rule.operator_spec.argument);
                     compile_operator(&OperatorSpec {
@@ -1097,8 +1105,6 @@ impl Transaction {
                     Some(operator) => operator,
                     None => return,
                 }
-            } else {
-                rule.operator.as_ref()
             };
 
             // A value the rule's regex cannot match whatever the

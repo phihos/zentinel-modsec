@@ -47,3 +47,16 @@ fn a_bare_name_that_is_no_variable_still_reads_tx() {
     assert_eq!(matched(rules, "GET", "/?v=yes"), ["9", "1"]);
     assert_eq!(matched(rules, "GET", "/?v=no"), ["9"]);
 }
+
+#[test]
+fn within_reads_the_current_tx_list_and_matches_whole_words() {
+    let rules = r#"SecRuleEngine On
+SecRule ARGS:x "!@within %{tx.words}" "id:1,phase:2,pass"
+SecAction "id:2,phase:2,pass,setvar:'tx.words=coffee tea'"
+SecRule ARGS:x "@within %{TX.WORDS}" "id:3,phase:2,pass"
+SecRule ARGS:x "@within %{tx.words}cake" "id:4,phase:2,pass"
+"#;
+    assert_eq!(matched(rules, "GET", "/?x=tea"), ["1", "2", "3"]);
+    assert_eq!(matched(rules, "GET", "/?x=teacake"), ["1", "2", "4"]);
+    assert_eq!(matched(rules, "GET", "/?x=te"), ["1", "2"]);
+}

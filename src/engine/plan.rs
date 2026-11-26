@@ -29,6 +29,7 @@ pub(super) enum TargetPlan {
 /// The plan of one rule.
 pub(super) struct RulePlan {
     possible_sources: u64,
+    pub(super) within_tx_key: Option<Box<str>>,
     targets: Vec<TargetPlan>,
     /// Per target, the request collections all its values come from, as bits
     /// of [`Widths`]; zero when they come from elsewhere or it counts them.
@@ -153,6 +154,12 @@ impl RulePlan {
     /// transaction takes over from the ruleset, if it prepared any.
     pub(super) fn prepare(rule: &CompiledRule, shared_tx: Option<&HashMapCollection>) -> Self {
         Self {
+            within_tx_key: if rule.operator_spec.name == OperatorName::Within {
+                super::operand_macro::tx_key(&rule.operator_spec.argument)
+                    .map(|key| key.to_ascii_lowercase().into_boxed_str())
+            } else {
+                None
+            },
             possible_sources: if rule.variables.is_empty() {
                 ALWAYS
             } else {

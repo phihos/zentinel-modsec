@@ -56,6 +56,18 @@ impl<'a> OperandMacro<'a> {
     }
 }
 
+/// A single TX macro occupying the whole operand.
+pub(super) fn tx_key(text: &str) -> Option<&str> {
+    let inner = text.strip_prefix("%{")?.strip_suffix('}')?;
+    if inner.contains('}') {
+        return None;
+    }
+    match OperandMacro::parse(inner)? {
+        OperandMacro::Tx(key) => Some(key),
+        _ => None,
+    }
+}
+
 /// Whether `name` is a variable the engine resolves.
 fn resolved(name: &str) -> bool {
     crate::parser::VariableName::from_str(&name.to_ascii_uppercase())

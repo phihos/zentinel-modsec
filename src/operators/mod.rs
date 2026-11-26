@@ -157,6 +157,33 @@ impl Operator for ValidateByteRangeOperator {
     }
 }
 
+/// A dynamic `@within` whose list is already held by the transaction.
+pub(crate) struct WithinWords<'a> {
+    words: Vec<&'a str>,
+}
+
+impl<'a> WithinWords<'a> {
+    pub(crate) fn new(words: &'a str) -> Self {
+        Self {
+            words: words.split_whitespace().collect(),
+        }
+    }
+}
+
+impl Operator for WithinWords<'_> {
+    fn execute(&self, value: &str) -> OperatorResult {
+        if self.words.contains(&value) {
+            OperatorResult::matched(value.to_owned())
+        } else {
+            OperatorResult::no_match()
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "within"
+    }
+}
+
 /// Within operator - checks if value is within a list of values.
 pub struct WithinOperator {
     values: Vec<String>,
