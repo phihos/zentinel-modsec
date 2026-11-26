@@ -5,8 +5,10 @@ use std::fmt;
 use std::sync::Arc;
 
 mod initial;
+mod record;
 
 pub(super) use initial::InitialState;
+use record::{MessageRecord, Records, RuleAt};
 
 use super::chain::ChainState;
 use super::control::{CtlDirective, TransactionControls};
@@ -61,14 +63,14 @@ pub struct Transaction {
     intervention: Option<Intervention>,
     /// Default block status.
     default_status: u16,
-    /// Matched rules.
-    matched_rules: Vec<String>,
+    /// The rules that matched, published as their ids.
+    matched_rules: Records<RuleAt>,
     /// Allow flag (skip further processing).
     allowed: bool,
     /// Matched variables for current rule evaluation.
     matched_vars: Vec<(String, String)>,
     /// The messages of the rules that matched (`RuleMessage`).
-    messages: Vec<RuleMessage>,
+    messages: Records<MessageRecord>,
     /// Regex captures from last match.
     captures: Vec<String>,
     /// Per-transaction `ctl:` overrides.
@@ -233,10 +235,10 @@ impl Transaction {
             phase: Phase::RequestHeaders,
             intervention: None,
             default_status,
-            matched_rules: Vec::new(),
+            matched_rules: Records::default(),
             allowed: false,
             matched_vars: Vec::new(),
-            messages: Vec::new(),
+            messages: Records::default(),
             captures: Vec::new(),
             controls: TransactionControls::default(),
             matched_data: Vec::new(),
@@ -526,7 +528,7 @@ impl Transaction {
     /// The messages of the rules that matched, in order, as ModSecurity logs
     /// them (`RuleMessage::log_line`).
     pub fn messages(&self) -> &[RuleMessage] {
-        &self.messages
+        self.messages.as_slice(&self.ruleset)
     }
 
     /// Why the request body processor could not process the body
@@ -537,7 +539,7 @@ impl Transaction {
 
     /// Get matched rule IDs.
     pub fn matched_rules(&self) -> &[String] {
-        &self.matched_rules
+        self.matched_rules.as_slice(&self.ruleset)
     }
 
     /// Get the anomaly score: the value of `TX:anomaly_score`, or 0 when no
@@ -637,8 +639,7 @@ impl Transaction {
         // every link matches, so they are held here until the chain completes.
         // Held as the starter itself, whose disruptive action, flow and
         // metadata the chain takes, with the `ctl:` of every link so far.
-        let mut pending_chain_actions: Option<(&CompiledRule, Vec<&ControlAction>)> = None;
-        let mut pending_chain_id: Option<String> = None;
+        let mut pending_chain_actions: Option<(usize, Vec<&ControlAction>)> = None;
         // What each link matched, held with the starter's id: a chain that
         // fails part-way did not match, so it leaves nothing in matched_data.
         let mut pending_chain_data: Vec<MatchedData> = Vec::new();
@@ -693,7 +694,6 @@ impl Transaction {
                 if rule.is_chain {
                     chain_state.reset();
                     pending_chain_actions = None;
-                    pending_chain_id = None;
                     pending_chain_data.clear();
                     open_record.take_if(|open| *open == OpenRecord::Held);
                     idx += 1;
@@ -748,7 +748,11 @@ impl Transaction {
                     .actions
                     .iter()
                     .any(|a| matches!(a, Action::Data(DataAction::Capture)));
-                let link_rule_id = rule.id.as_deref().or(pending_chain_id.as_deref());
+                let link_rule_id = rule.id.as_deref().or_else(|| {
+                    pending_chain_actions
+                        .as_ref()
+                        .and_then(|(start, _)| rules[*start].id.as_deref())
+                });
 
                 // `capture` and `setvar` run once for each variable the
                 // operator matched, in order, as libmodsecurity does
@@ -807,8 +811,7 @@ impl Transaction {
                     // a match.
                     if !chain_state.in_chain {
                         chain_state.start_chain(idx);
-                        pending_chain_id = rule.id.clone();
-                        pending_chain_actions = Some((rule, on_match.control_ops.iter().collect()));
+                        pending_chain_actions = Some((idx, on_match.control_ops.iter().collect()));
                     } else if let Some((_, held_controls)) = pending_chain_actions.as_mut() {
                         // A middle link: its ctl runs with the chain.
                         held_controls.extend(&on_match.control_ops);
@@ -822,23 +825,25 @@ impl Transaction {
                 // has now matched in full. A completed chain keeps the
                 // starter's disruptive action, flow and metadata, and runs the
                 // ctl of every link.
-                let (acting_rule, held_controls) = if chain_state.in_chain {
+                let record_id = !chain_state.in_chain || pending_chain_actions.is_some();
+                let (acting_index, held_controls) = if chain_state.in_chain {
                     chain_state.reset();
-                    if let Some(id) = pending_chain_id.take() {
-                        self.matched_rules.push(id);
-                    }
                     self.matched_data.append(&mut pending_chain_data);
                     if *open_record == Some(OpenRecord::Held) {
                         *open_record = Some(OpenRecord::Recorded);
                     }
-                    pending_chain_actions.take().unwrap_or((rule, Vec::new()))
+                    pending_chain_actions.take().unwrap_or((idx, Vec::new()))
                 } else {
-                    // Track matched rule
-                    if let Some(ref id) = rule.id {
-                        self.matched_rules.push(id.clone());
-                    }
-                    (rule, Vec::new())
+                    (idx, Vec::new())
                 };
+                let acting_rule = &rules[acting_index];
+                let acting_at = RuleAt {
+                    phase,
+                    index: acting_index,
+                };
+                if record_id && acting_rule.id.is_some() {
+                    self.matched_rules.push(acting_at, &self.ruleset);
+                }
 
                 // The acting rule's metadata, prepared at load, with its
                 // message's macros expanded now, while MATCHED_VAR and TX:0 are
@@ -848,14 +853,11 @@ impl Transaction {
                 let prepared = &acting_rule.metadata;
                 let logs = !prepared.nolog;
                 let disruptive = acting_rule.on_match.disruptive.is_some();
+                // A text without a macro is the rule's own and is not copied.
                 let expand = |text: &Option<String>| {
-                    text.as_ref().map(|text| {
-                        if text.contains("%{") {
-                            self.expand_operator_macros(text)
-                        } else {
-                            text.clone()
-                        }
-                    })
+                    text.as_ref()
+                        .filter(|text| text.contains("%{"))
+                        .map(|text| self.expand_operator_macros(text))
                 };
                 let mut texts = (logs || disruptive)
                     .then(|| (expand(&prepared.msg), expand(&prepared.logdata)));
@@ -868,24 +870,19 @@ impl Transaction {
                         texts.take()
                     }
                     .unwrap_or_default();
-                    self.messages.push(RuleMessage {
-                        rule_id: prepared.id.clone(),
-                        rev: prepared.rev.clone(),
+                    let record = MessageRecord {
+                        rule: acting_at,
                         msg,
                         data,
-                        severity: prepared.severity,
-                        ver: prepared.ver.clone(),
-                        maturity: prepared.maturity,
-                        accuracy: prepared.accuracy,
-                        tags: prepared.tags.clone(),
-                    });
+                    };
+                    self.messages.push(record, &self.ruleset);
                 }
                 // What an intervention carries, made only if there is one.
                 let metadata = move || {
                     let mut meta = prepared.clone();
                     if let Some((msg, logdata)) = texts {
-                        meta.msg = msg;
-                        meta.logdata = logdata;
+                        meta.msg = msg.or(meta.msg);
+                        meta.logdata = logdata.or(meta.logdata);
                     }
                     meta
                 };
@@ -975,7 +972,6 @@ impl Transaction {
                 if chain_state.in_chain || rule.is_chain {
                     chain_state.reset();
                     pending_chain_actions = None;
-                    pending_chain_id = None;
                     pending_chain_data.clear();
                     open_record.take_if(|open| *open == OpenRecord::Held);
                     while idx < rules.len() && rules[idx].is_chain {
@@ -1410,7 +1406,7 @@ impl std::fmt::Debug for Transaction {
             .field("phase", &self.phase)
             .field("has_intervention", &self.intervention.is_some())
             .field("anomaly_score", &self.anomaly_score())
-            .field("matched_rules", &self.matched_rules)
+            .field("matched_rules", &self.matched_rules())
             .finish()
     }
 }
