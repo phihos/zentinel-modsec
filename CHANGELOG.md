@@ -9,6 +9,24 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-11-26
+
+CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.2 on the CRS regression corpus.
+
+### Performance
+
+- The matched-data records that the phase 1 rules prepared at load are shared
+  with each transaction until the caller reads them, instead of being copied
+  into every transaction; the transaction copies only the last record when it
+  still needs its variable and value. (#132)
+- A `multiMatch` rule tests the original value and then each changed
+  transformation stage as it is produced, and stops at the first qualifying
+  match, instead of building every changed stage first. (#133)
+- A rule whose request targets all need a collection or header that is absent
+  from the request is handled as a miss without resolving its targets. Count
+  targets, rules without targets, and targets outside the plan are evaluated as
+  before. (#134)
+
 ## [0.13.2] - 2026-11-26
 
 CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.1 on the CRS regression corpus.
@@ -462,7 +480,8 @@ upgrading.
 0.1.2 through 0.6.0 are tagged in Git (`v0.1.2` ... `v0.6.0`); see the tags
 and the commit history for what each contains.
 
-[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.2...HEAD
+[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.3...HEAD
+[0.13.3]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.2...v0.13.3
 [0.13.2]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.12.0...v0.13.0
