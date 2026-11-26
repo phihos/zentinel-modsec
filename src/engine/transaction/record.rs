@@ -132,8 +132,26 @@ impl<R: Record> Records<R> {
 #[derive(Default)]
 pub(super) struct MatchDataLog {
     prefix_len: usize,
-    suffix: Mutex<Vec<MatchedData>>,
+    suffix: Mutex<MatchDataSuffix>,
     published: OnceLock<Vec<MatchedData>>,
+}
+
+#[derive(Default)]
+struct MatchDataSuffix {
+    owned: Vec<MatchedData>,
+    /// Prepared records interleave with owned ones. The index is the number
+    /// of owned records preceding this one.
+    prepared: Vec<(usize, RuleAt)>,
+}
+
+impl RuleAt {
+    fn prepared_data(self, ruleset: &CompiledRuleset) -> &MatchedData {
+        ruleset.plans_for_phase(self.phase)[self.index]
+            .shared_comparison
+            .as_ref()
+            .and_then(|comparison| comparison.record.as_ref())
+            .expect("matched shared comparison")
+    }
 }
 
 impl MatchDataLog {
@@ -141,14 +159,24 @@ impl MatchDataLog {
         self.prefix_len = prepared.len() - usize::from(last_is_open);
         self.published.take();
         let suffix = self.suffix.get_mut().unwrap();
-        suffix.clear();
-        suffix.extend_from_slice(&prepared[self.prefix_len..]);
+        suffix.prepared.clear();
+        suffix.owned.clear();
+        suffix.owned.extend_from_slice(&prepared[self.prefix_len..]);
     }
 
     pub(super) fn records_mut(&mut self) -> &mut Vec<MatchedData> {
         match self.published.get_mut() {
             Some(records) => records,
-            None => self.suffix.get_mut().unwrap(),
+            None => &mut self.suffix.get_mut().unwrap().owned,
+        }
+    }
+
+    pub(super) fn push_prepared(&mut self, at: RuleAt, ruleset: &CompiledRuleset) {
+        if let Some(records) = self.published.get_mut() {
+            records.push(at.prepared_data(ruleset).clone());
+        } else {
+            let suffix = self.suffix.get_mut().unwrap();
+            suffix.prepared.push((suffix.owned.len(), at));
         }
     }
 
@@ -157,13 +185,23 @@ impl MatchDataLog {
             // Readers share &Transaction. Only the first one takes ownership of
             // the suffix, and subsequent phases append to the published vector.
             let suffix = std::mem::take(&mut *self.suffix.lock().unwrap());
-            if self.prefix_len == 0 {
-                return suffix;
+            if self.prefix_len == 0 && suffix.prepared.is_empty() {
+                return suffix.owned;
             }
-            let prepared = ruleset.initial_state().expect("prepared match data");
-            let mut records = Vec::with_capacity(self.prefix_len + suffix.len());
-            records.extend_from_slice(&prepared.matched_data[..self.prefix_len]);
-            records.extend(suffix);
+            let mut records =
+                Vec::with_capacity(self.prefix_len + suffix.owned.len() + suffix.prepared.len());
+            if self.prefix_len != 0 {
+                let initial = ruleset.initial_state().expect("prepared match data");
+                records.extend_from_slice(&initial.matched_data[..self.prefix_len]);
+            }
+            let mut owned = suffix.owned.into_iter();
+            let mut consumed = 0;
+            for (before, at) in suffix.prepared {
+                records.extend(owned.by_ref().take(before - consumed));
+                records.push(at.prepared_data(ruleset).clone());
+                consumed = before;
+            }
+            records.extend(owned);
             records
         })
     }

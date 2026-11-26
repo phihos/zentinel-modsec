@@ -73,6 +73,13 @@ impl TxCollection {
         self.shared = Some(Arc::clone(shared));
     }
 
+    pub(crate) fn uses_default(&self, defaults: &HashMapCollection, position: usize) -> bool {
+        self.shared
+            .as_deref()
+            .is_some_and(|shared| std::ptr::eq(shared, defaults))
+            && self.changed(position).is_none()
+    }
+
     /// The values of the shared variable at `position`, unless it was deleted.
     fn shared_at<'a>(&'a self, position: usize, values: &'a [String]) -> Option<&'a [String]> {
         match self.changed(position) {

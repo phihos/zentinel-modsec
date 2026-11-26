@@ -719,12 +719,25 @@ impl Transaction {
 
             // Evaluate rule
             let plan = plans.get(idx);
-            let matches = if plan.is_some_and(|plan| plan.targets_absent(&self.widths)) {
+            let comparison = plan
+                .and_then(|plan| plan.shared_comparison.as_deref())
+                .filter(|comparison| {
+                    !chain_state.in_chain
+                        && self.ruleset.initial_state().is_some_and(|initial| {
+                            self.tx.uses_default(initial.tx(), comparison.position)
+                        })
+                        && !self.controls.has_target_removals(rule.id.as_deref())
+                        && !self.controls.has_tag_target_removals(rule.tags())
+                });
+            let matches = if comparison.is_some()
+                || plan.is_some_and(|plan| plan.targets_absent(&self.widths))
+            {
                 Matches::default()
             } else {
                 self.evaluate_rule(rule, plan)?
             };
-            let matched = !matches.is_empty();
+            let prepared = comparison.and_then(|comparison| comparison.record.as_ref());
+            let matched = prepared.is_some() || !matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
             let mut captures = Vec::new();
 
@@ -746,7 +759,20 @@ impl Transaction {
                         record.value = std::mem::take(value);
                     }
                 }
-                self.matched_vars.clear();
+                if let Some(record) = prepared {
+                    self.matched_data
+                        .push_prepared(RuleAt { phase, index: idx }, &self.ruleset);
+                    self.matched_vars.truncate(1);
+                    if let Some((name, value)) = self.matched_vars.first_mut() {
+                        name.clone_from(&record.variable);
+                        value.clone_from(&record.value);
+                    } else {
+                        self.matched_vars
+                            .push((record.variable.clone(), record.value.clone()));
+                    }
+                } else {
+                    self.matched_vars.clear();
+                }
 
                 // What a match does was worked out when the rules loaded.
                 let on_match = &rule.on_match;

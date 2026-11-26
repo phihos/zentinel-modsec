@@ -9,6 +9,10 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+### Performance
+
+- Reuse numeric comparison results for unchanged shared TX defaults and materialize their audit records on first read.
+
 ## [0.13.3] - 2026-11-26
 
 CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.2 on the CRS regression corpus.

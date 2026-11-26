@@ -26,8 +26,59 @@ pub(super) enum TargetPlan {
     HeaderKey { key: String, lowered: String },
 }
 
+/// The result of comparing a shared TX default, valid while the transaction
+/// still reads that value from the ruleset.
+pub(super) struct SharedComparison {
+    pub(super) position: usize,
+    pub(super) record: Option<super::transaction::MatchedData>,
+}
+
+impl SharedComparison {
+    fn prepare(rule: &CompiledRule, shared: Option<&HashMapCollection>) -> Option<Box<Self>> {
+        use crate::parser::{Action, DataAction, OperatorName::*};
+        let [target] = rule.variables.as_slice() else {
+            return None;
+        };
+        let Some(Selection::Key(key)) = &target.selection else {
+            return None;
+        };
+        if target.name != VariableName::Tx
+            || target.count_mode
+            || !target.exclusions.is_empty()
+            || !matches!(rule.operator_spec.name, Eq | Lt | Le | Gt | Ge)
+            || rule.operand_has_macro
+            || rule.operand_unresolvable
+            || rule.is_chain
+            || !rule.transformations.is_empty()
+            || !rule.on_match.setvar_ops.is_empty()
+            || rule
+                .actions
+                .iter()
+                .any(|action| matches!(action, Action::Data(DataAction::Capture)))
+        {
+            return None;
+        }
+        let (position, values) = shared?.find(&key.to_ascii_lowercase())?;
+        let [value] = values else { return None };
+        // Bound the amount of default text retained per rule.
+        if value.len() > 64 {
+            return None;
+        }
+        let result = rule.operator.execute(value);
+        let record =
+            (result.matched != rule.operator_negated).then(|| super::transaction::MatchedData {
+                rule_id: rule.id.clone(),
+                variable: format!("TX:{key}"),
+                value: value.clone(),
+                matched_portion: result.matched_value,
+            });
+        Some(Box::new(Self { position, record }))
+    }
+}
+
 /// The plan of one rule.
 pub(super) struct RulePlan {
+    pub(super) shared_comparison: Option<Box<SharedComparison>>,
     possible_sources: u64,
     targets: Vec<TargetPlan>,
     /// Per target, the request collections all its values come from, as bits
@@ -153,6 +204,7 @@ impl RulePlan {
     /// transaction takes over from the ruleset, if it prepared any.
     pub(super) fn prepare(rule: &CompiledRule, shared_tx: Option<&HashMapCollection>) -> Self {
         Self {
+            shared_comparison: SharedComparison::prepare(rule, shared_tx),
             possible_sources: if rule.variables.is_empty() {
                 ALWAYS
             } else {
@@ -525,6 +577,58 @@ mod tests {
             "#,
             &["10", "11", "12", "13"],
         );
+    }
+
+    #[test]
+    fn shared_comparisons_keep_audit_order_and_follow_tx_edits() {
+        let rules = r#"
+            SecRule REQUEST_METHOD "@streq POST" "id:10,phase:1,pass"
+            SecRule TX:LEVEL "@lt 3" "id:11,phase:1,pass,log,msg:'%{MATCHED_VAR_NAME}=%{MATCHED_VAR}'"
+            SecRule TX:limit "@gt 4" "id:12,phase:1,pass"
+            SecRule MATCHED_VAR "@streq 5" "id:13,phase:1,pass,setvar:'tx.level=9'"
+            SecRule TX:Level "@lt 3" "id:14,phase:2,pass"
+            SecRule TX:Level "@gt 3" "id:15,phase:2,pass,setvar:'!tx.level'"
+            SecRule TX:LEVEL "@gt 3" "id:16,phase:2,pass"
+            SecRule TX:limit "!@eq 6" "id:17,phase:2,pass"
+            SecRule REQUEST_METHOD "@streq POST" "id:18,phase:2,pass,ctl:ruleRemoveTargetById=19;TX:limit"
+            SecRule TX:limit "@eq 5" "id:19,phase:2,pass"
+        "#;
+        same_with_and_without_plans(rules, &["10", "11", "12", "13", "15", "17", "18"]);
+    }
+
+    #[test]
+    fn published_comparisons_append_in_order_and_replaced_defaults_are_resolved() {
+        let make_tx = |level: u8| {
+            let rules = format!(
+                r#"
+                SecAction "id:1,phase:1,pass,nolog,setvar:tx.level={level}"
+                SecRule REQUEST_METHOD "@streq GET" "id:2,phase:1,pass"
+                SecRule TX:LEVEL "@eq 1" "id:3,phase:1,pass"
+                SecRule TX:LEVEL "@eq 1" "id:4,phase:2,pass"
+                SecRule REQUEST_METHOD "@streq GET" "id:5,phase:2,pass"
+                SecRule TX:LEVEL "@eq 2" "id:6,phase:2,pass"
+            "#
+            );
+            let mut tx =
+                Transaction::new(Arc::new(CompiledRuleset::from_string(&rules).unwrap()), 403);
+            tx.process_uri("/", "GET", "HTTP/1.1").unwrap();
+            tx.process_request_headers().unwrap();
+            tx
+        };
+        let ids = |tx: &Transaction| {
+            tx.matched_data()
+                .iter()
+                .filter_map(|data| data.rule_id.clone())
+                .collect::<Vec<_>>()
+        };
+        let mut tx = make_tx(1);
+        assert_eq!(ids(&tx), ["2", "3"]);
+        tx.process_request_body().unwrap();
+        assert_eq!(ids(&tx), ["2", "3", "4", "5"]);
+        let mut swapped = make_tx(1);
+        *swapped.tx_mut() = make_tx(2).tx().clone();
+        swapped.process_request_body().unwrap();
+        assert_eq!(ids(&swapped), ["2", "3", "5", "6"]);
     }
 
     #[test]
