@@ -1,0 +1,39 @@
+{
+  "processor": "AMD Ryzen 7 5700X3D",
+  "toolchain": [
+    "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+    "binary: rustc",
+    "commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860",
+    "commit-date: 2026-04-14",
+    "host: x86_64-unknown-linux-gnu",
+    "release: 1.95.0",
+    "LLVM version: 21.1.8"
+  ],
+  "refs": {
+    "matched-name-allocation": "c4094da7f5103493dc3b38bac40254ca441be538",
+    "phase-match-buffer": "b95505595c08e0fecd5d6c95536f284dffbe8c61",
+    "mixed-target-presence": "baf1f62cc296150008e2dae188fd6700b2a4b542",
+    "dynamic-within-tx": "b6d0674d363d049ef116b55b5ea7d5148553ea75",
+    "filename-width": "310d1475d050ed7244d3bec85ae5c1a5078ec516",
+    "tx-regex": "d96812387d16eb92f2e3f9f0780aad2ed0e0787e",
+    "url-validation": "95d102f520199b041ee894f6c41e346a366085eb",
+    "rule-width": "168eae8eaeac7ef27c9b980f795ffd5a8e427544",
+    "first-revision-142": "633cf4e88ea9f6a6d85589f4b26399e22c8a28ad",
+    "upstream": "a3a5f2c1f1f038c8fe35bb08d1f145935d714e56",
+    "fork": "3d1fd5cee22e6db14f209cc5d58c352c816bf8f3"
+  },
+  "binary_sha256": {
+    "fresh-base": "90aef84f22d13f7fc5834c54586de19ae5933d5c6745275b2820be80434b9c26",
+    "fork": "de2aaf22f269822efd195f0d6cd7b0be867fb3740aeebc2338a8dcbb48d56d07",
+    "main": "b5a5dd6c8bd1572a15c5ace01866a477298cdffc985fba9ceb1b76de89b01ab7",
+    "all": "2d0d00da2ffb9cfc1bffe390c539aef687b77d4715fc52e34229c4a42d510c7f",
+    "eight": "24512e0eedd0343610eaa273157340e10274f443563e3133e9fc768994ea26ab",
+    "eight-helper": "8773b8c73025234e7d3f05ea1710644a6fac71cfb7f1a65587bc0cc6a3087b80",
+    "tx-helper-pr": "0d3f2dd0998398d307e93d1e2699217ef60e54d94184e34d50bde61213af554b",
+    "no-tx": "91b258c985364ff4ae7e5dc35346dee4977b705b54def207cf039148dfbeb617",
+    "rule-width-pr": "eacd8d55539fcc47bf01477f11cee0940bd89ac5245c356c08767f3b54dd8a0c",
+    "filename-width-pr": "89deef0fa4d241a0f5e4ebacf78957c80f8762d8d549dafc77bebd7b72138289",
+    "url-validation-pr": "11ed179158f3fac3621a58cc0a1cc92d7b19c569af8bbf20191bb050b2c8ca14"
+  },
+  "crs_stage_snapshots_sha256": "027ab9a27ca9f078b16b84ed37c40a1fc63496715b6b1dac56d5525557471af7"
+}

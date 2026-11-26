@@ -50,6 +50,10 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#138](https://github.com/zentinelproxy/zentinel-modsec/pull/138) | Reuse one match buffer per phase. |
 | [#139](https://github.com/zentinelproxy/zentinel-modsec/pull/139) | Skip absent targets within a mixed target list. |
 | [#140](https://github.com/zentinelproxy/zentinel-modsec/pull/140) | Borrow words for a dynamic within comparison against TX. |
+| [#141](https://github.com/zentinelproxy/zentinel-modsec/pull/141) | Apply regex width bounds to REQUEST_FILENAME. |
+| [#142](https://github.com/zentinelproxy/zentinel-modsec/pull/142) | Prepare sparse TX key regex selections over shared defaults. |
+| [#143](https://github.com/zentinelproxy/zentinel-modsec/pull/143) | Scan literal runs when validating URL encoding. |
+| [#144](https://github.com/zentinelproxy/zentinel-modsec/pull/144) | Skip rule evaluation when width bounds exclude every target. |
 
 ## Queued on the fork
 

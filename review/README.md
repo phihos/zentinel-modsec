@@ -48,10 +48,16 @@
 | [#138](https://github.com/zentinelproxy/zentinel-modsec/pull/138) | Reuse one match buffer per phase. |
 | [#139](https://github.com/zentinelproxy/zentinel-modsec/pull/139) | Skip absent targets within a mixed target list. |
 | [#140](https://github.com/zentinelproxy/zentinel-modsec/pull/140) | Borrow words for a dynamic within comparison against TX. |
+| [#141](https://github.com/zentinelproxy/zentinel-modsec/pull/141) | Apply regex width bounds to REQUEST_FILENAME. |
+| [#142](https://github.com/zentinelproxy/zentinel-modsec/pull/142) | Prepare sparse TX key regex selections over shared defaults. |
+| [#143](https://github.com/zentinelproxy/zentinel-modsec/pull/143) | Scan literal runs when validating URL encoding. |
+| [#144](https://github.com/zentinelproxy/zentinel-modsec/pull/144) | Skip rule evaluation when width bounds exclude every target. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 
 ## Request timing
+
+The [November 26 measurements](measurements/post-140/) compare the eight performance changes submitted after 0.13.3 with the fork and isolate the gains in #141–144.
 
 The experiments below each used four counterbalanced process pairs on a shared host, pinned to one logical CPU. Each process took 24 Criterion samples per workload. Entries are medians of process means, in microseconds. See the [benchmark instructions](https://github.com/zentinelproxy/zentinel-modsec/pull/69/files) for the pinned rules and fixtures.
 
