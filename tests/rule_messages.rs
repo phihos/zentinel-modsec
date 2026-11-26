@@ -79,3 +79,39 @@ fn a_nolog_rule_that_denies_logs_nothing_and_still_reports_its_intervention() {
         Some("Denied quietly: attack")
     );
 }
+
+#[test]
+fn reading_between_phases_preserves_match_order_and_the_block_report() {
+    let rules = r#"SecRuleEngine On
+SecAction "id:1,phase:1,pass,msg:'initial'"
+SecRule ARGS:q "@streq tea" "id:2,phase:1,pass,msg:'header %{MATCHED_VAR}'"
+SecRule ARGS:r "@streq milk" "id:3,phase:2,deny,status:418,msg:'blocked %{MATCHED_VAR}',chain"
+SecRule ARGS:r "@streq milk" "t:none"
+"#;
+    let engine = ModSecurity::from_string(rules).unwrap();
+    for read_ids in [false, true] {
+        for read_messages in [false, true] {
+            let mut tx = engine.new_transaction();
+            tx.process_uri("/?q=tea&r=milk", "GET", "HTTP/1.1").unwrap();
+            tx.process_request_headers().unwrap();
+            assert!(tx.intervention().is_none());
+            if read_ids {
+                assert_eq!(tx.matched_rules(), ["1", "2"]);
+            }
+            if read_messages {
+                assert_eq!(tx.messages().len(), 2);
+                assert_eq!(tx.messages()[1].msg.as_deref(), Some("header tea"));
+            }
+            tx.process_request_body().unwrap();
+            let block = tx.intervention().expect("the chain denies");
+            assert_eq!(block.rule_ids, ["3"]);
+            assert_eq!(block.log.as_deref(), Some("blocked milk"));
+            assert_eq!(tx.matched_rules(), ["1", "2", "3"]);
+            let messages: Vec<_> = tx.messages().iter().map(|msg| msg.msg.as_deref()).collect();
+            assert_eq!(
+                messages,
+                [Some("initial"), Some("header tea"), Some("blocked milk")]
+            );
+        }
+    }
+}

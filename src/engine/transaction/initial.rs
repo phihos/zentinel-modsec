@@ -8,9 +8,9 @@
 //! them once at load, with the interpreter that would run them for a request,
 //! and a transaction that starts with nothing in it takes the result over.
 
+use super::record::{MessageRecord, RuleAt};
 use super::{MatchedData, OpenRecord, Transaction};
 use crate::actions::{DisruptiveOutcome, FlowOutcome, SetVarOperation};
-use crate::engine::intervention::RuleMessage;
 use crate::engine::operand_macro;
 use crate::engine::phase::Phase;
 use crate::engine::ruleset::CompiledRule;
@@ -23,9 +23,9 @@ pub(in crate::engine) struct InitialState {
     /// How many rules of phase 1 this stands for.
     rules: usize,
     tx: Arc<HashMapCollection>,
-    matched_rules: Vec<String>,
+    matched_rules: Vec<RuleAt>,
     matched_vars: Vec<(String, String)>,
-    messages: Vec<RuleMessage>,
+    messages: Vec<MessageRecord>,
     captures: Vec<String>,
     matched_data: Vec<MatchedData>,
     /// Whether the last record still waits for its variable and value.
@@ -75,9 +75,9 @@ impl InitialState {
         Some(Self {
             rules: count,
             tx: scratch.tx.into_shared(),
-            matched_rules: scratch.matched_rules,
+            matched_rules: scratch.matched_rules.into_pending(),
             matched_vars: scratch.matched_vars,
-            messages: scratch.messages,
+            messages: scratch.messages.into_pending(),
             captures: scratch.captures,
             matched_data: scratch.matched_data,
             open_record,
@@ -97,9 +97,9 @@ impl InitialState {
         open_record: &mut Option<OpenRecord>,
     ) -> usize {
         transaction.tx.share(&self.tx);
-        transaction.matched_rules.clone_from(&self.matched_rules);
+        transaction.matched_rules.restore(&self.matched_rules);
         transaction.matched_vars.clone_from(&self.matched_vars);
-        transaction.messages.clone_from(&self.messages);
+        transaction.messages.restore(&self.messages);
         transaction.captures.clone_from(&self.captures);
         transaction.matched_data.clone_from(&self.matched_data);
         *open_record = self.open_record;
