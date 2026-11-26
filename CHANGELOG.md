@@ -9,6 +9,10 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-11-26
+
+CRS conformance: 4,979 of 5,184 runnable cases, unchanged. Performance only: matched rules and matched data are identical to 0.13.1 on the CRS regression corpus.
+
 ### Performance
 
 - A target of an `@rx` rule is skipped when no value of the request
@@ -452,7 +456,8 @@ upgrading.
 0.1.2 through 0.6.0 are tagged in Git (`v0.1.2` ... `v0.6.0`); see the tags
 and the commit history for what each contains.
 
-[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.2...HEAD
+[0.13.2]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/zentinelproxy/zentinel-modsec/compare/v0.11.0...v0.12.0
