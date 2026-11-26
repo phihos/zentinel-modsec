@@ -40,25 +40,19 @@ impl Operator for ValidateUtf8EncodingOperator {
 
 /// Check if a string has valid URL encoding.
 fn is_valid_url_encoding(s: &str) -> bool {
-    let mut chars = s.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            // Must be followed by exactly 2 hex digits
-            let hex1 = chars.next();
-            let hex2 = chars.next();
-
-            match (hex1, hex2) {
-                (Some(h1), Some(h2)) => {
-                    if !h1.is_ascii_hexdigit() || !h2.is_ascii_hexdigit() {
-                        return false;
-                    }
-                }
-                _ => return false,
+    let mut rest = s.as_bytes();
+    while let Some(offset) = memchr::memchr(b'%', rest) {
+        rest = &rest[offset..];
+        while rest.first() == Some(&b'%') {
+            let [_, high, low, tail @ ..] = rest else {
+                return false;
+            };
+            if !high.is_ascii_hexdigit() || !low.is_ascii_hexdigit() {
+                return false;
             }
+            rest = tail;
         }
     }
-
     true
 }
 
@@ -92,6 +86,21 @@ fn is_valid_utf8_sequence(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn url_encoding_checks_each_escape_between_literal_runs() {
+        for (text, valid) in [
+            ("", true),
+            ("café%20au%20lait", true),
+            ("%41%42%43", true),
+            ("%4", false),
+            ("%%20", false),
+            ("%20%2é", false),
+            ("plain%", false),
+        ] {
+            assert_eq!(is_valid_url_encoding(text), valid, "{text:?}");
+        }
+    }
 
     #[test]
     fn test_valid_url_encoding() {
