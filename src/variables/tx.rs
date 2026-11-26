@@ -31,7 +31,7 @@ pub struct TxCollection {
 /// What a transaction did to a variable it shares.
 #[derive(Debug, Clone)]
 enum Change {
-    Set(Vec<String>),
+    Set([String; 1]),
     /// Deleted. Set again, it is a variable of the transaction's own, at the
     /// end of the order, where a deleted and re-added key goes.
     Deleted,
@@ -175,7 +175,7 @@ impl TxCollection {
     fn set_lowered(&mut self, key: Cow<'_, str>, value: String) {
         if let Some(position) = self.shared_position(&key) {
             if !matches!(self.changed(position), Some(Change::Deleted)) {
-                self.change(position, Change::Set(vec![value]));
+                self.change(position, Change::Set([value]));
                 return;
             }
         }

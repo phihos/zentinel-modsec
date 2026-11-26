@@ -50,7 +50,36 @@ pub trait MutableCollection: Collection {
 /// The name is kept for API compatibility.
 #[derive(Debug, Clone, Default)]
 pub struct HashMapCollection {
-    data: IndexMap<String, Vec<String>>,
+    data: IndexMap<String, MemberValues>,
+}
+
+/// Most keys have one value. Allocate a list when another value arrives.
+#[derive(Clone)]
+enum MemberValues {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl MemberValues {
+    fn as_slice(&self) -> &[String] {
+        match self {
+            Self::One(value) => std::slice::from_ref(value),
+            Self::Many(values) => values,
+        }
+    }
+
+    fn push(&mut self, value: String) {
+        match self {
+            Self::One(first) => *self = Self::Many(vec![std::mem::take(first), value]),
+            Self::Many(values) => values.push(value),
+        }
+    }
+}
+
+impl std::fmt::Debug for MemberValues {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_slice().fmt(f)
+    }
 }
 
 impl HashMapCollection {
@@ -61,7 +90,12 @@ impl HashMapCollection {
 
     /// Add a value to a key.
     pub fn add(&mut self, key: String, value: String) {
-        self.data.entry(key).or_default().push(value);
+        match self.data.entry(key) {
+            indexmap::map::Entry::Vacant(entry) => {
+                entry.insert(MemberValues::One(value));
+            }
+            indexmap::map::Entry::Occupied(mut entry) => entry.get_mut().push(value),
+        }
     }
 
     /// Clear all data.
@@ -75,13 +109,13 @@ impl HashMapCollection {
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
         self.data
             .iter()
-            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.as_str(), v.as_str())))
+            .flat_map(|(k, vs)| vs.as_slice().iter().map(move |v| (k.as_str(), v.as_str())))
     }
 
     /// The values stored under `key`, in the order they were added. Empty
     /// when the key is absent, where [`Collection::get`] returns `None`.
     pub fn values(&self, key: &str) -> &[String] {
-        self.data.get(key).map_or(&[], Vec::as_slice)
+        self.data.get(key).map_or(&[], MemberValues::as_slice)
     }
 
     /// The key and values at `position` in insertion order.
@@ -124,7 +158,7 @@ impl HashMapCollection {
         self.data
             .iter()
             .filter(move |(k, _)| pattern.is_match(k))
-            .flat_map(|(k, vs)| vs.iter().map(move |v| (k.as_str(), v.as_str())))
+            .flat_map(|(k, vs)| vs.as_slice().iter().map(move |v| (k.as_str(), v.as_str())))
     }
 
     /// The first value of a key as a number, or 0 when it is missing or not
@@ -132,7 +166,7 @@ impl HashMapCollection {
     fn numeric(&self, key: &str) -> i64 {
         self.data
             .get(key)
-            .and_then(|v| v.first())
+            .and_then(|v| v.as_slice().first())
             .and_then(|s| s.parse().ok())
             .unwrap_or(0)
     }
@@ -146,7 +180,7 @@ impl Collection for HashMapCollection {
     fn get(&self, key: &str) -> Option<Vec<&str>> {
         self.data
             .get(key)
-            .map(|vs| vs.iter().map(|s| s.as_str()).collect())
+            .map(|vs| vs.as_slice().iter().map(|s| s.as_str()).collect())
     }
 
     fn get_regex(&self, pattern: &KeyRegex) -> Vec<(&str, &str)> {
@@ -154,17 +188,17 @@ impl Collection for HashMapCollection {
     }
 
     fn count(&self) -> usize {
-        self.data.values().map(|v| v.len()).sum()
+        self.data.values().map(|v| v.as_slice().len()).sum()
     }
 
     fn count_key(&self, key: &str) -> usize {
-        self.data.get(key).map(|v| v.len()).unwrap_or(0)
+        self.data.get(key).map(|v| v.as_slice().len()).unwrap_or(0)
     }
 }
 
 impl MutableCollection for HashMapCollection {
     fn set(&mut self, key: String, value: String) {
-        self.data.insert(key, vec![value]);
+        self.data.insert(key, MemberValues::One(value));
     }
 
     fn delete(&mut self, key: &str) {
@@ -200,6 +234,21 @@ mod tests {
         c.add("b".to_string(), "3".to_string());
         c.add("ab".to_string(), "".to_string());
         c
+    }
+
+    #[test]
+    fn repeated_keys_keep_their_order_when_appended_replaced_and_cloned() {
+        let mut c = sample();
+        c.set("b".into(), "new".into());
+        c.add("b".into(), "again".into());
+        let original = c.clone();
+        c.delete("b");
+        c.add("b".into(), "last".into());
+        assert_eq!(
+            original.all(),
+            [("b", "new"), ("b", "again"), ("a", "2"), ("ab", "")]
+        );
+        assert_eq!(c.all(), [("a", "2"), ("ab", ""), ("b", "last")]);
     }
 
     #[test]
