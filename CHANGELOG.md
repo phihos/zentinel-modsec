@@ -18,6 +18,10 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   collections are all too short for the rule's shortest match is not
   resolved at all. The bounds are those of #128, so the same rules qualify;
   a counting target and any other variable are resolved as before. (#130)
+- Transactions build matched rule ID strings and rule messages when a caller
+  first reads the corresponding list. Message macros still expand when the
+  rule matches, and a blocking intervention immediately reports its rule IDs
+  and log. (#131)
 
 ## [0.13.1] - 2026-11-25
 
