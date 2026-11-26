@@ -6,6 +6,7 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::borrow::Cow;
 
 static PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"%\{([^}]+)\}").expect("static macro regex is valid"));
@@ -64,33 +65,40 @@ fn resolved(name: &str) -> bool {
 
 /// Replace every macro in `arg` with what `resolve` returns for it. A macro
 /// the engine does not resolve becomes an empty string.
-pub(super) fn expand(arg: &str, resolve: impl Fn(OperandMacro) -> String) -> String {
-    // Scans for what `PATTERN` matches, `%{` then one or more non-`}` then
-    // `}`, without running the regex on every evaluation.
-    let mut expanded = String::with_capacity(arg.len());
+pub(super) fn expand<'a>(
+    arg: &'a str,
+    resolve: impl Fn(OperandMacro<'_>) -> Cow<'a, str>,
+) -> Cow<'a, str> {
     let mut rest = arg;
+    let mut copied = 0;
+    let mut expanded = String::new();
     while let Some(start) = rest.find("%{") {
         let body = &rest[start + 2..];
-        match body.find('}') {
-            // `%{}` names nothing and is not a macro: keep the `%` and look
-            // for the next opening after it.
-            Some(0) => {
-                expanded.push_str(&rest[..=start]);
-                rest = &rest[start + 1..];
-            }
-            Some(end) => {
-                expanded.push_str(&rest[..start]);
-                if let Some(operand) = OperandMacro::parse(&body[..end]) {
-                    expanded.push_str(&resolve(operand));
-                }
-                rest = &body[end + 1..];
-            }
-            // No closing brace is left, so nothing after this can match.
-            None => break,
+        let Some(end) = body.find('}') else { break };
+        if end == 0 {
+            rest = &body[1..];
+            continue;
         }
+        let from = arg.len() - rest.len() + start;
+        rest = &body[end + 1..];
+        let value = OperandMacro::parse(&body[..end])
+            .map(&resolve)
+            .unwrap_or_default();
+        if from == 0 && rest.is_empty() {
+            return value;
+        }
+        if copied == 0 {
+            expanded.reserve(arg.len());
+        }
+        expanded.push_str(&arg[copied..from]);
+        expanded.push_str(&value);
+        copied = arg.len() - rest.len();
     }
-    expanded.push_str(rest);
-    expanded
+    if copied == 0 {
+        return Cow::Borrowed(arg);
+    }
+    expanded.push_str(&arg[copied..]);
+    Cow::Owned(expanded)
 }
 
 /// Whether every macro in `text` is a `%{tx.<name>}`, so that [`expand`]
@@ -132,6 +140,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn whole_macros_can_borrow_and_interpolated_macros_keep_literal_text() {
+        fn resolve(_: OperandMacro<'_>) -> Cow<'static, str> {
+            Cow::Borrowed("book")
+        }
+        assert!(matches!(
+            expand("%{tx.item}", resolve),
+            Cow::Borrowed("book")
+        ));
+        assert_eq!(
+            expand("%{}-%{tx.item}-%{tx.item}", resolve),
+            "%{}-book-book"
+        );
+        assert_eq!(expand("%{}-%{unfinished", resolve), "%{}-%{unfinished");
+    }
+
     /// `expand` replaces exactly what `PATTERN` matches.
     #[test]
     fn expand_replaces_what_the_macro_pattern_matches() {
@@ -159,7 +183,11 @@ mod tests {
                     .map(resolve)
                     .unwrap_or_default()
             });
-            assert_eq!(expand(arg, resolve), reference, "argument {arg:?}");
+            assert_eq!(
+                expand(arg, |operand| resolve(operand).into()),
+                reference,
+                "argument {arg:?}"
+            );
         }
     }
 }

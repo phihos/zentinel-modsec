@@ -865,7 +865,7 @@ impl Transaction {
                 let expand = |text: &Option<String>| {
                     text.as_ref()
                         .filter(|text| text.contains("%{"))
-                        .map(|text| self.expand_operator_macros(text))
+                        .map(|text| self.expand_operator_macros(text).into_owned())
                 };
                 let mut texts = (logs || disruptive)
                     .then(|| (expand(&prepared.msg), expand(&prepared.logdata)));
@@ -1073,7 +1073,7 @@ impl Transaction {
                     compile_operator(&OperatorSpec {
                         negated: rule.operator_spec.negated,
                         name: rule.operator_spec.name,
-                        argument: expanded,
+                        argument: expanded.into_owned(),
                     })
                     // An expanded argument can come from the request
                     // (`@rx %{request_headers.x}`), so it may not compile.
@@ -1226,33 +1226,32 @@ impl Transaction {
     /// collection (CRS 920650 compares REQUEST_METHOD with `%{ARGS._method}`)
     /// and a bare variable name (`%{REQUEST_METHOD}`), else a TX key of that
     /// name. A variable this engine does not resolve expands to nothing.
-    fn expand_operator_macros(&self, arg: &str) -> String {
-        let tx = |name: &str| self.tx.values(name).first().cloned().unwrap_or_default();
+    fn expand_operator_macros<'a>(&'a self, arg: &'a str) -> Cow<'a, str> {
+        let tx =
+            |name: &str| Cow::Borrowed(self.tx.values(name).first().map_or("", String::as_str));
         operand_macro::expand(arg, |operand| match operand {
-            OperandMacro::MatchedVar => self
-                .matched_vars
-                .last()
-                .map(|(_, v)| v.clone())
-                .unwrap_or_default(),
-            OperandMacro::MatchedVarName => self
-                .matched_vars
-                .last()
-                .map(|(n, _)| n.clone())
-                .unwrap_or_default(),
+            OperandMacro::MatchedVar => {
+                Cow::Borrowed(self.matched_vars.last().map_or("", |(_, v)| v.as_str()))
+            }
+            OperandMacro::MatchedVarName => {
+                Cow::Borrowed(self.matched_vars.last().map_or("", |(n, _)| n.as_str()))
+            }
             OperandMacro::Tx(name) => tx(name),
             OperandMacro::Bare(name) => self
                 .macro_variable(&name.to_ascii_uppercase())
+                .map(Cow::Owned)
                 .unwrap_or_else(|| tx(name)),
-            OperandMacro::RequestHeader(name) => self
-                .request
-                .headers
-                .values(&name.to_ascii_lowercase())
-                .first()
-                .cloned()
-                .unwrap_or_default(),
-            OperandMacro::Member(collection, name) => self
-                .macro_variable(&format!("{}:{}", collection.to_ascii_uppercase(), name))
-                .unwrap_or_default(),
+            OperandMacro::RequestHeader(name) => Cow::Borrowed(
+                self.request
+                    .headers
+                    .values(&name.to_ascii_lowercase())
+                    .first()
+                    .map_or("", String::as_str),
+            ),
+            OperandMacro::Member(collection, name) => Cow::Owned(
+                self.macro_variable(&format!("{}:{}", collection.to_ascii_uppercase(), name))
+                    .unwrap_or_default(),
+            ),
         })
     }
 
@@ -1313,7 +1312,7 @@ impl Transaction {
         // `tx.header_name_920450_%{tx.0}`, one variable per request header);
         // without expanding it every header would overwrite one variable.
         let name = if op.name.contains("%{") {
-            Cow::Owned(self.expand_operator_macros(&op.name))
+            Cow::Owned(self.expand_operator_macros(&op.name).into_owned())
         } else {
             Cow::Borrowed(op.name.as_str())
         };
@@ -1325,7 +1324,7 @@ impl Transaction {
                 let (kind, operand) = split_setvar_rhs(raw);
                 let operand = self.expand_operator_macros(operand);
                 match kind {
-                    SetVarKind::Set => SetVarChange::Set(operand),
+                    SetVarKind::Set => SetVarChange::Set(operand.into_owned()),
                     SetVarKind::Add => SetVarChange::Increment(leading_int(&operand)),
                     SetVarKind::Subtract => SetVarChange::Decrement(leading_int(&operand)),
                 }
