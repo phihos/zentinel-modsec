@@ -127,3 +127,24 @@ fn a_macro_reads_the_first_value_of_a_tx_variable_and_of_a_header() {
     assert_eq!(seen(&tx), "7//one/");
     assert_eq!(tx.matched_rules(), ["1", "2", "3"]);
 }
+
+#[test]
+fn counted_and_mixed_targets_still_run_when_some_collections_are_empty() {
+    let rules = r#"SecRuleEngine On
+SecRule &REQUEST_COOKIES "@eq 0" "id:1,phase:1,pass"
+SecRule REQUEST_COOKIES|REQUEST_HEADERS:X-TeA "@streq hot" "id:2,phase:1,pass"
+SecRule REQUEST_HEADERS:X-taA "@streq hot" "id:3,phase:1,pass"
+SecRule ARGS_POST:x "@streq tea" "id:4,phase:2,pass"
+"#;
+    let engine = zentinel_modsec::ModSecurity::from_string(rules).unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/", "POST", "HTTP/1.1").unwrap();
+    tx.add_request_header("x-tea", "hot").unwrap();
+    tx.add_request_header("Content-Type", "application/x-www-form-urlencoded")
+        .unwrap();
+    tx.process_request_headers().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2"]);
+    tx.append_request_body(b"x=tea").unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["1", "2", "4"]);
+}

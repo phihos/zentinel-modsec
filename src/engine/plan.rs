@@ -28,6 +28,7 @@ pub(super) enum TargetPlan {
 
 /// The plan of one rule.
 pub(super) struct RulePlan {
+    possible_sources: u64,
     targets: Vec<TargetPlan>,
     /// Per target, the request collections all its values come from, as bits
     /// of [`Widths`]; zero when they come from elsewhere or it counts them.
@@ -152,6 +153,14 @@ impl RulePlan {
     /// transaction takes over from the ruleset, if it prepared any.
     pub(super) fn prepare(rule: &CompiledRule, shared_tx: Option<&HashMapCollection>) -> Self {
         Self {
+            possible_sources: if rule.variables.is_empty() {
+                ALWAYS
+            } else {
+                rule.variables
+                    .iter()
+                    .map(presence_source)
+                    .fold(0, |mask, bit| mask | bit)
+            },
             sources: rule.variables.iter().map(sources).collect(),
             too_short: TooShort::of(rule),
             targets: rule
@@ -160,6 +169,11 @@ impl RulePlan {
                 .map(|spec| plan_target(spec, shared_tx))
                 .collect(),
         }
+    }
+
+    /// False only when every target needs a collection or header that is absent.
+    pub(super) fn targets_absent(&self, widths: &Widths) -> bool {
+        self.possible_sources & widths.present == 0
     }
 
     /// Whether no value of the target at `position` can match, going by the
@@ -172,7 +186,7 @@ impl RulePlan {
         sources != 0
             && (0..SOURCES)
                 .filter(|source| sources & (1 << source) != 0)
-                .all(|source| bounds.rules_out_all(widths.0[source]))
+                .all(|source| bounds.rules_out_all(widths.collections[source]))
     }
 
     /// The plan of the target at `position` in the rule.
@@ -205,6 +219,50 @@ fn plan_target(spec: &VariableSpec, shared_tx: Option<&HashMapCollection>) -> Ta
         }
         VariableName::RequestHeaders => TargetPlan::HeaderKey { key, lowered },
         _ => TargetPlan::Resolver,
+    }
+}
+
+const QUERY: u64 = 1;
+const BODY: u64 = 1 << 1;
+const COOKIE: u64 = 1 << 2;
+const FILE: u64 = 1 << 3;
+const PART_HEADER: u64 = 1 << 4;
+const ALWAYS: u64 = 1 << 63;
+
+// A collision only sends the rule to the ordinary resolver.
+const HEADER_BITS: u64 = (ALWAYS - 1) & !0xff;
+fn header_bit(key: &str) -> u64 {
+    let bytes = key.as_bytes();
+    let first = bytes
+        .first()
+        .copied()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let last = bytes
+        .last()
+        .copied()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    1 << (8 + (17 * usize::from(first) + usize::from(last) + bytes.len()) % 55)
+}
+
+fn presence_source(spec: &VariableSpec) -> u64 {
+    use VariableName::*;
+    if spec.count_mode {
+        return ALWAYS;
+    }
+    match spec.name {
+        Args | ArgsNames => QUERY | BODY,
+        ArgsGet | ArgsGetNames => QUERY,
+        ArgsPost | ArgsPostNames | Xml => BODY,
+        RequestCookies | RequestCookiesNames => COOKIE,
+        Files | FilesNames => FILE,
+        MultipartPartHeaders => PART_HEADER,
+        RequestHeaders => match &spec.selection {
+            Some(Selection::Key(key)) => header_bit(key),
+            _ => ALWAYS,
+        },
+        _ => ALWAYS,
     }
 }
 
@@ -276,20 +334,48 @@ impl Width {
 /// The widths of the names and values of the request's arguments and
 /// cookies, taken once per phase.
 #[derive(Clone, Copy, Default)]
-pub(super) struct Widths([Width; SOURCES]);
+pub(super) struct Widths {
+    collections: [Width; SOURCES],
+    present: u64,
+}
 
 impl Widths {
     pub(super) fn of(request: &RequestData) -> Self {
         let values = |c: &'_ HashMapCollection| Width::of(c.iter().map(|(_, value)| value));
         let names = |c: &'_ HashMapCollection| Width::of(c.entries().map(|(name, _)| name));
-        Self([
-            values(&request.args_get),
-            names(&request.args_get),
-            values(&request.args_post),
-            names(&request.args_post),
-            values(&request.cookies),
-            names(&request.cookies),
-        ])
+        // Bound the work for requests with many headers by treating every
+        // header key as potentially present.
+        let mut present = ALWAYS
+            | if request.headers.keys() > 32 {
+                HEADER_BITS
+            } else {
+                request
+                    .headers
+                    .entries()
+                    .fold(0, |mask, (key, _)| mask | header_bit(key))
+            };
+        for (collection, bit) in [
+            (&request.args_get, QUERY),
+            (&request.args_post, BODY),
+            (&request.cookies, COOKIE),
+            (&request.files, FILE),
+            (&request.multipart_part_headers, PART_HEADER),
+        ] {
+            if collection.keys() != 0 {
+                present |= bit;
+            }
+        }
+        Self {
+            present,
+            collections: [
+                values(&request.args_get),
+                names(&request.args_get),
+                values(&request.args_post),
+                names(&request.args_post),
+                values(&request.cookies),
+                names(&request.cookies),
+            ],
+        }
     }
 }
 

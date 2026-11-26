@@ -717,7 +717,12 @@ impl Transaction {
             }
 
             // Evaluate rule
-            let matches = self.evaluate_rule(rule, plans.get(idx))?;
+            let plan = plans.get(idx);
+            let matches = if plan.is_some_and(|plan| plan.targets_absent(&self.widths)) {
+                Matches::default()
+            } else {
+                self.evaluate_rule(rule, plan)?
+            };
             let matched = !matches.is_empty();
             // What the rule left behind for the chain: the last match's captures.
             let mut captures = Vec::new();

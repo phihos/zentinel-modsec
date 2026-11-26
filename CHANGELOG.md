@@ -18,6 +18,8 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
   collections are all too short for the rule's shortest match is not
   resolved at all. The bounds are those of #128, so the same rules qualify;
   a counting target and any other variable are resolved as before. (#130)
+- Skip evaluation when every target of a rule requires a request collection
+  or a named header that is absent.
 - Transactions build matched rule ID strings and rule messages when a caller
   first reads the corresponding list. Message macros still expand when the
   rule matches, and a blocking intervention immediately reports its rule IDs
