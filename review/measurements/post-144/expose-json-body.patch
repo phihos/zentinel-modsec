@@ -1,0 +1,13 @@
+diff --git a/src/variables/request.rs b/src/variables/request.rs
+index bf4d73b..f4a90f6 100644
+--- a/src/variables/request.rs
++++ b/src/variables/request.rs
+@@ -399,7 +399,7 @@ impl RequestData {
+ 
+     /// REQUEST_BODY's original bytes, observing processor-specific visibility.
+     pub fn request_body_bytes_variable(&self) -> &[u8] {
+-        if self.body_processed && matches!(self.body_processor.as_str(), "URLENCODED" | "RAW") {
++        if self.body_processed && matches!(self.body_processor.as_str(), "URLENCODED" | "RAW" | "JSON") {
+             &self.body
+         } else {
+             b""

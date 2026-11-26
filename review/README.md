@@ -52,10 +52,17 @@
 | [#142](https://github.com/zentinelproxy/zentinel-modsec/pull/142) | Prepare sparse TX key regex selections over shared defaults. |
 | [#143](https://github.com/zentinelproxy/zentinel-modsec/pull/143) | Scan literal runs when validating URL encoding. |
 | [#144](https://github.com/zentinelproxy/zentinel-modsec/pull/144) | Skip rule evaluation when width bounds exclude every target. |
+| [#145](https://github.com/zentinelproxy/zentinel-modsec/pull/145) | Reuse numeric comparisons on unchanged shared TX defaults. |
+| [#146](https://github.com/zentinelproxy/zentinel-modsec/pull/146) | Avoid collecting discarded regex match data. |
+| [#147](https://github.com/zentinelproxy/zentinel-modsec/pull/147) | Borrow whole macro values while expanding rule text. |
+| [#148](https://github.com/zentinelproxy/zentinel-modsec/pull/148) | Keep singleton collection values in their map entries. |
+| [#149](https://github.com/zentinelproxy/zentinel-modsec/pull/149) | Skip phrase searches on targets too short to match. |
 
 The fix PRs use the benchmark merged in #69 for measurement. The [grouped series](series.md) shows which changes are filed and how the remaining work fits together. It identifies overlap with #65 and #67. The Windows and Unicode fixes together recover 47 cases on the upstream CI checkout.
 
 ## Request timing
+
+The [fork gap investigation](measurements/post-144/) compares all thirteen open performance PRs with the fork and measures short-value allocations, shared numeric comparisons and phrase searches separately.
 
 The [November 26 measurements](measurements/post-140/) compare the eight performance changes submitted after 0.13.3 with the fork and isolate the gains in #141–144.
 

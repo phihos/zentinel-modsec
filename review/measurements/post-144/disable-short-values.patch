@@ -1,0 +1,40 @@
+diff --git a/src/variables/value.rs b/src/variables/value.rs
+index 38e1f01..806042b 100644
+--- a/src/variables/value.rs
++++ b/src/variables/value.rs
+@@ -253,7 +253,7 @@ pub(crate) fn qualified_name(prefix: &str, member: Option<&[u8]>) -> ByteValue {
+         return prefix.into();
+     };
+     let length = prefix.len() + 1 + key.len();
+-    if length <= INLINE_CAPACITY {
++    if length == 0 {
+         let mut bytes = [0; INLINE_CAPACITY];
+         bytes[..prefix.len()].copy_from_slice(prefix.as_bytes());
+         bytes[prefix.len()] = b':';
+@@ -275,7 +275,7 @@ impl Default for ByteValue {
+ 
+ impl From<String> for ByteValue {
+     fn from(value: String) -> Self {
+-        let storage = if value.len() <= INLINE_CAPACITY {
++        let storage = if value.len() == 0 {
+             Storage::Short(ShortText::new(&value))
+         } else if value.len() >= SHARED_TEXT_MIN {
+             Storage::Shared(Arc::new(SharedValue::Text(value)))
+@@ -288,7 +288,7 @@ impl From<String> for ByteValue {
+ 
+ impl From<&str> for ByteValue {
+     fn from(value: &str) -> Self {
+-        if value.len() <= INLINE_CAPACITY {
++        if value.len() == 0 {
+             Self {
+                 storage: Storage::Short(ShortText::new(value)),
+             }
+@@ -300,7 +300,7 @@ impl From<&str> for ByteValue {
+ 
+ impl From<&[u8]> for ByteValue {
+     fn from(value: &[u8]) -> Self {
+-        if value.len() <= INLINE_CAPACITY {
++        if value.len() == 0 {
+             return match std::str::from_utf8(value) {
+                 Ok(text) => text.into(),
+                 Err(_) => Self::binary(value.to_vec()),
