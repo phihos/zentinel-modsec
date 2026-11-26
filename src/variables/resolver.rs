@@ -157,19 +157,29 @@ impl<'a> VariableResolver<'a> {
         keyed(&mut visit, "TX", key, tx.values_at(lowered, position));
     }
 
+    /// Positions refer to this ruleset's defaults. A caller can replace TX
+    /// through `tx_mut`, in which case the ordinary resolver checks every key.
+    /// Keep both scans out of the per-target dispatch loop.
+    #[inline(never)]
     pub(crate) fn visit_tx_regex<'s>(
         &self,
+        spec: &'s VariableSpec,
         pattern: &super::KeyRegex,
         positions: &[usize],
+        defaults: Option<&HashMapCollection>,
         mut visit: impl FnMut(ResolvedName<'s>, Cow<'s, str>),
     ) where
         'a: 's,
     {
-        members(
-            &mut visit,
-            "TX",
-            self.tx.iter_prepared_regex(pattern, positions),
-        );
+        if defaults.is_some_and(|shared| self.tx.shares(shared)) {
+            members(
+                &mut visit,
+                "TX",
+                self.tx.iter_prepared_regex(pattern, positions),
+            );
+        } else {
+            self.visit(spec, visit);
+        }
     }
 
     /// Visit `REQUEST_HEADERS:key` for a rule whose plan holds the key as

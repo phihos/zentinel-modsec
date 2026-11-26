@@ -1204,19 +1204,13 @@ impl Transaction {
                     lowered,
                     position,
                 }) => resolver.visit_tx_key(key, lowered, *position, &mut each),
-                Some(TargetPlan::TxRegex { pattern, positions }) => {
-                    // tx_mut can replace the whole collection with one from
-                    // another ruleset. Positions belong to the original defaults.
-                    if self
-                        .ruleset
-                        .initial_state()
-                        .is_some_and(|initial| self.tx.shares(initial.tx()))
-                    {
-                        resolver.visit_tx_regex(pattern, positions, &mut each)
-                    } else {
-                        resolver.visit(spec, &mut each)
-                    }
-                }
+                Some(TargetPlan::TxRegex { pattern, positions }) => resolver.visit_tx_regex(
+                    spec,
+                    pattern,
+                    positions,
+                    self.ruleset.initial_state().map(|state| state.tx()),
+                    &mut each,
+                ),
                 Some(TargetPlan::HeaderKey { key, lowered }) => {
                     resolver.visit_header_key(key, lowered, &mut each)
                 }
