@@ -5,7 +5,7 @@ mod detection;
 mod network;
 mod pattern;
 mod requirements;
-pub(crate) use requirements::is_token;
+pub(crate) use requirements::{is_dotted, is_token};
 mod traits;
 mod validation;
 

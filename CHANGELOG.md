@@ -11,7 +11,7 @@ pins (see [`docs/conformance.md`](docs/conformance.md)).
 
 ### Changed
 
-- Skip phrase searches on short ASCII targets when no phrase can match.
+- Skip impossible phrase searches on short ASCII targets and recognize dotted argument names when ruling out phrase and regex matches.
 
 ## [0.13.3] - 2026-11-26
 

@@ -6,7 +6,7 @@
 //! rule runs without a plan.
 
 use super::ruleset::CompiledRule;
-use crate::operators::is_token;
+use crate::operators::{is_dotted, is_token};
 use crate::parser::{Selection, VariableName, VariableSpec};
 use crate::variables::{HashMapCollection, RequestData};
 
@@ -39,10 +39,11 @@ pub(super) struct RulePlan {
 }
 
 /// What a rule's operator needs of a value made only of token bytes (letters,
-/// digits and `-./:_`) or only of letters and digits. Zero where the rule's
+/// digits and `-./:_`), of dotted words, or only of letters and digits. Zero where the rule's
 /// transformations could turn such a value into something else.
 pub(super) struct TooShort {
     token: usize,
+    dotted: usize,
     alphanumeric: usize,
 }
 
@@ -59,7 +60,10 @@ impl TooShort {
     /// Whether no value of a collection as wide as `width` can match.
     fn rules_out_all(&self, width: Width) -> bool {
         match width.alphabet {
-            Alphabet::Alphanumeric => width.longest < self.token.max(self.alphanumeric),
+            Alphabet::Alphanumeric => {
+                width.longest < self.token.max(self.dotted).max(self.alphanumeric)
+            }
+            Alphabet::Dotted => width.longest < self.token.max(self.dotted),
             Alphabet::Token => width.longest < self.token,
             Alphabet::Any => false,
         }
@@ -69,21 +73,19 @@ impl TooShort {
         if rule.operator_negated || rule.operand_has_macro || rule.operand_unresolvable {
             return None;
         }
-        let (token, alphanumeric) = rule.operator.minimum_match_widths()?;
+        let (token, dotted, alphanumeric) = rule.operator.minimum_match_widths()?;
         let keeps = |kept: &[&str]| {
             rule.transformations
                 .names()
                 .all(|name| kept.iter().any(|k| k.eq_ignore_ascii_case(name)))
         };
+        let keeps_dotted_words = keeps(KEEP_ALPHANUMERICS);
         let bounds = Self {
             token: if keeps(KEEP_TOKENS) { token } else { 0 },
-            alphanumeric: if keeps(KEEP_ALPHANUMERICS) {
-                alphanumeric
-            } else {
-                0
-            },
+            dotted: if keeps_dotted_words { dotted } else { 0 },
+            alphanumeric: if keeps_dotted_words { alphanumeric } else { 0 },
         };
-        (bounds.token > 1 || bounds.alphanumeric > 1).then_some(bounds)
+        (bounds.token > 1 || bounds.dotted > 1 || bounds.alphanumeric > 1).then_some(bounds)
     }
 }
 
@@ -290,7 +292,9 @@ enum Alphabet {
     /// Letters and digits only, as is a collection with no text.
     #[default]
     Alphanumeric,
-    /// Those and `-./:_`.
+    /// Letters, digits and dots, as in JSON argument paths.
+    Dotted,
+    /// Letters, digits and `-./:_`.
     Token,
     /// Any byte, or a text too long to be worth scanning.
     Any,
@@ -313,8 +317,12 @@ impl Width {
                 width.alphabet = Alphabet::Any;
                 break;
             }
-            if !bytes.iter().all(u8::is_ascii_alphanumeric) {
-                width.alphabet = Alphabet::Token;
+            if width.alphabet != Alphabet::Token && !bytes.iter().all(u8::is_ascii_alphanumeric) {
+                width.alphabet = if bytes.iter().copied().all(is_dotted) {
+                    Alphabet::Dotted
+                } else {
+                    Alphabet::Token
+                };
             }
             width.longest = width.longest.max(bytes.len());
         }
@@ -616,8 +624,9 @@ mod tests {
             "A/B/../../c",
         ];
         type Within = fn(u8) -> bool;
-        let cases: [(&[&str], &str, Within); 2] = [
+        let cases: [(&[&str], &str, Within); 3] = [
             (KEEP_TOKENS, "aZ0-./:_", is_token),
+            (KEEP_ALPHANUMERICS, "aZ09xf.", is_dotted),
             (KEEP_ALPHANUMERICS, "aZ09xf", |b| b.is_ascii_alphanumeric()),
         ];
         for (kept, letters, alphabet) in cases {
@@ -680,6 +689,7 @@ mod tests {
     fn bounds_rule_out_short_values_of_a_narrow_alphabet_only() {
         let bounds = TooShort {
             token: 4,
+            dotted: 4,
             alphanumeric: 6,
         };
         for (value, out) in [
@@ -699,6 +709,7 @@ mod tests {
         assert!(!bounds.rules_out("a".repeat(65).as_bytes()));
         let letters_only = TooShort {
             token: 0,
+            dotted: 0,
             alphanumeric: 80,
         };
         assert!(letters_only.rules_out("a".repeat(64).as_bytes()));
@@ -733,7 +744,9 @@ mod tests {
         assert_eq!(width(&[]), (0, Alphabet::Alphanumeric));
         assert_eq!(width(&["", "abc", "Z9"]), (3, Alphabet::Alphanumeric));
         assert_eq!(width(&["abc", "a.b/c:d_e-f", "x"]), (11, Alphabet::Token));
-        assert_eq!(width(&["a.b", "abcdef"]), (6, Alphabet::Token));
+        assert_eq!(width(&["a.b", "abcdef"]), (6, Alphabet::Dotted));
+        assert_eq!(width(&["a-b", "a.b"]), (3, Alphabet::Token));
+        assert_eq!(width(&["a.b", "a-b"]), (3, Alphabet::Token));
         for other in ["a b", "a%41", "é", "a=b", "a\0"] {
             assert_eq!(width(&["abc", other, "a.b"]).1, Alphabet::Any, "{other:?}");
         }
@@ -774,13 +787,13 @@ mod tests {
             ruled_out(&rule(all, ""), "/?item=booked&author=x", "sid=a b"),
             [false, false, true, false, false, true, false, true, true]
         );
-        // Dots keep a value out only where the transformations keep them.
+        // Path normalization preserves the dotted alphabet and cannot lengthen a dotted word.
         let uri = "/?a=b.c&d=e";
         assert_eq!(ruled_out(&rule("ARGS", ""), uri, ""), [true]);
         assert_eq!(ruled_out(&rule("ARGS", ",t:lowercase"), uri, ""), [true]);
         assert_eq!(
             ruled_out(&rule("ARGS", ",t:normalizePath"), uri, ""),
-            [false]
+            [true]
         );
         assert_eq!(ruled_out(&rule("ARGS", ",t:hexEncode"), uri, ""), [false]);
         // A selection takes values of the same collections; a count is not a
@@ -795,6 +808,24 @@ mod tests {
                 ""
             ),
             [true, true, false, false, false, false]
+        );
+    }
+
+    #[test]
+    fn dotted_names_can_match_a_dot_and_cannot_match_a_slash() {
+        let request = Request {
+            uri: "/?json.items.0.sku=book",
+            ..REQUEST
+        };
+        same_on(
+            &request,
+            r#"
+            SecRule ARGS_NAMES "@rx [./]sku$" "id:10,phase:1,pass,t:lowercase"
+            SecRule ARGS_NAMES "@rx /sku$" "id:11,phase:1,pass,t:normalizePath"
+            SecRule ARGS_NAMES "@pm .sku /name" "id:12,phase:1,pass"
+            SecRule ARGS_NAMES "!@pm /sku" "id:13,phase:1,pass"
+        "#,
+            &["10", "12", "13"],
         );
     }
 

@@ -27,6 +27,10 @@ pub(crate) fn is_token(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'/' | b':' | b'_')
 }
 
+pub(crate) fn is_dotted(byte: u8) -> bool {
+    byte == b'.' || byte.is_ascii_alphanumeric()
+}
+
 fn is_alphanumeric(byte: u8) -> bool {
     byte.is_ascii_alphanumeric()
 }
@@ -38,6 +42,8 @@ pub(crate) struct MatchRequirements {
     len: usize,
     /// The shortest match made only of token bytes; `usize::MAX` if none is.
     token_len: usize,
+    /// The shortest match made only of letters, digits and dots.
+    dotted_len: usize,
     /// The shortest match made only of letters and digits.
     alphanumeric_len: usize,
     /// A byte every match contains.
@@ -47,14 +53,15 @@ pub(crate) struct MatchRequirements {
 impl MatchRequirements {
     /// The shortest match made only of token bytes, and only of letters and
     /// digits: what a value of such bytes has to be as long as.
-    pub(crate) fn widths(&self) -> (usize, usize) {
-        (self.token_len, self.alphanumeric_len)
+    pub(crate) fn widths(&self) -> (usize, usize, usize) {
+        (self.token_len, self.dotted_len, self.alphanumeric_len)
     }
 
     pub(super) fn of(pattern: &Hir) -> Self {
         Self {
             len: pattern.properties().minimum_len().unwrap_or(0),
             token_len: shortest_within(pattern, is_token, DEPTH_LIMIT).unwrap_or(usize::MAX),
+            dotted_len: shortest_within(pattern, is_dotted, DEPTH_LIMIT).unwrap_or(usize::MAX),
             alphanumeric_len: shortest_within(pattern, is_alphanumeric, DEPTH_LIMIT)
                 .unwrap_or(usize::MAX),
             byte: required_byte(pattern, DEPTH_LIMIT),
@@ -169,12 +176,14 @@ mod tests {
     fn requirements(
         len: usize,
         token_len: usize,
+        dotted_len: usize,
         alphanumeric_len: usize,
         byte: Option<u8>,
     ) -> MatchRequirements {
         MatchRequirements {
             len,
             token_len,
+            dotted_len,
             alphanumeric_len,
             byte,
         }
@@ -184,25 +193,31 @@ mod tests {
 
     #[test]
     fn a_literal_needs_its_length_and_its_bytes() {
-        assert_eq!(of("select"), requirements(6, 6, 6, Some(b's')));
-        assert_eq!(of("<script"), requirements(7, NEVER, NEVER, Some(b'<')));
-        assert_eq!(of(r"\.\./"), requirements(3, 3, NEVER, Some(b'.')));
-        assert_eq!(of("a b"), requirements(3, NEVER, NEVER, Some(b' ')));
+        assert_eq!(of("select"), requirements(6, 6, 6, 6, Some(b's')));
+        assert_eq!(
+            of("<script"),
+            requirements(7, NEVER, NEVER, NEVER, Some(b'<'))
+        );
+        assert_eq!(of(r"\.\./"), requirements(3, 3, NEVER, NEVER, Some(b'.')));
+        assert_eq!(of("a b"), requirements(3, NEVER, NEVER, NEVER, Some(b' ')));
     }
 
     #[test]
     fn a_pattern_that_matches_the_empty_string_needs_nothing() {
         for pattern in ["(?:)", "a*", "^$", "(?:a|)", r"\b", "(a)?(b)?", "x{0,3}"] {
-            assert_eq!(of(pattern), requirements(0, 0, 0, None), "{pattern}");
+            assert_eq!(of(pattern), requirements(0, 0, 0, 0, None), "{pattern}");
         }
     }
 
     #[test]
     fn an_alternation_needs_what_its_shortest_branch_does() {
-        assert_eq!(of("GET|HEAD"), requirements(3, 3, 3, None));
-        assert_eq!(of("a-b|<"), requirements(1, 3, NEVER, None));
+        assert_eq!(of("GET|HEAD"), requirements(3, 3, 3, 3, None));
+        assert_eq!(of("a-b|<"), requirements(1, 3, NEVER, NEVER, None));
         // Each branch needs the same byte.
-        assert_eq!(of("a=1|b=22"), requirements(3, NEVER, NEVER, Some(b'=')));
+        assert_eq!(
+            of("a=1|b=22"),
+            requirements(3, NEVER, NEVER, NEVER, Some(b'='))
+        );
         // The branches share no byte, and the parser may factor a common
         // prefix out of them.
         assert_eq!(of("foo:x|foo:y").byte, Some(b':'));
@@ -211,51 +226,66 @@ mod tests {
 
     #[test]
     fn an_optional_part_adds_nothing() {
-        assert_eq!(of("ab(?:<c)?"), requirements(2, 2, 2, Some(b'a')));
-        assert_eq!(of("ab(?:<c)*d"), requirements(3, 3, 3, Some(b'a')));
-        assert_eq!(of("(?:<c)+"), requirements(2, NEVER, NEVER, Some(b'<')));
-        assert_eq!(of("a{3}-{2,}"), requirements(5, 5, NEVER, Some(b'-')));
+        assert_eq!(of("ab(?:<c)?"), requirements(2, 2, 2, 2, Some(b'a')));
+        assert_eq!(of("ab(?:<c)*d"), requirements(3, 3, 3, 3, Some(b'a')));
+        assert_eq!(
+            of("(?:<c)+"),
+            requirements(2, NEVER, NEVER, NEVER, Some(b'<'))
+        );
+        assert_eq!(
+            of("a{3}-{2,}"),
+            requirements(5, 5, NEVER, NEVER, Some(b'-'))
+        );
     }
 
     #[test]
     fn a_class_counts_one_byte_of_any_alphabet_it_admits() {
-        assert_eq!(of("[a-z]{8,}"), requirements(8, 8, 8, None));
-        assert_eq!(of(r"\d+"), requirements(1, 1, 1, None));
-        assert_eq!(of("[<>]x"), requirements(2, NEVER, NEVER, Some(b'x')));
-        assert_eq!(of("[/.]x"), requirements(2, 2, NEVER, Some(b'x')));
-        assert_eq!(of("[^a-z]"), requirements(1, 1, 1, None));
-        assert_eq!(of("[^!-~]"), requirements(1, NEVER, NEVER, None));
-        assert_eq!(of("."), requirements(1, 1, 1, None));
-        assert_eq!(of(r"\s"), requirements(1, NEVER, NEVER, None));
-        assert_eq!(of(r"(?-u:\w)"), requirements(1, 1, 1, None));
+        assert_eq!(of("[a-z]{8,}"), requirements(8, 8, 8, 8, None));
+        assert_eq!(of(r"\d+"), requirements(1, 1, 1, 1, None));
+        assert_eq!(
+            of("[<>]x"),
+            requirements(2, NEVER, NEVER, NEVER, Some(b'x'))
+        );
+        assert_eq!(of("[/.]x"), requirements(2, 2, 2, NEVER, Some(b'x')));
+        assert_eq!(of("[^a-z]"), requirements(1, 1, 1, 1, None));
+        assert_eq!(of("[^!-~]"), requirements(1, NEVER, NEVER, NEVER, None));
+        assert_eq!(of("."), requirements(1, 1, 1, 1, None));
+        assert_eq!(of(r"\s"), requirements(1, NEVER, NEVER, NEVER, None));
+        assert_eq!(of(r"(?-u:\w)"), requirements(1, 1, 1, 1, None));
     }
 
     #[test]
     fn a_case_insensitive_literal_is_a_class_and_needs_no_byte() {
-        assert_eq!(of("(?i)select"), requirements(6, 6, 6, None));
-        assert_eq!(of("(?i)<script"), requirements(7, NEVER, NEVER, Some(b'<')));
+        assert_eq!(of("(?i)select"), requirements(6, 6, 6, 6, None));
+        assert_eq!(
+            of("(?i)<script"),
+            requirements(7, NEVER, NEVER, NEVER, Some(b'<'))
+        );
         // `k` also matches the Kelvin sign, three bytes that are no token.
-        assert_eq!(of("(?i)k"), requirements(1, 1, 1, None));
+        assert_eq!(of("(?i)k"), requirements(1, 1, 1, 1, None));
     }
 
     #[test]
     fn text_outside_ascii_is_in_no_alphabet() {
-        assert_eq!(of("é"), requirements(2, NEVER, NEVER, Some(0xC3)));
-        assert_eq!(of(r"\p{Greek}+"), requirements(2, NEVER, NEVER, None));
-        assert_eq!(of("[a-zé]"), requirements(1, 1, 1, None));
+        assert_eq!(of("é"), requirements(2, NEVER, NEVER, NEVER, Some(0xC3)));
+        assert_eq!(
+            of(r"\p{Greek}+"),
+            requirements(2, NEVER, NEVER, NEVER, None)
+        );
+        assert_eq!(of("[a-zé]"), requirements(1, 1, 1, 1, None));
     }
 
     #[test]
     fn assertions_are_taken_to_hold() {
-        assert_eq!(of(r"^\d+$"), requirements(1, 1, 1, None));
-        assert_eq!(of(r"\bor\b"), requirements(2, 2, 2, Some(b'o')));
-        assert_eq!(of(r"(?m)^end$"), requirements(3, 3, 3, Some(b'e')));
+        assert_eq!(of(r"^\d+$"), requirements(1, 1, 1, 1, None));
+        assert_eq!(of(r"\bor\b"), requirements(2, 2, 2, 2, Some(b'o')));
+        assert_eq!(of(r"(?m)^end$"), requirements(3, 3, 3, 3, Some(b'e')));
     }
 
     #[test]
     fn nesting_past_the_limit_falls_back_to_the_shortest_match() {
         let nested = format!("{}deep<{}", "(?:".repeat(40), ")+".repeat(40));
-        assert_eq!(of(&nested), requirements(5, 5, 5, None));
+        assert_eq!(of(&nested), requirements(5, 5, 5, 5, None));
     }
 
     #[test]

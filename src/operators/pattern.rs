@@ -85,7 +85,7 @@ impl RxOperator {
 }
 
 impl Operator for RxOperator {
-    fn minimum_match_widths(&self) -> Option<(usize, usize)> {
+    fn minimum_match_widths(&self) -> Option<(usize, usize, usize)> {
         Some(self.requirements.widths())
     }
 
@@ -223,20 +223,24 @@ impl PmOperator {
 }
 
 impl Operator for PmOperator {
-    fn minimum_match_widths(&self) -> Option<(usize, usize)> {
+    fn minimum_match_widths(&self) -> Option<(usize, usize, usize)> {
         // Matching folds ASCII case. It preserves length and membership in
         // both alphabets, including for phrases read from a file.
         let mut token = usize::MAX;
+        let mut dotted = usize::MAX;
         let mut alphanumeric = usize::MAX;
         for phrase in &self.patterns {
             if phrase.bytes().all(super::is_token) {
                 token = token.min(phrase.len());
+                if phrase.bytes().all(super::is_dotted) {
+                    dotted = dotted.min(phrase.len());
+                }
                 if phrase.bytes().all(|b| b.is_ascii_alphanumeric()) {
                     alphanumeric = alphanumeric.min(phrase.len());
                 }
             }
         }
-        Some((token, alphanumeric))
+        Some((token, dotted, alphanumeric))
     }
 
     fn execute(&self, value: &str) -> OperatorResult {
@@ -277,7 +281,7 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), "x y\nab.cd\nlongword\nÉ\n").unwrap();
         let op = PmOperator::from_file(file.path().to_str().unwrap()).unwrap();
-        assert_eq!(op.minimum_match_widths(), Some((5, 8)));
+        assert_eq!(op.minimum_match_widths(), Some((5, 5, 8)));
         assert!(op.execute("AB.CD").matched);
         assert!(op.execute("x y").matched);
         assert!(op.execute("É").matched);
