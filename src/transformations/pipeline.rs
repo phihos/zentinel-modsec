@@ -93,6 +93,33 @@ impl TransformationPipeline {
         out
     }
 
+    /// Visit the input and each distinct consecutive stage until the callback
+    /// accepts one. The returned value is the stage that produced the result.
+    pub(crate) fn find_stage<'a, T>(
+        &self,
+        input: &'a str,
+        mut visit: impl FnMut(&str) -> Option<T>,
+    ) -> Option<(Cow<'a, str>, T)> {
+        let mut stage = Cow::Borrowed(input);
+        if let Some(result) = visit(&stage) {
+            return Some((stage, result));
+        }
+        for transformation in &self.transformations {
+            if transformation.leaves_unchanged(&stage) {
+                continue;
+            }
+            if let Cow::Owned(next) = transformation.transform(&stage) {
+                if next != *stage {
+                    stage = Cow::Owned(next);
+                    if let Some(result) = visit(&stage) {
+                        return Some((stage, result));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Check if the pipeline is empty.
     pub fn is_empty(&self) -> bool {
         self.transformations.is_empty()

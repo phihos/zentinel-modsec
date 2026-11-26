@@ -33,3 +33,17 @@ fn a_value_that_never_matches_does_not() {
     let rules = format!("SecRuleEngine On\n{TRAVERSAL}");
     assert!(matched(&rules, "/?arg=pine.apple").is_empty());
 }
+
+#[test]
+fn negated_multi_match_records_the_first_changed_stage_that_qualifies() {
+    let rules = r#"SecRuleEngine On
+SecRule ARGS:q "!@streq Tea" "id:42,phase:2,pass,t:none,t:trim,t:lowercase,t:uppercase,multiMatch"
+"#;
+    let engine = ModSecurity::from_string(rules).unwrap();
+    let mut tx = engine.new_transaction();
+    tx.process_uri("/?q=Tea", "GET", "HTTP/1.1").unwrap();
+    tx.process_request_headers().unwrap();
+    tx.process_request_body().unwrap();
+    assert_eq!(tx.matched_rules(), ["42"]);
+    assert_eq!(tx.matched_data()[0].value, "tea");
+}

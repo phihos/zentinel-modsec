@@ -1106,17 +1106,13 @@ impl Transaction {
             // first stage that matches being the match (CRS 930110 finds
             // `..\` before t:cmdLine deletes the backslash)
             let (transformed, result) = if rule.multi_match {
-                let stages = rule.transformations.stages(&value);
-                let last = stages.len() - 1;
-                let mut found = None;
-                for (i, stage) in stages.into_iter().enumerate() {
-                    let result = operator.execute(&stage);
-                    if result.matched != rule.operator_negated || i == last {
-                        found = Some((std::borrow::Cow::Owned(stage), result));
-                        break;
-                    }
-                }
-                found.expect("the last stage is always taken")
+                let Some(hit) = rule.transformations.find_stage(&value, |stage| {
+                    let result = operator.execute(stage);
+                    (result.matched != rule.operator_negated).then_some(result)
+                }) else {
+                    return;
+                };
+                hit
             } else {
                 let transformed = rule.transformations.apply(&value);
                 let result = operator.execute(&transformed);
