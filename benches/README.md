@@ -99,3 +99,26 @@ cargo bench --features libmodsec-compare
 - **Throughput**: operations/second
 - **Memory**: peak RSS, allocations
 - **CPU**: cycles per operation
+
+## Build a profile-guided release
+
+The build helper trains an instrumented engine on 12,000 requests using all 698 rules in CRS 4.25.0, then rebuilds the CLI and timing example using the recorded LLVM profile. Training includes clean requests, a denied method and callers that read matched data. The timed GET, form and JSON fixtures use different paths, arguments and bodies.
+
+Set `CRS_BENCH_DIR` to a clean checkout of CRS at `aabf675fcfc5e489b424b844e6c9f1b39802df69`. Install `llvm-profdata` from the LLVM version reported by `rustc -vV`, or set `LLVM_PROFDATA` to its executable. From the repository root run
+
+```sh
+export CRS_BENCH_DIR=/path/to/crs-4.25.0
+benches/build-profiled-release.sh
+```
+
+The helper prints the paths to the optimized CLI and profile. Its default output directory is `target/profiled`. Cargo feature arguments apply to both compilation stages. To time either caller workload with the resulting binary, run
+
+```sh
+host=$(rustc -vV | sed -n 's/^host: //p')
+target/profiled/"$host"/release/examples/crs_latency 2200
+target/profiled/"$host"/release/examples/crs_latency 2200 --read-matched-data
+```
+
+The example warms each fixture and reports mean microseconds per transaction, including logging and destruction. Compare with an ordinary release of the same example, alternating the binaries on one CPU.
+
+For an application that embeds the engine, train the application itself. Build its executable with `RUSTFLAGS="-Cprofile-generate=$raw"`, run representative requests with `LLVM_PROFILE_FILE="$raw/%m-%p.profraw"`, merge the files with `llvm-profdata merge`, and rebuild with `RUSTFLAGS="-Cprofile-use=$profile"`. Use absolute paths for the raw profile directory and merged file. Keep the Rust toolchain, target, features and dependency graph consistent across both builds.
