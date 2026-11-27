@@ -121,4 +121,4 @@ target/profiled/"$host"/release/examples/crs_latency 2200 --read-matched-data
 
 The example warms each fixture and reports mean microseconds per transaction, including logging and destruction. Compare with an ordinary release of the same example, alternating the binaries on one CPU.
 
-For an application that embeds the engine, train the application itself. Build its executable with `RUSTFLAGS="-Cprofile-generate=$raw"`, run representative requests with `LLVM_PROFILE_FILE="$raw/%m-%p.profraw"`, merge the files with `llvm-profdata merge`, and rebuild with `RUSTFLAGS="-Cprofile-use=$profile"`. Use absolute paths for the raw profile directory and merged file. Keep the Rust toolchain, target, features and dependency graph consistent across both builds.
+For a WAF or connector that depends on the library, see [PGO for applications that embed the engine](../docs/pgo.md).

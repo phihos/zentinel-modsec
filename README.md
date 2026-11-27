@@ -68,7 +68,7 @@ fn main() -> zentinel_modsec::Result<()> {
 
 ## Install
 
-As a library, from crates.io: `cargo add zentinel-modsec`.
+As a library, from crates.io: `cargo add zentinel-modsec`. For a profile-guided release of your WAF, see [PGO for applications that embed the engine](docs/pgo.md).
 
 The crate also builds a small CLI for checking rule files:
 
