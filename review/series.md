@@ -59,6 +59,7 @@ The full OWASP CRS benchmark comes first. The results for upstream 0.6.0 and the
 | [#147](https://github.com/zentinelproxy/zentinel-modsec/pull/147) | Borrow whole macro values while expanding rule text. |
 | [#148](https://github.com/zentinelproxy/zentinel-modsec/pull/148) | Keep singleton collection values in their map entries. |
 | [#149](https://github.com/zentinelproxy/zentinel-modsec/pull/149) | Use phrase and dotted-word width bounds to skip impossible matches. |
+| [#150](https://github.com/zentinelproxy/zentinel-modsec/pull/150) | Build an opt-in profile-guided release using full CRS traffic. |
 
 ## Queued on the fork
 
